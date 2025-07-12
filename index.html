@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis Evolution – Serene Neon Gameplay</title>
+<title>Genesis Evolution – Balanced Neon Gameplay</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>
@@ -17,9 +17,6 @@
 <canvas id="game"></canvas>
 <div id="hud">Mass: <span id="mass">10</span> Score: <span id="score">0</span> Level: <span id="level">1</span></div>
 <div id="effBar"><div id="effFill"></div></div>
-<audio id="backgroundMusic" loop autoplay>
-  <source src="https://example.com/serene-music.mp3" type="audio/mpeg">
-</audio>
 <script>
 const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
 let W,H;
@@ -38,14 +35,14 @@ let food=[];
 let opponents=[];
 
 function spawnFood(){
-  if(food.length<40){
+  if(food.length<60){
     food.push({x:Math.random()*2000-1000,y:Math.random()*2000-1000,radius:5+Math.random()*5});
   }
 }
 
 function spawnOpponents(){
-  if(opponents.length<8){
-    opponents.push({x:Math.random()*2000-1000,y:Math.random()*2000-1000,radius:10+Math.random()*25});
+  if(opponents.length<12){
+    opponents.push({x:Math.random()*2000-1000,y:Math.random()*2000-1000,radius:10+Math.random()*20});
   }
 }
 
@@ -77,31 +74,31 @@ function drawTile(){
 }
 
 function update(){
-  const speed=2;
+  const speed=2.5;
   const dx=target.x-player.x,dy=target.y-player.y,dist=Math.hypot(dx,dy);
-  if(dist>1){player.x+=dx/dist*speed;player.y+=dy/dist*speed;player.mass-=0.004*(1-player.tail.length/100);}
+  if(dist>1){player.x+=dx/dist*speed;player.y+=dy/dist*speed;player.mass-=0.003*(1-player.tail.length/75);}
 
   food.forEach((f,i)=>{
     if(Math.hypot(player.x-f.x,player.y-f.y)<player.radius+f.radius){
-      player.mass+=f.radius/2;food.splice(i,1);
+      player.mass+=f.radius;food.splice(i,1);
     }
   });
 
   opponents.forEach((o,i)=>{
     const odx=player.x-o.x,ody=player.y-o.y,odist=Math.hypot(odx,ody);
     if(player.radius>o.radius&&odist<player.radius){
-      player.mass+=o.radius/3;opponents.splice(i,1);
+      player.mass+=o.radius/2;opponents.splice(i,1);
     } else if(o.radius>player.radius&&odist<o.radius){
-      player.mass-=0.1;
+      player.mass-=0.05;
     }
-    const chaseSpeed=0.5;
-    if(o.radius<player.radius&&odist<150){o.x+=odx/odist*-chaseSpeed;o.y+=ody/odist*-chaseSpeed;}
+    const chaseSpeed=1;
+    if(o.radius<player.radius&&odist<200){o.x+=odx/odist*-chaseSpeed;o.y+=ody/odist*-chaseSpeed;}
     else if(o.radius>player.radius&&odist<200){o.x+=odx/odist*chaseSpeed;o.y+=ody/odist*chaseSpeed;}
   });
 
-  player.radius=Math.min(50,10+player.mass/20);
+  player.radius=10+player.mass/15;
   player.tail.unshift({x:player.x,y:player.y});
-  if(player.tail.length>player.mass/4)player.tail.pop();
+  if(player.tail.length>player.mass/3)player.tail.pop();
 
   offset.x=W/2-player.x;
   offset.y=H/2-player.y;
@@ -113,7 +110,7 @@ function update(){
 
   food.forEach(f=>drawCircle(f,'#ff0'));
   opponents.forEach(o=>drawCircle(o,'#f00'));
-  player.tail.forEach((t,i)=>drawCircle({x:t.x,y:t.y,radius:player.radius*(1-i/player.tail.length)},'rgba(0,228,184,'+(0.6-i/player.tail.length)+')'));
+  player.tail.forEach((t,i)=>drawCircle({x:t.x,y:t.y,radius:player.radius*(1-i/player.tail.length)},'rgba(0,228,184,'+(0.8-i/player.tail.length)+')'));
   drawCircle(player,'#00e4b8');
 
   document.getElementById('mass').textContent=player.mass.toFixed(1);
