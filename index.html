@@ -1,1 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Genesis Evolution – Serene Pastel Gameplay</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#f5f0e6;overflow:hidden;font-family:"Inter",Arial,sans-serif;}
+  canvas{display:block;width:100%;height:100%;touch-action:none;background:radial-gradient(circle,#f3e8d9 0%,#e6ded2 80%);}
+  #hud{position:fixed;top:14px;left:18px;color:#776e65;font-size:15px;text-shadow:0 0 2px rgba(255,255,255,.5);}
+  #effBar{position:fixed;bottom:14px;left:18px;width:220px;height:18px;background:rgba(119,110,101,.2);border-radius:9px;}
+  #effFill{height:100%;width:100%;background:#d6a8c9;border-radius:9px;}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">Mass: <span id="mass">10</span> Score: <span id="score">0</span> Level: <span id="level">1</span></div>
+<div id="effBar"><div id="effFill"></div></div>
+<audio id="backgroundMusic" loop autoplay>
+  <source src="https://example.com/soothing-song.mp3" type="audio/mpeg">
+</audio>
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+let W,H;
 
+function resize(){
+  W=canvas.width=window.innerWidth;
+  H=canvas.height=window.innerHeight;
+}
+window.addEventListener('resize',resize);resize();
+
+let player={x:0,y:0,radius:15,mass:10,tail:[]};
+let target={x:0,y:0};
+let offset={x:W/2,y:H/2};
+
+let food=[];
+let opponents=[];
+
+function spawnFood(){
+  if(food.length<50){
+    food.push({x:player.x+(Math.random()*400-200),y:player.y+(Math.random()*400-200),radius:5+Math.random()*5});
+  }
+}
+
+function spawnOpponents(){
+  if(opponents.length<8){
+    opponents.push({x:player.x+(Math.random()*600-300),y:player.y+(Math.random()*600-300),radius:10+Math.random()*20});
+  }
+}
+
+canvas.addEventListener('touchstart',setTarget,false);
+canvas.addEventListener('touchmove',setTarget,false);
+canvas.addEventListener('mousedown',setTarget,false);
+canvas.addEventListener('mousemove',e=>{if(e.buttons)setTarget(e)},false);
+
+function setTarget(e){
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const touch=e.touches?e.touches[0]:e;
+  target.x=touch.clientX-offset.x;
+  target.y=touch.clientY-offset.y;
+}
+
+function drawCircle(obj,color){
+  ctx.fillStyle=color;
+  ctx.beginPath();ctx.arc(obj.x,obj.y,obj.radius,0,Math.PI*2);ctx.fill();
+}
+
+function playSound(){
+  let audio=new Audio('https://example.com/soft-click.mp3');audio.play();
+}
+
+function update(){
+  const speed=2;
+  const dx=target.x-player.x,dy=target.y-player.y,dist=Math.hypot(dx,dy);
+  if(dist>1){player.x+=dx/dist*speed;player.y+=dy/dist*speed;}
+
+  let decayRate=player.mass>900?0.02:0.004*(1-player.tail.length/100);
+  player.mass-=decayRate;
+
+  food.forEach((f,i)=>{
+    if(Math.hypot(player.x-f.x,player.y-f.y)<player.radius+f.radius){
+      player.mass+=f.radius/2;food.splice(i,1);playSound();
+    }
+  });
+
+  opponents.forEach((o,i)=>{
+    const odx=player.x-o.x,ody=player.y-o.y,odist=Math.hypot(odx,ody);
+    if(player.radius>o.radius&&odist<player.radius){
+      player.mass+=o.radius/4;opponents.splice(i,1);playSound();
+    } else if(o.radius>player.radius&&odist<o.radius){
+      player.mass-=0.2;
+    }
+    const chaseSpeed=0.4;
+    if(o.radius<player.radius&&odist<200){o.x+=odx/odist*-chaseSpeed;o.y+=ody/odist*-chaseSpeed;}
+    else if(o.radius>player.radius&&odist<250){o.x+=odx/odist*chaseSpeed;o.y+=ody/odist*chaseSpeed;}
+  });
+
+  player.radius=Math.min(40,10+player.mass/25);
+  player.tail.unshift({x:player.x,y:player.y});
+  if(player.tail.length>player.mass/5)player.tail.pop();
+
+  offset.x=W/2-player.x;
+  offset.y=H/2-player.y;
+
+  ctx.setTransform(1,0,0,1,offset.x,offset.y);
+  ctx.clearRect(-offset.x,-offset.y,W,H);
+
+  food.forEach(f=>drawCircle(f,'#f7d794'));
+  opponents.forEach(o=>drawCircle(o,'#c44569'));
+  player.tail.forEach((t,i)=>drawCircle({x:t.x,y:t.y,radius:player.radius*(1-i/player.tail.length)},'rgba(214,168,201,'+(0.5-i/player.tail.length)+')'));
+  drawCircle(player,'#786fa6');
+
+  document.getElementById('mass').textContent=player.mass.toFixed(1);
+  document.getElementById('score').textContent=Math.floor(player.mass);
+
+  spawnFood();
+  spawnOpponents();
+
+  requestAnimationFrame(update);
+}
+update();
+</script>
+</body>
+</html>
