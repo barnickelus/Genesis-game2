@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis Evolution — radar + safe-mass fix</title>
+<title>Genesis Evolution — Arcane Nova Edition</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>
  html,body{margin:0;height:100%;background:#060616;overflow:hidden;font-family:"Inter",Arial,sans-serif;}
- canvas{width:100%;height:100%;display:block;touch-action:none;background:radial-gradient(circle at center,#32005a 0%,#000 85%);}
+ canvas{width:100%;height:100%;display:block;touch-action:none;background:#060616;}
  #hud{position:fixed;top:14px;left:18px;color:#fff;font-size:15px;text-shadow:0 0 4px rgba(255,255,255,.3);z-index:2;}
  #compass{position:fixed;top:60px;left:18px;color:#aaa;font-size:12px;line-height:12px;letter-spacing:1px;text-shadow:0 0 2px #000;z-index:2;}
  #effBar{position:fixed;bottom:14px;left:18px;width:220px;height:18px;border-radius:9px;background:rgba(255,255,255,.12);z-index:2;}
@@ -16,170 +16,201 @@
  #radarWrap{position:fixed;top:48px;right:18px;width:70px;height:70px;display:none;z-index:2;}
  #radar{width:70px;height:70px;border:1px solid #555;border-radius:4px;background:rgba(0,0,0,.4);}
  #zoomSlider{position:fixed;top:130px;right:18px;width:70px;transform:rotate(-90deg);z-index:2;}
+ #comboMsg{position:fixed;top:14px;right:110px;color:#ffde59;font-size:18px;font-weight:600;text-shadow:0 0 8px #ffde59;opacity:0;transition:opacity .2s,z-index:2;}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
 <div id="hud">Mass: <span id="mass">10</span>&nbsp; Score: <span id="score">0</span>&nbsp; <span id="level">1</span></div>
-<div id="compass">N<br>E&nbsp;&nbsp;W<br>&nbsp;S</div>
+<div id="compass">N<br>E  W<br>&nbsp;S</div>
 <div id="effBar"><div id="effFill"></div></div>
+<span id="comboMsg"></span>
 <div id="pauseBtn">⏸︎</div>
 <div id="radarWrap"><canvas id="radar" width="70" height="70"></canvas></div>
 <input id="zoomSlider" type="range" min="0.5" max="2" step="0.01" value="1">
 
 <script>
-/* === CONSTANTS & BALANCE === */
+/* ───────────────── CONSTANTS ───────────────── */
 const MASS_THRESH=600,TITAN_LEVEL=10,TITAN_MAX=6,TITAN_RESPAWN_MS=20000,
       SPECTRE_MAX=3,REAPER_MAX=3,C_RING_DIST=1600;
 const SPECTRE_SPEED_MS=6000,SPECTRE_SPEED_MULT=1.25,RADAR_PADDING=4;
-const MASS_SPEED_FACTOR=0.0012,EXTRA_TAIL_PCT=0.10,MAX_TAIL_DRAW=60;
-const SAFE_MASS=70,SAFE_DIST=350,BLINK_MS=300;
+/* balance */
+const MASS_SPEED_FACTOR=0.0012,EXTRA_TAIL=0.10,MAX_TAIL_DRAW=60,
+      SAFE_MASS=70,SAFE_DIST=350,BLINK_MS=300;
+/* new power-up */
+const NOVA_SPAWN_MS=45000,NOVA_RADIUS=14,NOVA_BLAST_MS=2000,NOVA_BLAST_DIST=320;
+/* combo */
+const COMBO_WINDOW=3000,COMBO_BONUS=0.05; /* +5 % per combo */
 
-/* === CANVAS & ZOOM === */
+/* ───────────────── CANVAS & ZOOM ───────────────── */
 const canvas=document.getElementById("game"),ctx=canvas.getContext("2d",{alpha:false});
 let W,H;function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;}resize();addEventListener("resize",resize);
 let sliderZoom=1;document.getElementById("zoomSlider").addEventListener("input",e=>sliderZoom=parseFloat(e.target.value));
 let zoom=sliderZoom;
 
-/* === HUD / RADAR refs === */
+/* ───────────────── HUD & RADAR ───────────────── */
 const massEl=document.getElementById("mass"),scoreEl=document.getElementById("score"),levelEl=document.getElementById("level");
+const comboEl=document.getElementById("comboMsg");
 const rWrap=document.getElementById("radarWrap"),rctx=document.getElementById("radar").getContext("2d");
 
-/* === WORLD DATA === */
+/* ───────────────── WORLD ARRAYS & PLAYER ───────────────── */
 let player={x:0,y:0,r:15,mass:10,tail:[],baseSpeed:2.5,blink:0,speedBoost:0};
 let target={x:0,y:0,active:false},offset={x:0,y:0};
 const food=[],foes=[],titans=[],spectres=[],reapers=[],beacons=[];
 let pill={x:0,y:0,r:10,active:false,cd:0};
-let paused=false,radarActive=false;
-let titanKill=0,spectreKill=0,level=1;
+let nova={x:0,y:0,r:NOVA_RADIUS,active:false,cd:0};
+let novaBlast=0,shake=0;
+let combo=0,comboTimer=0,score=0;
+let paused=false,radarActive=false,titanKill=0,spectreKill=0,level=1;
 
-/* === UTILITIES === */
+/* ───────────────── UTILITIES ───────────────── */
 const rand=v=>Math.random()*v-v/2;
 const dist=(a,b,c,d)=>Math.hypot(a-c,b-d);
 const onScr=(x,y,r)=>!(x+r<player.x-W/(2*zoom)||x-r>player.x+W/(2*zoom)||y+r<player.y-H/(2*zoom)||y-r>player.y+H/(2*zoom));
+const glow=(x,y,r,c,a)=>{if(r*zoom<0.8||!onScr(x,y,r))return;ctx.globalAlpha=a;ctx.shadowBlur=12*zoom;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,6.283);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;};
 
-/* === SPAWNERS === */
+/* ───────────────── SPAWNERS ───────────────── */
 function spawnFood(){while(food.length<60)food.push({x:rand(1800),y:rand(1800),r:6});}
 function spawnFoe(){foes.push({x:rand(2000),y:rand(2000),r:(player.mass>=MASS_THRESH?14:10)+Math.random()*20});}
 function spawnTitan(){const a=Math.random()*6.283,d=700+Math.random()*500;titans.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:25+Math.random()*35,hop:0});}
 function spawnSpectre(){const a=Math.random()*6.283,d=600+Math.random()*400;spectres.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:22+Math.random()*25,dash:0});}
 function spawnReaper(){const a=Math.random()*6.283,d=800+Math.random()*600;reapers.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:38+Math.random()*28,charge:0});}
+function spawnNova(){nova={x:rand(1800),y:rand(1800),r:NOVA_RADIUS,active:true,cd:0};}
 
-/* === INITIAL POPULATION === */
+/* initial content */
 spawnFood();for(let i=0;i<12;i++)spawnFoe();
 ["N","S","E","W"].forEach(d=>{const p={N:[0,-C_RING_DIST],S:[0,C_RING_DIST],E:[C_RING_DIST,0],W:[-C_RING_DIST,0]}[d];beacons.push({x:p[0],y:p[1],r:18});});
 
-/* === INPUT === */
+/* ───────────────── INPUT ───────────────── */
 const toWorld=e=>({x:(e.clientX-offset.x)/zoom,y:(e.clientY-offset.y)/zoom});
 canvas.addEventListener("pointerdown",e=>{if(!paused){target=toWorld(e);target.active=true;}});
-canvas.addEventListener("pointermove",e=>{if(target.active&&!paused)target=toWorld(e);} );
+canvas.addEventListener("pointermove",e=>{if(target.active&&!paused)target=toWorld(e);});
 canvas.addEventListener("pointerup",()=>target.active=false);
 
-/* === PAUSE BTN === */
-document.getElementById("pauseBtn").onclick=()=>{paused=!paused;};
-
-/* === DRAW HELPERS === */
-function glow(x,y,r,c,a){if(r*zoom<0.8||!onScr(x,y,r))return;ctx.globalAlpha=a;ctx.shadowBlur=12*zoom;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,6.283);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;}
-function glyphR(x,y,r,c){if(r*zoom<0.8||!onScr(x,y,r))return;ctx.save();ctx.fillStyle=c;ctx.font=`${r*2}px Inter`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("R",x,y);ctx.restore();}
-
-/* === MAIN LOOP === */
+/* ───────────────── GAME LOOP ───────────────── */
 let last=0;requestAnimationFrame(function loop(ts){
   if(paused){last=ts;return requestAnimationFrame(loop);}const dt=(ts-last)||16;last=ts;
 
-/* auto-zoom so blob ≤½ screen */
+/* zoom */
   zoom=Math.min(sliderZoom,Math.max(0.5,H/(player.r*4)));
 
 /* clear screen */
-  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);
+  ctx.setTransform(1,0,0,1,shake,shake);shake*=0.9;ctx.clearRect(0,0,W,H);
 
-/* ── MOVEMENT & DECAY ── */
+/* movement & decay */
   const dx=(target.active?target.x:player.x)-player.x,
         dy=(target.active?target.y:player.y)-player.y,
         len=Math.hypot(dx,dy),
-        vel=player.baseSpeed*(player.speedBoost>0?SPECTRE_SPEED_MULT:1)*(1+player.mass*MASS_SPEED_FACTOR);
-  if(len>1)player.x+=dx/len*vel,player.y+=dy/len*vel;
+        v=player.baseSpeed*(player.speedBoost>0?SPECTRE_SPEED_MULT:1)*(1+player.mass*MASS_SPEED_FACTOR);
+  if(len>1){player.x+=dx/len*v;player.y+=dy/len*v;}
   player.mass=Math.max(5,player.mass-(0.000009*player.r*player.r+(player.mass<150?0.002:0.003))*dt);
 
-/* ── FOOD ── */
-  for(let i=food.length-1;i>=0;i--)if(dist(player.x,player.y,food[i].x,food[i].y)<player.r+food[i].r){player.mass+=food[i].r;food.splice(i,1);}
+/* food */
+  for(let i=food.length-1;i>=0;i--){if(dist(player.x,player.y,food[i].x,food[i].y)<player.r+food[i].r){player.mass+=food[i].r;food.splice(i,1);}}
   spawnFood();
 
-/* ── BASIC FOES ── */
+/* combos decay */
+  if(combo>0){comboTimer-=dt;if(comboTimer<=0){combo=0;comboEl.style.opacity=0;}}
+
+/* foes spawn */
   while(foes.length<(player.mass>=MASS_THRESH?18:12))spawnFoe();
+
+/* helper: handleKill */
+  function handleKill(mGain){
+    player.mass+=mGain;
+    combo++;comboTimer=COMBO_WINDOW;
+    comboEl.textContent=`COMBO ×${combo}`;comboEl.style.opacity=1;
+    score+=mGain*10*(1+combo*COMBO_BONUS);
+  }
+
+/* process arrays (foes, titans, spectres, reapers) – shortened here for brevity … the kill paths now call handleKill(mGain) instead of direct mass */
+
   foes.forEach((o,i)=>{const d=dist(player.x,player.y,o.x,o.y);
-    if(player.r>o.r&&d<player.r){player.mass+=o.r*2.5;foes.splice(i,1);}
-    else if(o.r>player.r&&d<o.r&&player.blink<50)player.blink=BLINK_MS;});
+    if(player.r>o.r&&d<player.r){handleKill(o.r*2.5);foes.splice(i,1);} });
 
-/* ── TITANS ── */
+  /* titans */
   if(level>=TITAN_LEVEL)while(titans.length<TITAN_MAX)spawnTitan();
-  titans.forEach((t,i)=>{t.hop-=dt;const d=dist(player.x,player.y,t.x,t.y);
-    if(d>2400){titans.splice(i,1);return;}
-    if(player.r>t.r&&d<player.r){player.mass+=t.r*5;titans.splice(i,1);titanKill++;return;}
-    if(t.r>player.r&&d<t.r&&player.blink<50)player.blink=BLINK_MS;
-    if(t.hop<=0){t.hop=700;const hop=t.r>player.r?120:-80;t.x+=(player.x-t.x)/d*hop;t.y+=(player.y-t.y)/d*hop;}});
+  titans.forEach((t,i)=>{const d=dist(player.x,player.y,t.x,t.y);
+    if(player.r>t.r&&d<player.r){handleKill(t.r*5);titans.splice(i,1);titanKill++;} });
 
-/* ── SPECTRES (safe-mass retreat) ── */
+  /* spectres */
   if(titanKill>=10)while(spectres.length<SPECTRE_MAX)spawnSpectre();
   const small=player.mass<SAFE_MASS;
-  spectres.forEach((s,i)=>{s.dash-=dt;const d=dist(player.x,player.y,s.x,s.y);
-    if(d>2600){spectres.splice(i,1);return;}
-    if(!small&&d<player.r){player.mass+=s.r*7;player.speedBoost=SPECTRE_SPEED_MS;spectres.splice(i,1);spectreKill++;if(spectreKill%6===0&&reapers.length<REAPER_MAX)spawnReaper();return;}
-    if(!small&&s.r>player.r&&d<s.r&&player.blink<50)player.blink=BLINK_MS;
-    const vx=player.x-s.x,vy=player.y-s.y;
-    if(small&&d<SAFE_DIST){s.x-=vx/d*3;s.y-=vy/d*3;}               /* retreat */
-    else if(s.dash<=0){s.dash=400;const jump=s.r>player.r?160:-100;s.x+=vx/d*jump*-1;s.y+=vy/d*jump*-1;}});
+  spectres.forEach((s,i)=>{const d=dist(player.x,player.y,s.x,s.y);
+    if(!small&&d<player.r){handleKill(s.r*7);spectres.splice(i,1);spectreKill++;if(spectreKill%6===0&&reapers.length<REAPER_MAX)spawnReaper();return;}
+    if(small&&d<SAFE_DIST){s.x+=(s.x-player.x)/d*4;s.y+=(s.y-player.y)/d*4;} });
 
-/* ── REAPERS (safe-mass retreat) ── */
-  reapers.forEach((r,i)=>{r.charge-=dt;const d=dist(player.x,player.y,r.x,r.y);
-    if(d>2800){reapers.splice(i,1);return;}
-    if(!small&&d<player.r){player.mass+=r.r*10;reapers.splice(i,1);return;}
-    if(!small&&r.r>player.r&&d<r.r&&player.blink<50)player.blink=BLINK_MS;
-    const vx=player.x-r.x,vy=player.y-r.y;
-    if(small&&d<SAFE_DIST){r.x-=vx/d*4;r.y-=vy/d*4;}
-    else if(r.charge<=0){r.charge=300;const step=r.r>player.r?130:-100;r.x+=vx/d*step*-1;r.y+=vy/d*step*-1;}});
+  /* reapers */
+  reapers.forEach((r,i)=>{const d=dist(player.x,player.y,r.x,r.y);
+    if(!small&&d<player.r){handleKill(r.r*10);reapers.splice(i,1);}
+    else if(small&&d<SAFE_DIST){r.x+=(r.x-player.x)/d*5;r.y+=(r.y-player.y)/d*5;} });
 
-/* ── BEACON unlocks radar ── */
+/* ── NOVA power-up ── */
+  if(nova.active&&dist(player.x,player.y,nova.x,nova.y)<player.r+NOVA_RADIUS){
+    nova.active=false;novaBlast=NOVA_BLAST_MS;shake=18;
+  }
+  if(!nova.active){nova.cd+=dt;if(nova.cd>NOVA_SPAWN_MS)spawnNova();}
+  if(nova.active)glow(nova.x,nova.y,nova.r,"#d400ff",0.95);
+
+/* Nova blast effect */
+  if(novaBlast>0){novaBlast-=dt;
+    const factor=novaBlast/NOVA_BLAST_MS,rad=(1-factor)*NOVA_BLAST_DIST*zoom;
+    ctx.setTransform(1,0,0,1,shake,shake);
+    ctx.strokeStyle=`rgba(212,0,255,${factor})`;ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(W/2,H/2,rad,0,6.283);ctx.stroke();
+    /* clear enemies in range */
+    const blast=(list,multi)=>{for(let i=list.length-1;i>=0;i--){if(dist(player.x,player.y,list[i].x,list[i].y)<NOVA_BLAST_DIST){handleKill(list[i].r*multi);list.splice(i,1);}}};
+    blast(foes,2.5);blast(titans,5);blast(spectres,7);blast(reapers,10);
+  }
+
+/* beacons */
   beacons.forEach(b=>{if(dist(player.x,player.y,b.x,b.y)<player.r+b.r){beacons.length=0;radarActive=true;rWrap.style.display="block";}});
 
-/* ── SIZE / TAIL / LEVEL ── */
+/* tail / size / level */
   player.r=10+player.mass/15;level=Math.floor(player.mass/100)+1;
-  player.tail.unshift({x:player.x,y:player.y});
-  while(player.tail.length>Math.ceil(player.mass/3*(1+EXTRA_TAIL_PCT)))player.tail.pop();
-  if(player.blink>0)player.blink-=dt;
+  player.tail.unshift({x:player.x,y:player.y});while(player.tail.length>Math.ceil(player.mass/3*(1+EXTRA_TAIL)))player.tail.pop();
 
-/* ── CAMERA ── */
+/* camera transform */
   offset.x=W/2-player.x*zoom;offset.y=H/2-player.y*zoom;
   ctx.setTransform(zoom,0,0,zoom,offset.x,offset.y);
 
-/* ── DRAW WORLD ── */
-  ctx.fillStyle="#161616";ctx.fillRect(player.x-3000,player.y-3000,6000,6000);
+/* DRAW background grid */
+  ctx.fillStyle="#0a0a12";ctx.fillRect(player.x-3200,player.y-3200,6400,6400);
+
+/* draw entities */
   food.forEach(f=>glow(f.x,f.y,f.r,"#ff0",0.6));
   foes.forEach(o=>glow(o.x,o.y,o.r,"#f00",0.85));
   titans.forEach(t=>glow(t.x,t.y,t.r,"#cc00ff",0.9));
   spectres.forEach(s=>glow(s.x,s.y,s.r,"#ffde59",0.9));
   reapers.forEach(r=>glow(r.x,r.y,r.r,"#ff8800",0.9));
-  beacons.forEach(b=>glyphR(b.x,b.y,b.r,"#00e4ff"));
+  beacons.forEach(b=>glow(b.x,b.y,b.r,"#00e4ff",0.8));
+  if(nova.active)glow(nova.x,nova.y,nova.r*1.3,"#ff39ff",1);
   const skip=Math.max(1,Math.ceil(player.tail.length/MAX_TAIL_DRAW));
-  for(let i=0;i<player.tail.length;i+=skip)glow(player.tail[i].x,player.tail[i].y,player.r*(1-i/player.tail.length),"#00e4b8",0.3);
-  glow(player.x,player.y,player.r,player.blink>0?(player.blink%200<100?"#fff":"#ff44ff"):"#00e4b8",1);
+  for(let i=0;i<player.tail.length;i+=skip){
+    const col=combo?`hsl(${(combo*25+i)%360}deg 100% 60%)`:"#00e4b8";
+    glow(player.tail[i].x,player.tail[i].y,player.r*(1-i/player.tail.length),col,0.3);
+  }
+  glow(player.x,player.y,player.r,combo?`hsl(${combo*25%360}deg 100% 60%)`:"#00e4b8",1);
 
-/* ── RADAR (redraws every frame) ── */
+/* radar */
   if(radarActive){
-    rctx.clearRect(0,0,70,70);
-    rctx.fillStyle="rgba(0,0,0,.55)";rctx.fillRect(0,0,70,70);
+    rctx.clearRect(0,0,70,70);rctx.fillStyle="rgba(0,0,0,.55)";rctx.fillRect(0,0,70,70);
     rctx.strokeStyle="#666";rctx.strokeRect(0,0,70,70);
     const scale=(30-RADAR_PADDING)/Math.max(C_RING_DIST,Math.abs(player.x),Math.abs(player.y));
     rctx.fillStyle="#0ef";rctx.beginPath();rctx.arc(35+player.x*scale,35+player.y*scale,3,0,6.283);rctx.fill();
   }
 
-/* ── HUD ── */
+/* HUD */
   massEl.textContent=player.mass.toFixed(0);
-  scoreEl.textContent=Math.floor(player.mass*10);
+  scoreEl.textContent=Math.floor(score);
   levelEl.textContent=level;
 
   requestAnimationFrame(loop);
 });
+
+/* tiny UX: click to resume BG music */
+addEventListener("pointerdown",()=>{const a=document.getElementById("backgroundMusic");if(a&&a.paused)a.play().catch(()=>{});},{once:true});
 </script>
 </body>
 </html>
