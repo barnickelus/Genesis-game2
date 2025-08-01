@@ -2,13 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis Evolution — Radar & Spectre Fix</title>
+<title>Genesis Evolution — Radar & Safe-Mass Fix</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>
  html,body{margin:0;height:100%;background:#060616;overflow:hidden;font-family:"Inter",Arial,sans-serif;}
- canvas{width:100%;height:100%;display:block;touch-action:none;
-        background:radial-gradient(circle at center,#32005a 0%,#000 85%);}
+ canvas{width:100%;height:100%;display:block;touch-action:none;background:radial-gradient(circle at center,#32005a 0%,#000 85%);}
  #hud{position:fixed;top:14px;left:18px;color:#fff;font-size:15px;text-shadow:0 0 4px rgba(255,255,255,.3);z-index:2;}
  #compass{position:fixed;top:60px;left:18px;color:#aaa;font-size:12px;line-height:12px;letter-spacing:1px;text-shadow:0 0 2px #000;z-index:2;}
  #effBar{position:fixed;bottom:14px;left:18px;width:220px;height:18px;border-radius:9px;background:rgba(255,255,255,.12);z-index:2;}
@@ -29,160 +28,131 @@
 <div id="radarWrap"><canvas id="radar" width="70" height="70"></canvas></div>
 <input id="zoomSlider" type="range" min="0.5" max="2" step="0.01" value="1">
 
-<audio id="backgroundMusic" src="background-music.mp3" loop preload="auto"></audio>
-
 <script>
-/* ===== CONSTANTS & BALANCE ===== */
+/* === CONSTANTS === */
 const MASS_THRESH=600,TITAN_LEVEL=10,TITAN_MAX=6,TITAN_RESPAWN_MS=20000,
-      SPECTRE_MAX=3,REAPER_MAX=3,C_RING_DIST=1600;
-const SPECTRE_SPEED_MS=6000,SPECTRE_SPEED_MULT=1.25,RADAR_PADDING=4;
-const MASS_SPEED_FACTOR=0.0012,EXTRA_TAIL_PCT=0.10,MAX_TAIL_DRAW=60,
-      SAFE_PLAYER_MASS=70,BLINK_MS=300;
+      SPECTRE_MAX=3,REAPER_MAX=3,C_RING_DIST=1600,
+      SPECTRE_SPEED_MS=6000,SPECTRE_SPEED_MULT=1.25,RADAR_PADDING=4;
+/* balance */
+const MASS_SPEED_FACTOR=0.0012,EXTRA_TAIL=0.1,MAX_TAIL_DRAW=60,
+      SAFE_MASS=70,BLINK_MS=300;
 
-/* ===== CANVAS & ZOOM ===== */
+/* === CANVAS & ZOOM === */
 const canvas=document.getElementById("game"),ctx=canvas.getContext("2d",{alpha:false});
 let W,H;function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;}resize();addEventListener("resize",resize);
 let sliderZoom=1;document.getElementById("zoomSlider").addEventListener("input",e=>sliderZoom=parseFloat(e.target.value));
 let zoom=sliderZoom;
 
-/* ===== HUD refs ===== */
+/* === HUD & RADAR === */
 const massEl=document.getElementById("mass"),scoreEl=document.getElementById("score"),levelEl=document.getElementById("level");
-const radarWrap=document.getElementById("radarWrap"),rctx=document.getElementById("radar").getContext("2d");
-const pauseBtn=document.getElementById("pauseBtn");
+const rWrap=document.getElementById("radarWrap"),rctx=document.getElementById("radar").getContext("2d");
 
-/* ===== WORLD ARRAYS & PLAYER ===== */
+/* === WORLD ARRAYS === */
 let player={x:0,y:0,r:15,mass:10,tail:[],baseSpeed:2.5,blink:0,speedBoost:0};
 let target={x:0,y:0,active:false},offset={x:0,y:0};
 const food=[],foes=[],titans=[],spectres=[],reapers=[],beacons=[];
-let pill={x:0,y:0,r:10,active:false,cd:0};
-let frenzy=false,F_TIME=0;
-let paused=false,radarActive=false;
-let titanTimer=0,titanKill=0,spectreKill=0,level=1;
+let frenzy=false;let titanKill=0,reaperKill=0,level=1;
+let radarActive=false;
 
-/* ===== UTILITIES ===== */
+/* === UTIL === */
 const rand=v=>Math.random()*v-v/2;
 const dist=(a,b,c,d)=>Math.hypot(a-c,b-d);
 const onScreen=(x,y,r)=>!(x+r<player.x-W/(2*zoom)||x-r>player.x+W/(2*zoom)||y+r<player.y-H/(2*zoom)||y-r>player.y+H/(2*zoom));
 
-/* ===== SPAWNERS ===== */
+/* === SPAWNERS === */
 function spawnFood(){while(food.length<60)food.push({x:rand(1800),y:rand(1800),r:6});}
 function spawnFoe(){foes.push({x:rand(2000),y:rand(2000),r:(player.mass>=MASS_THRESH?14:10)+Math.random()*20});}
-function spawnTitan(){const a=Math.random()*6.283,d=700+Math.random()*500;titans.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:25+Math.random()*35,hop:0});}
-function spawnSpectre(){const a=Math.random()*6.283,d=600+Math.random()*400;spectres.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:22+Math.random()*25,dash:0});}
-function spawnReaper(){const a=Math.random()*6.283,d=800+Math.random()*600;reapers.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:38+Math.random()*28,charge:0});}
+function spawnTitan(){const a=Math.random()*6.28,d=700+Math.random()*500;titans.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:25+Math.random()*35,hop:0});}
+function spawnSpectre(){const a=Math.random()*6.28,d=600+Math.random()*400;spectres.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:22+Math.random()*25,dash:0});}
+function spawnReaper(){const a=Math.random()*6.28,d=800+Math.random()*600;reapers.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:38+Math.random()*28,charge:0});}
 
-/* initial content */
+/* initial stuff */
 spawnFood();for(let i=0;i<12;i++)spawnFoe();
 ["N","S","E","W"].forEach(d=>{const p={N:[0,-C_RING_DIST],S:[0,C_RING_DIST],E:[C_RING_DIST,0],W:[-C_RING_DIST,0]}[d];beacons.push({x:p[0],y:p[1],r:18});});
 
-/* ===== INPUT ===== */
+/* === INPUT === */
 const toWorld=e=>({x:(e.clientX-offset.x)/zoom,y:(e.clientY-offset.y)/zoom});
-canvas.addEventListener("pointerdown",e=>{if(!paused){const p=toWorld(e);target.x=p.x;target.y=p.y;target.active=true;}});
-canvas.addEventListener("pointermove",e=>{if(target.active&&!paused){const p=toWorld(e);target.x=p.x;target.y=p.y;}});
+canvas.addEventListener("pointerdown",e=>{if(!paused){const p=toWorld(e);target=p;target.active=true;}});
+canvas.addEventListener("pointermove",e=>{if(target.active&&!paused){target=toWorld(e);} });
 canvas.addEventListener("pointerup",()=>target.active=false);
 
-/* ===== PAUSE ===== */
-pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?"▶︎":"⏸︎";};
+/* === PAUSE BTN === */
+document.getElementById("pauseBtn").onclick=()=>{paused=!paused;};
 
-/* ===== DRAW HELPERS ===== */
-function glow(x,y,r,c,a){if(r*zoom<0.8||!onScreen(x,y,r))return;ctx.globalAlpha=a;ctx.shadowBlur=12*zoom;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,6.283);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;}
-function glyphR(x,y,r,c){if(r*zoom<0.8||!onScreen(x,y,r))return;ctx.save();ctx.fillStyle=c;ctx.font=`${r*2}px Inter`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("R",x,y);ctx.restore();}
-
-/* ===== GAME LOOP ===== */
-let last=0;requestAnimationFrame(function loop(ts){
+/* === LOOP === */
+let last=0,paused=false;requestAnimationFrame(function loop(ts){
   if(paused){last=ts;return requestAnimationFrame(loop);}const dt=(ts-last)||16;last=ts;
 
-  /* dynamic zoom—player never >½ screen */
+/* auto-zoom so blob ≤½ screen */
   zoom=Math.min(sliderZoom,Math.max(0.5,H/(player.r*4)));
-
-  /* clear */
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);
 
-  /* --- movement & decay --- */
-  const dx=(target.active?target.x:player.x)-player.x,
-        dy=(target.active?target.y:player.y)-player.y,
-        dLen=Math.hypot(dx,dy);
-  if(player.speedBoost>0)player.speedBoost=Math.max(0,player.speedBoost-dt);
-  const sp=player.baseSpeed*(player.speedBoost>0?SPECTRE_SPEED_MULT:1)*(1+player.mass*MASS_SPEED_FACTOR);
-  if(dLen>1){player.x+=dx/dLen*sp;player.y+=dy/dLen*sp;}
+/* movement & decay */
+  const dx=(target.active?target.x:player.x)-player.x,dy=(target.active?target.y:player.y)-player.y,dLen=Math.hypot(dx,dy);
+  const speed=player.baseSpeed*(player.speedBoost>0?SPECTRE_SPEED_MULT:1)*(1+player.mass*MASS_SPEED_FACTOR);
+  if(dLen>1)player.x+=dx/dLen*speed,player.y+=dy/dLen*speed;
   player.mass=Math.max(5,player.mass-(0.000009*player.r*player.r+(player.mass<150?0.002:0.003))*dt);
 
-  /* --- food --- */
+/* food */
   for(let i=food.length-1;i>=0;i--){if(dist(player.x,player.y,food[i].x,food[i].y)<player.r+food[i].r){player.mass+=food[i].r;food.splice(i,1);}}
   spawnFood();
 
-  /* --- foes --- */
+/* foes basic */
   while(foes.length<(player.mass>=MASS_THRESH?18:12))spawnFoe();
   foes.forEach((o,i)=>{const d=dist(player.x,player.y,o.x,o.y);
     if(player.r>o.r&&d<player.r){player.mass+=o.r*2.5;foes.splice(i,1);}
-    else{
-      if(o.r>player.r&&d<o.r&&player.blink<50)player.blink=BLINK_MS;
-      const push=o.r>player.r?1:-1;if(d<250){o.x+=(player.x-o.x)/d*push;o.y+=(player.y-o.y)/d*push;}
+    else if(o.r>player.r&&d<o.r){if(player.blink<50)player.blink=BLINK_MS;}});
+
+/* titans */
+  if(level>=TITAN_LEVEL)while(titans.length<TITAN_MAX)spawnTitan();
+  titans.forEach((t,i)=>{const d=dist(player.x,player.y,t.x,t.y);
+    if(player.r>t.r&&d<player.r){player.mass+=t.r*5;titans.splice(i,1);titanKill++;} });
+
+/* spectres with safe-mass retreat */
+  const small=player.mass<SAFE_MASS;
+  if(titanKill>=10)while(spectres.length<SPECTRE_MAX)spawnSpectre();
+  spectres.forEach((s,i)=>{const d=dist(player.x,player.y,s.x,s.y);
+    if(!small&&d<player.r){player.mass+=s.r*7;spectres.splice(i,1);}
+    else if(small){
+      /* aggressive retreat until ≥350px */
+      if(d<350){s.x+=(s.x-player.x)/d*3;s.y+=(s.y-player.y)/d*3;}
     }});
 
-  /* --- titans --- */
-  if(level>=TITAN_LEVEL){while(titans.length<TITAN_MAX)spawnTitan();titanTimer+=dt;if(titanTimer>TITAN_RESPAWN_MS){titanTimer=0;titans.length=0;}}
-  titans.forEach((o,i)=>{o.hop-=dt;const d=dist(player.x,player.y,o.x,o.y);
-    if(d>2000){titans.splice(i,1);spawnTitan();return;}
-    if(player.r>o.r&&d<player.r){player.mass+=o.r*5;titans.splice(i,1);titanKill++;return;}
-    if(o.r>player.r&&d<o.r&&player.blink<50)player.blink=BLINK_MS;
-    if(o.hop<=0){o.hop=700;const hop=o.r>player.r?120:-80;o.x+=(player.x-o.x)/d*hop;o.y+=(player.y-o.y)/d*hop;}});
+/* reapers with safe-mass retreat */
+  reapers.forEach((r,i)=>{const d=dist(player.x,player.y,r.x,r.y);
+    if(!small&&d<player.r){player.mass+=r.r*10;reapers.splice(i,1);}
+    else if(small){if(d<350){r.x+=(r.x-player.x)/d*3;r.y+=(r.y-player.y)/d*3;}}});
 
-  /* --- spectres --- */
-  if(titanKill>=10)while(spectres.length<SPECTRE_MAX)spawnSpectre();
-  spectres.forEach((s,i)=>{s.dash-=dt;const d=dist(player.x,player.y,s.x,s.y);
-    if(d>2200){spectres.splice(i,1);spawnSpectre();return;}
-    const ignore=player.mass<SAFE_PLAYER_MASS;
-    if(!ignore&&d<player.r){player.mass+=s.r*7;player.speedBoost=SPECTRE_SPEED_MS;spectres.splice(i,1);spectreKill++;if(spectreKill%6===0&&reapers.length<REAPER_MAX)spawnReaper();return;}
-    if(!ignore&&d<s.r&&s.r>player.r&&player.blink<50)player.blink=BLINK_MS;
-    const jump=ignore?-200:(s.r>player.r?160:-100);
-    if(s.dash<=0){s.dash=400;s.x+=(player.x-s.x)/d*jump;s.y+=(player.y-s.y)/d*jump;}
-  });
+/* beacons unlock radar */
+  beacons.forEach(b=>{if(dist(player.x,player.y,b.x,b.y)<player.r+b.r){beacons.length=0;radarActive=true;rWrap.style.display="block";}});
 
-  /* --- reapers --- */
-  reapers.forEach((r,i)=>{r.charge-=dt;const d=dist(player.x,player.y,r.x,r.y);
-    if(d>2400){reapers.splice(i,1);return;}
-    const ignore=player.mass<SAFE_PLAYER_MASS;
-    if(!ignore&&d<player.r){player.mass+=r.r*10;reapers.splice(i,1);return;}
-    if(!ignore&&d<r.r&&r.r>player.r&&player.blink<50)player.blink=BLINK_MS;
-    const step=ignore?-200:(r.r>player.r?130:-100);
-    if(r.charge<=0){r.charge=300;r.x+=(player.x-r.x)/d*step;r.y+=(player.y-r.y)/d*step;}
-  });
-
-  /* --- beacons unlock radar --- */
-  beacons.forEach(b=>{if(dist(player.x,player.y,b.x,b.y)<player.r+b.r){beacons.length=0;radarActive=true;radarWrap.style.display="block";}});
-
-  /* --- sizes & tail --- */
+/* size / level / tail */
   player.r=10+player.mass/15;level=Math.floor(player.mass/100)+1;
-  player.tail.unshift({x:player.x,y:player.y});
-  while(player.tail.length>Math.ceil(player.mass/3*(1+EXTRA_TAIL_PCT)))player.tail.pop();
-  if(player.blink>0)player.blink-=dt;
+  player.tail.unshift({x:player.x,y:player.y});while(player.tail.length>Math.ceil(player.mass/3*(1+EXTRA_TAIL)))player.tail.pop();
 
-  /* --- camera transform --- */
+/* camera transform */
   offset.x=W/2-player.x*zoom;offset.y=H/2-player.y*zoom;
   ctx.setTransform(zoom,0,0,zoom,offset.x,offset.y);
 
-  /* --- DRAW WORLD --- */
+/* draw field */
   ctx.fillStyle="#161616";ctx.fillRect(player.x-2500,player.y-2500,5000,5000);
   food.forEach(f=>glow(f.x,f.y,f.r,"#ff0",0.65));
-  foes.forEach(o=>glow(o.x,o.y,o.r,"#f00",0.85));
-  titans.forEach(o=>glow(o.x,o.y,o.r,"#cc00ff",0.9));
+  foes.forEach(o=>glow(o.x,o.y,o.r,"#f00",0.8));
+  titans.forEach(t=>glow(t.x,t.y,t.r,"#cc00ff",0.9));
   spectres.forEach(s=>glow(s.x,s.y,s.r,"#ffde59",0.9));
   reapers.forEach(r=>glow(r.x,r.y,r.r,"#ff8800",0.9));
   beacons.forEach(b=>glyphR(b.x,b.y,b.r,"#00e4ff"));
   const skip=Math.max(1,Math.ceil(player.tail.length/MAX_TAIL_DRAW));
-  for(let i=0;i<player.tail.length;i+=skip){
-    const p=player.tail[i];glow(p.x,p.y,player.r*(1-i/player.tail.length),"#00e4b8",0.3);}
-  glow(player.x,player.y,player.r,player.blink>0?(player.blink%200<100?"#fff":"#ff44ff"):"#00e4b8",1);
+  for(let i=0;i<player.tail.length;i+=skip)glow(player.tail[i].x,player.tail[i].y,player.r*(1-i/player.tail.length),"#00e4b8",0.3);
+  glow(player.x,player.y,player.r,player.blink>0?(player.blink%200<100?"#fff":"#f0f"):"#0ef",1);
 
-  /* --- RADAR --- */
+/* radar redraw */
   if(radarActive){
-    rctx.clearRect(0,0,70,70);
-    rctx.fillStyle="rgba(0,0,0,.55)";rctx.fillRect(0,0,70,70);
-    rctx.strokeStyle="#666";rctx.strokeRect(0,0,70,70);
+    rctx.clearRect(0,0,70,70);rctx.strokeStyle="#666";rctx.strokeRect(0,0,70,70);
     const scale=(30-RADAR_PADDING)/Math.max(C_RING_DIST,Math.abs(player.x),Math.abs(player.y));
     rctx.fillStyle="#0ef";rctx.beginPath();rctx.arc(35+player.x*scale,35+player.y*scale,3,0,6.283);rctx.fill();}
-  /* HUD */
+
+/* HUD */
   massEl.textContent=player.mass.toFixed(0);
   scoreEl.textContent=Math.floor(player.mass*10);
   levelEl.textContent=level;
