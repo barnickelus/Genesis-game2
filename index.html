@@ -2,66 +2,57 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis Evolution — Star-Frenzy 3-D</title>
+<title>Genesis Evolution — Star-Frenzy · 3-D Dragon Build</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
  html,body{margin:0;height:100%;background:#060616;font-family:Inter,Arial,sans-serif;overflow:hidden}
- #game{position:fixed;inset:0;background:#000;touch-action:none;image-rendering:pixelated}
+ #game    {position:fixed;inset:0;background:#000;touch-action:none;image-rendering:pixelated}
  #dragonGL{position:fixed;inset:0;pointer-events:none}
  #hud{position:fixed;top:14px;left:18px;color:#fff;font-size:15px;text-shadow:0 0 4px #000c;z-index:2}
  #compass{position:fixed;top:60px;left:18px;color:#aaa;font-size:12px;line-height:12px;letter-spacing:1px;text-shadow:0 0 2px #000;z-index:2}
- #effBar{position:fixed;bottom:14px;left:18px;width:220px;height:18px;border-radius:9px;background:#ffffff2a;z-index:2}
+ #effBar{position:fixed;bottom:14px;left:18px;width:220px;height:18px;border-radius:9px;background:#ffffff29;z-index:2}
  #effFill{width:100%;height:100%;border-radius:9px;background:#00e4b8}
  #pauseBtn{position:fixed;top:14px;right:18px;font-size:22px;color:#fff;cursor:pointer;user-select:none;z-index:2}
  #radarWrap{position:fixed;top:48px;right:18px;width:70px;height:70px;display:none;z-index:2}
- #radar{width:70px;height:70px;border:1px solid #555;border-radius:4px;background:#0006}
+ #radar{width:70px;height:70px;border:1px solid #555;border-radius:4px;background:#0007}
  #zoomSlider{position:fixed;top:130px;right:18px;width:70px;transform:rotate(-90deg);z-index:2}
- #err{position:fixed;top:0;left:0;max-width:320px;padding:6px 8px;background:#900;color:#fff;font:12px/15px monospace;white-space:pre-wrap;z-index:9999;display:none}
+ #err{position:fixed;top:0;left:0;max-width:340px;padding:6px 8px;background:#c00;color:#fff;font:12px/15px monospace;white-space:pre-wrap;z-index:9;display:none}
 </style>
 </head>
 <body>
 
+<!-- 2-D world -->
 <canvas id="game"></canvas>
+<!-- WebGL overlay head -->
 <canvas id="dragonGL"></canvas>
 
-<div id="hud">Mass <span id="mass">10</span> | Score <span id="score">0</span> | Lvl <span id="level">1</span></div>
+<!-- HUD -->
+<div id="hud">Mass <span id="mass">10</span>&nbsp;|&nbsp;Score <span id="score">0</span>&nbsp;|&nbsp;Lvl <span id="level">1</span></div>
 <div id="compass">N<br>E  W<br> S</div>
 <div id="effBar"><div id="effFill"></div></div>
 <div id="pauseBtn">⏸︎</div>
 <div id="radarWrap"><canvas id="radar" width="70" height="70"></canvas></div>
 <input id="zoomSlider" type="range" min="0.5" max="2" step="0.01" value="1">
 
-<!-- optional audio (comment out if you don’t have the mp3s yet) -->
-<!--
-<audio id="backgroundMusic" src="background-music.mp3" loop preload="auto"></audio>
-<audio id="eatSnd"  src="eat.mp3"    preload="auto"></audio>
-<audio id="hurtSnd" src="hurt.mp3"   preload="auto"></audio>
-<audio id="frenzySnd" src="frenzy.mp3" preload="auto"></audio>
--->
-
 <div id="err"></div>
 
-<!-- 1) primary CDN -->
+<!-- CDN #1 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r156/three.min.js" crossorigin="anonymous"></script>
-<!-- 2) fallback CDN if primary blocked -->
-<script>if(!window.THREE){let s=document.createElement('script');s.src='https://unpkg.com/three@0.156.1/build/three.min.js';s.crossOrigin='anonymous';document.head.appendChild(s);}</script>
+<!-- CDN #2 fallback -->
+<script>if(!window.THREE){const s=document.createElement('script');s.src='https://unpkg.com/three@0.156.1/build/three.min.js';s.crossOrigin='anonymous';document.head.appendChild(s);}</script>
 
 <script>
-/* ╔════════════════ ERROR OVERLAY ════════════════╗ */
-onerror=(m,src,l,c)=>{const e=document.getElementById('err');e.textContent=`${m}\n${src}:${l}`;e.style.display='block';};
+/*──────── error overlay ────────*/
+onerror=(m,src,l)=>{const b=document.getElementById('err');b.textContent=`${m}\n${src}:${l}`;b.style.display='block';};
 
-/* ╔════════════ WAIT FOR THREE TO LOAD ════════════╗ */
-(function wait(i=0){
-  if(window.THREE){init();return;}
-  if(i>40){onerror('Three.js failed to load','',0);return;}
-  setTimeout(()=>wait(i+1),100);
-})();
+/*──────── wait for THREE then boot ────────*/
+(function wait(i=0){if(window.THREE){boot();return;}if(i>40){onerror('Three.js failed to load','',0);}else setTimeout(()=>wait(i+1),100);})();
 
-/* ╔═══════════════ GAME STARTS HERE ═══════════════╗ */
-function init(){
-
-/* ————————  WebGL DRAGON HEAD  ———————— */
+function boot(){
+/*═══════════════════════════════════════════
+  SECTION A · WebGL neon dragon head
+═══════════════════════════════════════════*/
 const glC=document.getElementById('dragonGL');
 const glR=new THREE.WebGLRenderer({canvas:glC,alpha:true,antialias:false});
 glR.setPixelRatio(devicePixelRatio);
@@ -70,48 +61,52 @@ const glScene=new THREE.Scene();
 const glCam=new THREE.OrthographicCamera(-1,1,1,-1,0.1,10);glCam.position.z=4;
 
 const head=new THREE.Group();glScene.add(head);
-/* skull */
 head.add(new THREE.Mesh(new THREE.IcosahedronGeometry(.55,0),
-  new THREE.MeshPhongMaterial({color:0x00dfff,shininess:80})));
-/* jaw */
-const jaw=new THREE.Mesh(new THREE.BoxGeometry(.7,.18,.25),
-  new THREE.MeshPhongMaterial({color:0x00caff}));
+        new THREE.MeshPhongMaterial({color:0x00dfff,shininess:80})));
+const jaw =new THREE.Mesh(new THREE.BoxGeometry(.7,.18,.25),
+        new THREE.MeshPhongMaterial({color:0x00caff}));
 jaw.position.set(.15,-.25,0);jaw.rotation.z=.14;head.add(jaw);
-/* horns */
 const hornMat=new THREE.MeshPhongMaterial({color:0x00e4b8});
 for(let i=0;i<3;i++){const h=new THREE.Mesh(new THREE.ConeGeometry(.06,.45,5),hornMat);
   h.position.set(.12*i,.38+.02*i,-.05*i);h.rotation.z=-Math.PI/7;head.add(h);}
 glScene.add(new THREE.DirectionalLight(0xffffff,1).position.set(1,1,2));
-glScene.add(new THREE.AmbientLight(0x445566,.6));
+glScene.add(new THREE.AmbientLight(0x445566,.55));
 
-function fitGL(){glR.setSize(innerWidth,innerHeight,false);} addEventListener('resize',fitGL);fitGL();
-function drawHead(px,py,r,ang,blink){
-  head.rotation.z=ang;head.scale.setScalar(r*0.018);
+function fitGL(){glR.setSize(innerWidth,innerHeight,false);}addEventListener('resize',fitGL);fitGL();
+function drawHead(scrX,scrY,radPx,angle,blink){
+  head.rotation.z=angle;
+  head.scale.setScalar(radPx*0.018);
   glCam.left=-innerWidth/2;glCam.right=innerWidth/2;glCam.top=innerHeight/2;glCam.bottom=-innerHeight/2;glCam.updateProjectionMatrix();
-  head.position.set(px-innerWidth/2,-py+innerHeight/2,0);
+  head.position.set(scrX-innerWidth/2,-scrY+innerHeight/2,0);
   glR.render(glScene,glCam);
 }
 
-/* ———————— 2-D GAME WORLD ———————— */
-const g=document.getElementById('game'),ctx=g.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=false;
-let W,H;function fit2D(){W=g.width=innerWidth;H=g.height=innerHeight;}fit2D();addEventListener('resize',fit2D);
-
-const rand=v=>Math.random()*v-v/2,dist=(ax,ay,bx,by)=>Math.hypot(ax-bx,ay-by),lerp=(a,b,t)=>a+(b-a)*t;
-const STAR_CT=120,stars=[...Array(STAR_CT)].map(()=>({x:rand(4000),y:rand(4000),s:Math.random()*1.4+.6}));
+/*═══════════════════════════════════════════
+  SECTION B · 2-D game world
+═══════════════════════════════════════════*/
+const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=false;
+let W=0,H=0;function fit2D(){W=cvs.width=innerWidth;H=cvs.height=innerHeight;}fit2D();addEventListener('resize',fit2D);
 
 /* constants */
-const MASS_THRESH=600,TITAN_LEVEL=10,TITAN_MAX=6,TITAN_RESPAWN_MS=2e4,
-      SPECTRE_MAX=3,REAPER_MAX=3,C_RING_DIST=1600,
-      SPEED_PILL_CD=3e4,FRENZY_MS=1e4,
+const MASS_THRESH=600,TITAN_LEVEL=10,TITAN_MAX=6,TITAN_RESPAWN=2e4,
+      SPECTRE_MAX=3,REAPER_MAX=3,C_RING=1600,
+      SPEED_CD=3e4,FRENZY_MS=1e4,
       MASS_SPEED=0.0012,BLINK_MS=300,ZOOM_EASE=.25,
-      MAX_TAIL=60,EXTRA_TAIL=.1;
+      MAX_TAIL=60,EXTRA_TAIL_PCT=0.10;
 
-/* world */
-let player={x:0,y:0,r:15,mass:10,tail:[],base:2.3,blink:0,speedBoost:0},
+/* state */
+let player={x:0,y:0,r:15,mass:10,tail:[],base:2.4,blink:0,speedBoost:0},
     target={x:0,y:0,active:false},zoom=1,offX=0,offY=0,dir=0,
-    food=[],foes=[],titans=[],spectres=[],reapers=[],pill={active:false},
-    frenzy=false,frenzyT=0;
+    food=[],foes=[],titans=[],spectres=[],reapers=[],
+    pill={active:false,cd:0},frenzy=false,frenzyT=0,
+    stars=[...Array(120)].map(()=>({x:Math.random()*4000-2000,y:Math.random()*4000-2000,s:Math.random()*1.4+.6}));
 
+/* helpers */
+const rand=v=>Math.random()*v-v/2,dist=(ax,ay,bx,by)=>Math.hypot(ax-bx,ay-by),lerp=(a,b,t)=>a+(b-a)*t;
+function glow(x,y,r,c,a=.9){if(!onScr(x,y,r))return;ctx.save();ctx.globalAlpha=a;ctx.shadowBlur=r*.8*zoom;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.restore();}
+function onScr(x,y,r){return!(x+r<player.x-W/(2*zoom)||x-r>player.x+W/(2*zoom)||y+r<player.y-H/(2*zoom)||y-r>player.y+H/(2*zoom));}
+
+/* spawners */
 function spawnFood(){while(food.length<60)food.push({x:rand(1800),y:rand(1800),r:6});}
 function spawnFoe(){foes.push({x:rand(2000),y:rand(2000),r:10+Math.random()*20});}
 function spawnTitan(){const a=Math.random()*6.28,d=800+Math.random()*400;titans.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:30+Math.random()*25});}
@@ -121,104 +116,96 @@ function spawnPill(){pill={x:rand(1800),y:rand(1800),r:10,active:true,cd:0};}
 
 spawnFood();for(let i=0;i<12;i++)spawnFoe();
 
-g.addEventListener('pointerdown',e=>{target.active=true;setT(e);});
-g.addEventListener('pointermove',e=>{if(target.active)setT(e);});
-g.addEventListener('pointerup',()=>target.active=false);
+/* input */
+cvs.addEventListener('pointerdown',e=>{target.active=true;setT(e);});
+cvs.addEventListener('pointermove',e=>{if(target.active)setT(e);});
+cvs.addEventListener('pointerup',()=>target.active=false);
 function setT(e){target.x=(e.clientX-offX)/zoom;target.y=(e.clientY-offY)/zoom;}
 
 const mEl=document.getElementById('mass'),sEl=document.getElementById('score'),lvlEl=document.getElementById('level');
 
-function glow(x,y,r,c,a=.9){if(!onScreen(x,y,r))return;
-  ctx.save();ctx.globalAlpha=a;ctx.shadowBlur=r*.8*zoom;ctx.shadowColor=c;ctx.fillStyle=c;
-  ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.restore();}
-function onScreen(x,y,r){return!(x+r<player.x-W/(2*zoom)||x-r>player.x+W/(2*zoom)||y+r<player.y-H/(2*zoom)||y-r>player.y+H/(2*zoom));}
-
 let last=0;
 function loop(t){
   const dt=(t-last)||16;last=t;
-  /* zoom easing */
-  zoom=lerp(zoom,Math.min(2,Math.max(.5,H/(player.r*4))),ZOOM_EASE);
-  offX=W/2-player.x*zoom;offY=H/2-player.y*zoom;
 
-  /* move */
+  /* movement & decay */
   const ax=target.active?target.x:player.x, ay=target.active?target.y:player.y,
         dx=ax-player.x, dy=ay-player.y, d=Math.hypot(dx,dy);
   if(d>0.5)dir=Math.atan2(dy,dx);
-  const speed=(player.base+player.mass*MASS_SPEED)*(player.speedBoost?1.25:1)*(frenzy?1.3:1);
-  if(d>1){player.x+=dx/d*speed;player.y+=dy/d*speed;}
-  /* mass decay */
+  const sp=(player.base+player.mass*MASS_SPEED)*(player.speedBoost?1.25:1)*(frenzy?1.3:1);
+  if(d>1){player.x+=dx/d*sp;player.y+=dy/d*sp;}
   player.mass=Math.max(5,player.mass-(.002+.000009*player.r*player.r)*dt);
   player.r=10+player.mass/15;
 
-  /* STARFIELD */
-  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#060616';ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='#222';
-  stars.forEach(s=>{const sx=(s.x-player.x*.1)*zoom+offX,sy=(s.y-player.y*.1)*zoom+offY;
-    if(sx>-4&&sx<W+4&&sy>-4&&sy<H+4)ctx.fillRect(sx,sy,s.s,s.s);});
+  /* camera */
+  zoom=lerp(zoom,Math.min(2,Math.max(.5,H/(player.r*4))),ZOOM_EASE);
+  offX=W/2-player.x*zoom;offY=H/2-player.y*zoom;
 
-  /* world space */
+  /* bg + stars */
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#060616';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#222';stars.forEach(s=>{const sx=(s.x-player.x*.1)*zoom+offX,sy=(s.y-player.y*.1)*zoom+offY;if(sx>-4&&sx<W+4&&sy>-4&&sy<H+4)ctx.fillRect(sx,sy,s.s,s.s);});
   ctx.setTransform(zoom,0,0,zoom,offX,offY);
 
-  /* spawn / AI */
-  spawnFood();while(foes.length<12)spawnFoe();
-  if(player.mass/100|0>=TITAN_LEVEL){while(titans.length<TITAN_MAX)spawnTitan();}
-  if(titans.length>=5&&spectres.length<SPECTRE_MAX)spawnSpectre();
-  if(spectres.length>=3&&reapers.length<REAPER_MAX)spawnReaper();
-
-  /* food draw / eat */
-  for(let i=food.length;i--;){const f=food[i];if(dist(player.x,player.y,f.x,f.y)<player.r){player.mass+=f.r*1.5;food.splice(i,1);}else glow(f.x,f.y,f.r,'#ff0');}
+  /* food */
+  spawnFood();
+  for(let i=food.length;i--;){
+    const f=food[i];if(dist(player.x,player.y,f.x,f.y)<player.r){player.mass+=f.r;food.splice(i,1);}else glow(f.x,f.y,f.r,'#ff0');
+  }
 
   /* foes */
+  while(foes.length<12)spawnFoe();
   foes.forEach((o,i)=>{
     const d=dist(player.x,player.y,o.x,o.y);
     if(player.r>o.r&&d<player.r){player.mass+=o.r*2;foes.splice(i,1);}
-    else if(o.r>player.r&&d<o.r){player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-0.1*dt);}
+    else if(o.r>player.r&&d<o.r){player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.1*dt);}
     glow(o.x,o.y,o.r,'#f00');
   });
 
   /* titans */
+  if(player.mass>=TITAN_LEVEL*100){while(titans.length<TITAN_MAX)spawnTitan();}
   titans.forEach((o,i)=>{const d=dist(player.x,player.y,o.x,o.y);
     if(d>2500){titans.splice(i,1);return;}
     if(player.r>o.r&&d<player.r){player.mass+=o.r*4;titans.splice(i,1);}
-    else if(o.r>player.r&&d<o.r){player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-0.2*dt);}
+    else if(o.r>player.r&&d<o.r){player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.2*dt);}
     glow(o.x,o.y,o.r,'#cc00ff');});
 
-  /* spectres dash */
+  /* spectres */
+  if(titans.length>=3&&spectres.length<SPECTRE_MAX)spawnSpectre();
   spectres.forEach((s,i)=>{const d=dist(player.x,player.y,s.x,s.y);
     if(d>2200){spectres.splice(i,1);return;}
-    if(player.r>    s.r&&d<player.r){player.mass+=s.r*6;spectres.splice(i,1);player.speedBoost=6e3;}
-    else if(s.r>player.r&&d<s.r){player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-0.25*dt);}
+    if(player.r>s.r&&d<player.r){player.mass+=s.r*5;spectres.splice(i,1);player.speedBoost=6e3;}
+    else if(s.r>player.r&&d<s.r){player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.25*dt);}
     glow(s.x,s.y,s.r,'#ff39ff');});
 
   /* reapers */
+  if(spectres.length>=3&&reapers.length<REAPER_MAX)spawnReaper();
   reapers.forEach((r,i)=>{const d=dist(player.x,player.y,r.x,r.y);
     if(d>2400){reapers.splice(i,1);return;}
-    if(player.r>r.r&&d<player.r){player.mass+=r.r*8;reapers.splice(i,1);}
-    else if(r.r>player.r&&d<r.r){player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-0.3*dt);}
+    if(player.r>r.r&&d<player.r){player.mass+=r.r*6;reapers.splice(i,1);}
+    else if(r.r>player.r&&d<r.r){player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.3*dt);}
     glow(r.x,r.y,r.r,'#ff8800');});
 
-  /* pill & frenzy */
-  if(pill.active){glow(pill.x,pill.y,pill.r,'#00aaff');
-    if(dist(player.x,player.y,pill.x,pill.y)<player.r+pill.r){pill.active=false;frenzy=true;frenzyT=FRENZY_MS;}}
-  else pill.cd=(pill.cd||0)+dt, pill.cd> SPEED_PILL_CD && spawnPill();
+  /* pill + frenzy */
+  if(pill.active){
+    glow(pill.x,pill.y,pill.r,'#00aaff');
+    if(dist(player.x,player.y,pill.x,pill.y)<player.r+pill.r){pill.active=false;frenzy=true;frenzyT=FRENZY_MS;}
+  }else{pill.cd+=dt;if(pill.cd>SPEED_CD)spawnPill();}
   if(frenzy){frenzyT-=dt;if(frenzyT<=0)frenzy=false;}
 
   /* tail */
-  player.tail.unshift({x:player.x,y:player.y});
-  while(player.tail.length>player.mass/3*(1+EXTRA_TAIL_PCT))player.tail.pop();
+  player.tail.unshift({x:player.x,y:player.y});while(player.tail.length>player.mass/3*(1+EXTRA_TAIL_PCT))player.tail.pop();
   const skip=Math.max(1,Math.ceil(player.tail.length/MAX_TAIL));
   for(let i=0;i<player.tail.length;i+=skip){
-    const pseg=player.tail[i],t=i/player.tail.length;
-    glow(pseg.x,pseg.y,player.r*(1-t),`hsl(${180+180*t},100%,60%)`,0.3);
+    const seg=player.tail[i],t=i/player.tail.length;glow(seg.x,seg.y,player.r*(1-t),`hsl(${180+180*t},100%,60%)`,.32);
   }
 
-  /* player blink */
-  if(player.blink>0)player.blink-=dt;
-  glow(player.x,player.y,player.r,player.blink>0 && player.blink%200<100?'#fff':'#00e4b8',1);
+  /* player glow / blink */
+  if(player.blink>0){player.blink-=dt;}
+  glow(player.x,player.y,player.r,player.blink>0&&player.blink%200<100?'#fff':'#00e4b8',1);
 
-  /* draw head */
-  const sX=player.x*zoom+offX,sY=player.y*zoom+offY;
-  drawHead(sX,sY,player.r*zoom,dir,player.blink>0 && player.blink%200<100);
+  /* 3-D head */
+  const scrX=player.x*zoom+offX,scrY=player.y*zoom+offY;
+  drawHead(scrX,scrY,player.r*zoom,dir,player.blink>0&&player.blink%200<100);
 
   /* HUD */
   mEl.textContent=player.mass|0;
