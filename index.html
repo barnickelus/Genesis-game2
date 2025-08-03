@@ -21,8 +21,8 @@
 <body>
 <canvas id="game"></canvas>
 
-<!-- ░░░ EMBEDDED DRAGON STYLESHEET ░░░ -->
-<svg id="dragon-sprites" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;left:-9999px">
+<!-- ░░░  DRAGON SPRITE SHEET  ░░░ -->
+<svg id="dragon-sheet" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;left:-9999px">
   <defs>
     <linearGradient id="grad-body" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#25f4ff"/>
@@ -30,11 +30,15 @@
     </linearGradient>
 
     <symbol id="head-right" viewBox="0 0 512 256">
-      <path d="M36 142 C36 66 120 18 230 34 C310 46 348 46 388 28 L432 6 492 46 452 80 C482 118 488 162 426 196 C362 228 294 218 236 178 C176 136 108 156 36 142 Z"
+      <path d="M36 142 C36 66 120 18 230 34 C310 46 348 46 388 28
+               L432 6 492 46 452 80 C482 118 488 162 426 196
+               C362 228 294 218 236 178 C176 136 108 156 36 142 Z"
             fill="url(#grad-body)"/>
-      <path d="M214 78 C228 66 248 66 260 92 C242 98 226 102 214 78 Z" fill="#004b72"/>
+      <path d="M214 78 C228 66 248 66 260 92
+               C242 98 226 102 214 78 Z" fill="#004b72"/>
       <circle cx="108" cy="116" r="10" fill="#008ccf"/>
-      <path d="M76 158 C146 150 204 142 256 150" stroke="#0068b7" stroke-width="18" stroke-linecap="round"/>
+      <path d="M76 158 C146 150 204 142 256 150"
+            stroke="#0068b7" stroke-width="18" stroke-linecap="round"/>
     </symbol>
 
     <symbol id="head-left">
@@ -50,80 +54,87 @@
     </symbol>
 
     <symbol id="head-top">
-      <use href="#head-right" transform="rotate(-90 256 128) scale(1 .82) translate(0 46)"/>
+      <use href="#head-right"
+           transform="rotate(-90 256 128) scale(1 .82) translate(0 46)"/>
     </symbol>
 
     <symbol id="head-bottom">
-      <use href="#head-right" transform="rotate(90 256 128) scale(1 .82) translate(0 -46)"/>
+      <use href="#head-right"
+           transform="rotate(90 256 128) scale(1 .82) translate(0 -46)"/>
     </symbol>
   </defs>
 </svg>
 
-<!-- individual SVG elements we draw from -->
-<svg id="svgE" viewBox="0 0 512 256" width="512" height="256" hidden><use href="#head-right"/></svg>
-<svg id="svgW" viewBox="0 0 512 256" width="512" height="256" hidden><use href="#head-left"/></svg>
-<svg id="svgNE" viewBox="0 0 512 256" width="512" height="256" hidden><use href="#head-right34"/></svg>
-<svg id="svgNW" viewBox="0 0 512 256" width="512" height="256" hidden><use href="#head-left34"/></svg>
-<svg id="svgN" viewBox="0 0 512 256" width="512" height="256" hidden><use href="#head-top"/></svg>
-<svg id="svgS" viewBox="0 0 512 256" width="512" height="256" hidden><use href="#head-bottom"/></svg>
-
-<!-- HUD -->
+<!-- ░░░  HUD  ░░░ -->
 <div id="hud">Mass: <span id="mass">10</span>&nbsp; Score: <span id="score">0</span>&nbsp; <span id="level">1</span></div>
 <div id="compass">N<br>E&nbsp;&nbsp;W<br>&nbsp;S</div>
 <div id="effBar"><div id="effFill"></div></div>
 <div id="pauseBtn">⏸︎</div>
 <div id="radarWrap"><canvas id="radar" width="70" height="70"></canvas></div>
 <input id="zoomSlider" type="range" min="0.5" max="2" step="0.01" value="1">
+
 <audio id="backgroundMusic" src="background-music.mp3" loop preload="auto"></audio>
-<audio id="eatSnd" src="eat.mp3" preload="auto"></audio>
-<audio id="hurtSnd" src="hurt.mp3" preload="auto"></audio>
-<audio id="frenzySnd" src="frenzy.mp3" preload="auto"></audio>
+<audio id="eatSnd"        src="eat.mp3"     preload="auto"></audio>
+<audio id="hurtSnd"       src="hurt.mp3"    preload="auto"></audio>
+<audio id="frenzySnd"     src="frenzy.mp3"  preload="auto"></audio>
 
 <script>
-/* ======================================================
-   DragonHead v5  (uses SVG symbols)
-   ====================================================== */
-const DragonHead=(()=>{
-  const SPRITES={
-    0:document.getElementById('svgE'),  // E
-    1:document.getElementById('svgNE'), // NE
-    2:document.getElementById('svgN'),  // N
-    3:document.getElementById('svgNW'), // NW
-    4:document.getElementById('svgW'),  // W
-    5:document.getElementById('svgNW'), // SW (reuse)
-    6:document.getElementById('svgS'),  // S
-    7:document.getElementById('svgNE')  // SE (reuse)
+/* ==========================================================
+   DragonHead v6  –  safe drawImage with data-URI SVGs
+   ========================================================== */
+const DragonHead = (() => {
+  const map = {
+    0:'head-right',   // E
+    1:'head-right34', // NE
+    2:'head-top',     // N
+    3:'head-left34',  // NW
+    4:'head-left',    // W
+    5:'head-left34',  // SW
+    6:'head-bottom',  // S
+    7:'head-right34'  // SE
   };
-  const GLOW='#00faff';
 
-  function octant(a){return (Math.round(((a%(2*Math.PI))+2*Math.PI)/(Math.PI/4)))&7;}
+  /* grab gradient once so each miniature SVG has its own copy */
+  const grad  = document.getElementById('grad-body').outerHTML;
+  const sheet = document.getElementById('dragon-sheet');
+
+  const IMG = {};
+  for (const id of new Set(Object.values(map))) {
+    const sym   = sheet.querySelector(`#${id}`).innerHTML;
+    const svg   = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
+                     <defs>${grad}</defs>${sym}
+                   </svg>`;
+    const uri   = 'data:image/svg+xml,' + encodeURIComponent(svg);
+    const img   = new Image();
+    img.src     = uri;
+    IMG[id]     = img;                // begins loading
+  }
+
+  const GLOW='#00faff';
+  const oct = a => (Math.round(((a%(2*Math.PI))+2*Math.PI)/(Math.PI/4)))&7;
 
   function draw(ctx,x,y,r,ang){
-    const o=octant(ang),img=SPRITES[o];
-    if(!img.width.baseVal.value) return;            // not parsed yet
+    const img = IMG[ map[ oct(ang) ] ];
+    if(!img.complete) return;         // still loading
 
-    const w=img.viewBox.baseVal.width,
-          h=img.viewBox.baseVal.height,
-          s=(r*2)/w;
-
+    const scale = (r*2)/512;          // viewBox width = 512
     ctx.save();
     ctx.translate(x,y);
     ctx.rotate(ang);
-    if(Math.cos(ang)<0) ctx.scale(-1,1);            // mirror West
+    ctx.scale(Math.cos(ang)<0?-scale:scale, scale);
 
-    ctx.scale(s,s);
     ctx.shadowColor=GLOW;
-    ctx.shadowBlur=25/s;
-    ctx.drawImage(img,-w/2,-h/2);
+    ctx.shadowBlur =25/scale;
+    ctx.drawImage(img,-256,-128);     // center of viewBox
     ctx.shadowBlur=0;
     ctx.restore();
   }
-  return{draw};
+  return { draw };
 })();
 
-/* ======================================================
-   CONSTANTS
-   ====================================================== */
+/* ==========================================================
+   CONSTANTS  (unchanged)
+   ========================================================== */
 const MASS_THRESH=600,TITAN_LEVEL=10,TITAN_MAX=6,TITAN_RESPAWN_MS=20000,
       SPECTRE_MAX=3,REAPER_MAX=3,C_RING_DIST=1600;
 const SPECTRE_SPEED_MS=6000,SPECTRE_SPEED_MULT=1.25,
@@ -131,17 +142,20 @@ const SPECTRE_SPEED_MS=6000,SPECTRE_SPEED_MULT=1.25,
 const MASS_SPEED_FACTOR=0.0012,EXTRA_TAIL_PCT=0.10,MAX_TAIL_DRAW=60,
       SAFE_PLAYER_MASS=70,BLINK_MS=300;
 
-/* canvas setup */
+/* ==========================================================
+   CANVAS / VIEWPORT
+   ========================================================== */
 const canvas=document.getElementById("game"),ctx=canvas.getContext("2d",{alpha:false});
-ctx.imageSmoothingEnabled=false;
-let W,H;function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;}resize();addEventListener("resize",resize);
+ctx.imageSmoothingEnabled=false;let W,H;function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;}resize();addEventListener("resize",resize);
 let sliderZoom=1,zoom=1;document.getElementById("zoomSlider").addEventListener("input",e=>sliderZoom=parseFloat(e.target.value));
 
 /* HUD refs */
 const massEl=document.getElementById("mass"),scoreEl=document.getElementById("score"),levelEl=document.getElementById("level");
 const pauseBtn=document.getElementById("pauseBtn"),radarWrap=document.getElementById("radarWrap"),rctx=document.getElementById("radar").getContext("2d");
 
-/* WORLD VARS */
+/* ==========================================================
+   WORLD STATE
+   ========================================================== */
 let player={x:0,y:0,r:15,mass:10,tail:[],baseSpeed:2.5,blink:0,speedBoost:0,heading:0};
 let target={x:0,y:0,active:false},offset={x:0,y:0};
 const food=[],foes=[],titans=[],spectres=[],reapers=[],beacons=[];
@@ -170,7 +184,7 @@ function spawnSpectre(){const a=Math.random()*Math.PI*2,d=600+Math.random()*400;
 function spawnReaper(){const a=Math.random()*Math.PI*2,d=800+Math.random()*600;reapers.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:38+Math.random()*28,charge:0});}
 function spawnPill(){pill={x:rand(1800),y:rand(1800),r:10,active:true,cd:0};}
 
-/* INIT CONTENT */
+/* INITIAL CONTENT */
 spawnFood();for(let i=0;i<12;i++)spawnFoe();
 ["N","S","E","W"].forEach(d=>{const p={N:[0,-C_RING_DIST],S:[0,C_RING_DIST],E:[C_RING_DIST,0],W:[-C_RING_DIST,0]}[d];beacons.push({x:p[0],y:p[1],r:18});});
 
@@ -187,40 +201,36 @@ pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?"▶︎":"⏸�
 function glow(x,y,r,c,a){if(r*zoom<0.8||!onScreen(x,y,r))return;ctx.globalAlpha=a;ctx.shadowBlur=12*zoom;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;}
 function grid(){const step=(zoom<=0.8?60:120);ctx.lineWidth=1.2;for(let z=0;z<6;z++){const s=1+z*0.15,opa=0.8-0.12*z;ctx.strokeStyle=`rgba(34,34,34,${opa})`;for(let i=-4;i<=4;i++)for(let j=-4;j<=4;j++){const x=i*step*s,y=j*step*s;if(!onScreen(x,y,step*s*1.4))continue;ctx.beginPath();ctx.rect(x,y,step*s,step*s);ctx.stroke();}}}
 
-/* GAME LOOP */
+/* ==========================================================
+   GAME LOOP
+   ========================================================== */
 let last=0;
 function loop(ts){
   if(paused){last=ts;return requestAnimationFrame(loop);}const dt=(ts-last)||16;last=ts;
 
-  /* zoom */
+  /* zoom / movement ------------------------------------------------ */
   zoom=lerp(zoom,Math.min(sliderZoom,Math.max(0.5,H/(player.r*4))),ZOOM_EASE);
-
-  /* movement */
   const dx=(target.active?target.x:player.x)-player.x,
-        dy=(target.active?target.y:player.y)-player.y,
-        dLen=Math.hypot(dx,dy);
+        dy=(target.active?target.y:player.y)-player.y,dLen=Math.hypot(dx,dy);
   if(dLen>0.5)player.heading=Math.atan2(dy,dx);
-
   if(player.speedBoost>0)player.speedBoost=Math.max(0,player.speedBoost-dt);
-  const speed=player.baseSpeed*(player.speedBoost>0?SPECTRE_SPEED_MULT:1)*(frenzy?1.3:1)*(1+player.mass*MASS_SPEED_FACTOR);
-  if(dLen>1){player.x+=dx/dLen*speed;player.y+=dy/dLen*speed;}
+  const sp=player.baseSpeed*(player.speedBoost>0?SPECTRE_SPEED_MULT:1)*(frenzy?1.3:1)*(1+player.mass*MASS_SPEED_FACTOR);
+  if(dLen>1){player.x+=dx/dLen*sp;player.y+=dy/dLen*sp;}
 
-  /* decay */
+  /* decay & camera */
   player.mass=Math.max(5,player.mass-(0.000009*player.r*player.r+(player.mass<150?0.002:0.003))*dt);
-
-  /* camera */
   offset.x=W/2-player.x*zoom;offset.y=H/2-player.y*zoom;
 
-  /* -------- background -------- */
+  /* ---------- BACKGROUND ---------- */
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);ctx.fillStyle="#060616";ctx.fillRect(0,0,W,H);ctx.fillStyle="#222";
   for(const s of stars){const sx=(s.x-player.x*0.1)*zoom+offset.x,sy=(s.y-player.y*0.1)*zoom+offset.y;if(sx<0||sx>W||sy<0||sy>H)continue;ctx.fillRect(sx,sy,s.s,s.s);}
   ctx.setTransform(zoom,0,0,zoom,offset.x,offset.y);grid();
 
-  /* ===== FOOD ===== */
+  /* ---------- FOOD ---------- */
   for(let i=food.length-1;i>=0;i--){const f=food[i];if(dist(player.x,player.y,f.x,f.y)<player.r+f.r){player.mass+=f.r;food.splice(i,1);burst(f.x,f.y,"#ff0");document.getElementById('eatSnd').play().catch(()=>{});}}
   spawnFood();
 
-  /* ===== FOES ===== */
+  /* ---------- FOES ---------- */
   while(foes.length<(player.mass>=MASS_THRESH?18:12))spawnFoe();
   foes.forEach((o,i)=>{const d=dist(player.x,player.y,o.x,o.y);
     if(player.r>o.r&&d<player.r){player.mass+=o.r*2.5;foes.splice(i,1);burst(o.x,o.y,"#f00");document.getElementById('eatSnd').play().catch(()=>{});return;}
@@ -228,7 +238,7 @@ function loop(ts){
     const c=1;if(o.r<player.r&&d<250){o.x-=(player.x-o.x)/d*c;o.y-=(player.y-o.y)/d*c;}else if(o.r>player.r&&d<250){o.x+=(player.x-o.x)/d*c;o.y+=(player.y-o.y)/d*c);}
   });
 
-  /* ===== TITANS ===== */
+  /* ---------- TITANS ---------- */
   if(level>=TITAN_LEVEL){while(titans.length<TITAN_MAX)spawnTitan();titanTimer+=dt;if(titanTimer>TITAN_RESPAWN_MS){titanTimer=0;titans.length=0;}}
   titans.forEach((o,i)=>{const d=dist(player.x,player.y,o.x,o.y);
     if(d>2000){titans.splice(i,1);spawnTitan();return;}
@@ -237,7 +247,7 @@ function loop(ts){
     o.hop-=dt;if(o.hop<=0){o.hop=700;const hop=o.r>player.r?120:-80;o.x+=(player.x-o.x)/d*hop;o.y+=(player.y-o.y)/d*hop);}
   });
 
-  /* ===== SPECTRES ===== */
+  /* ---------- SPECTRES ---------- */
   if(titanKill>=10)while(spectres.length<SPECTRE_MAX)spawnSpectre();
   spectres.forEach((s,i)=>{s.dash-=dt;const d=dist(player.x,player.y,s.x,s.y),ignore=player.mass<SAFE_PLAYER_MASS;
     if(d>2200){spectres.splice(i,1);spawnSpectre();return;}
@@ -246,7 +256,7 @@ function loop(ts){
     const jump=ignore?-100:(s.r>player.r?160:-100);if(s.dash<=0){s.dash=400;s.x+=(player.x-s.x)/d*jump;s.y+=(player.y-s.y)/d*jump);}
   });
 
-  /* ===== REAPERS ===== */
+  /* ---------- REAPERS ---------- */
   reapers.forEach((r,i)=>{r.charge-=dt;const d=dist(player.x,player.y,r.x,r.y),ignore=player.mass<SAFE_PLAYER_MASS;
     if(d>2400){reapers.splice(i,1);return;}
     if(!ignore&&d<player.r){player.mass+=r.r*10;reapers.splice(i,1);burst(r.x,r.y,"#ff8800");return;}
@@ -254,7 +264,7 @@ function loop(ts){
     const step=ignore?-100:(r.r>player.r?130:-100);if(r.charge<=0){r.charge=300;r.x+=(player.x-r.x)/d*step;r.y+=(player.y-r.y)/d*step);}
   });
 
-  /* ===== PILL / FRENZY ===== */
+  /* ---------- PILL / FRENZY ---------- */
   if(pill.active&&dist(player.x,player.y,pill.x,pill.y)<player.r+pill.r){
     frenzy=true;F_TIME=10000;pill.active=false;document.getElementById('frenzySnd').play().catch(()=>{});
     for(let i=0;i<40;i++){const a=Math.random()*Math.PI*2,r=120+Math.random()*120;food.push({cx:player.x,cy:player.y,ang:a,baseR:r,angV:0.004+Math.random()*0.003,x:player.x+Math.cos(a)*r,y:player.y+Math.sin(a)*r,r:5,frenzy:true,col:"#ff39ff"});}
@@ -264,15 +274,15 @@ function loop(ts){
 
   if(!pill.active&&!frenzy){pill.cd+=dt;if(pill.cd>25000+Math.random()*10000)spawnPill();}
 
-  /* ===== BEACONS / RADAR UNLOCK ===== */
+  /* ---------- BEACONS ---------- */
   beacons.forEach(b=>{if(dist(player.x,player.y,b.x,b.y)<player.r+b.r){beacons.length=0;radarActive=true;radarWrap.style.display="block";}});
 
-  /* SIZE / TAIL */
+  /* ---------- SIZE / TAIL ---------- */
   player.r=10+player.mass/15;level=Math.floor(player.mass/100)+1;
   player.tail.unshift({x:player.x,y:player.y});while(player.tail.length>Math.ceil(player.mass/3*(1+EXTRA_TAIL_PCT)))player.tail.pop();
   if(player.blink>0)player.blink-=dt;
 
-  /* ===== DRAW WORLD GLINTS ===== */
+  /* ---------- DRAW WORLD GLOWS ---------- */
   food.forEach(f=>glow(f.x,f.y,f.r,f.frenzy?f.col:"#ff0",f.frenzy?0.8:0.65));
   foes.forEach(o=>glow(o.x,o.y,o.r,"#f00",0.8));
   titans.forEach(o=>glow(o.x,o.y,o.r,"#cc00ff",0.9));
@@ -284,7 +294,6 @@ function loop(ts){
   for(let i=0;i<player.tail.length;i+=skip){
     const p=player.tail[i];glow(p.x,p.y,player.r*(1-i/player.tail.length),mix("#00e4b8","#ff39ff",i/player.tail.length),0.3);
   }
-
   if(frenzy){
     ctx.globalAlpha=0.15;
     const g=ctx.createRadialGradient(player.x,player.y,player.r*0.8,player.x,player.y,player.r*8);
@@ -292,10 +301,9 @@ function loop(ts){
     ctx.fillStyle=g;ctx.beginPath();ctx.arc(player.x,player.y,player.r*8,0,Math.PI*2);ctx.fill();
     ctx.globalAlpha=1;
   }
-
   glow(player.x,player.y,player.r,player.blink>0?(player.blink%200<100?"#fff":"#ff44ff"):"#00e4b8",1);
 
-  /* ===== DRAGON HEAD ===== */
+  /* ---------- DRAGON HEAD ---------- */
   DragonHead.draw(ctx,player.x,player.y,player.r*0.75,player.heading);
 
   /* PARTICLES */
@@ -322,7 +330,7 @@ function loop(ts){
 }
 requestAnimationFrame(loop);
 
-/* kick music on first tap */
+/* autoplay music */
 addEventListener("pointerdown",()=>{const bg=document.getElementById("backgroundMusic");if(bg&&bg.paused)bg.play().catch(()=>{});},{once:true});
 </script>
 </body>
