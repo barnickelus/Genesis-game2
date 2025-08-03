@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Genesis Evolution — Mobile 3-D Dragon Build</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+ html,body{margin:0;height:100%;background:#060616;font-family:Inter,Arial,sans-serif;overflow:hidden}
+ #game    {position:fixed;inset:0;background:#000;touch-action:none;image-rendering:pixelated}
+ #dragonGL{position:fixed;inset:0;pointer-events:none}
+ #hud{position:fixed;top:14px;left:18px;color:#fff;font-size:15px;text-shadow:0 0 4px #000c;z-index:2}
+ #errBox{position:fixed;top:0;left:0;max-width:320px;padding:6px 8px;background:#900;color:#fff;font:12px/15px monospace;white-space:pre-wrap;z-index:9999;display:none}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+<canvas id="dragonGL"></canvas>
+<div id="hud">Mass <span id="mass">10</span></div>
+<div id="errBox"></div>
+
+<!-- primary CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r156/three.min.js" crossorigin="anonymous"></script>
+<!-- fall-back CDN if primary blocked -->
+<script>if(!window.THREE){let s=document.createElement('script');s.src='https://unpkg.com/three@0.156.0/build/three.min.js';s.crossOrigin='anonymous';document.head.appendChild(s);}</script>
+
+<script>
+/* simple error overlay */
+onerror=(m,src,l,c)=>{const b=document.getElementById('errBox');b.textContent=`${m}\n${src}:${l}`;b.style.display='block';};
+
+/* wait for THREE */
+(function wait(k=0){if(window.THREE){boot();return;}if(k>40){onerror('Three.js failed to load','',0);return;}setTimeout(()=>wait(k+1),100);})();
+
+function boot(){
+
+/* --- WebGL neon head --- */
+const glc=document.getElementById('dragonGL');
+const glR=new THREE.WebGLRenderer({canvas:glc,alpha:true,antialias:false,preserveDrawingBuffer:false});
+glR.setPixelRatio(devicePixelRatio);
+const glS=new THREE.Scene();
+const glCam=new THREE.OrthographicCamera(-1,1,1,-1,0.1,10);glCam.position.z=4;
+
+const head=new THREE.Group();glS.add(head);
+/* skull */
+const skull=new THREE.Mesh(new THREE.IcosahedronGeometry(.55,0),
+                           new THREE.MeshPhongMaterial({color:0x00dfff,shininess:80}));
+head.add(skull);
+/* jaw */
+const jaw=new THREE.Mesh(new THREE.BoxGeometry(.7,.18,.25),
+                         new THREE.MeshPhongMaterial({color:0x00caff}));
+jaw.position.set(.15,-.25,0);jaw.rotation.z=.14;head.add(jaw);
+/* horns */
+const hornMat=new THREE.MeshPhongMaterial({color:0x00e4b8});
+for(let i=0;i<3;i++){const h=new THREE.Mesh(new THREE.ConeGeometry(.06,.45,5),hornMat);
+  h.position.set(.12*i,.38+.02*i,-.05*i);h.rotation.z=-Math.PI/7;head.add(h);}
+glS.add(new THREE.DirectionalLight(0xffffff,1).position.set(1,1,2));
+glS.add(new THREE.AmbientLight(0x335566,.5));
+
+function fitGL(){glR.setSize(innerWidth,innerHeight,false);} addEventListener('resize',fitGL);fitGL();
+function drawHead(px,py,r,ang){
+  head.rotation.z=ang;head.scale.setScalar(r*0.018);
+  glCam.left=-innerWidth/2;glCam.right=innerWidth/2;glCam.top=innerHeight/2;glCam.bottom=-innerHeight/2;glCam.updateProjectionMatrix();
+  head.position.set(px-innerWidth/2,-py+innerHeight/2,0);
+  glR.render(glS,glCam);
+}
+
+/* --- 2-D world (minimal demo) --- */
+const g=document.getElementById('game'),ctx=g.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=false;
+let W=0,H=0;function fit2D(){W=g.width=innerWidth;H=g.height=innerHeight;}fit2D();addEventListener('resize',fit2D);
+
+let p={x:0,y:0,r:18},stars=[...Array(120)].map(()=>({x:Math.random()*4000-2000,y:Math.random()*4000-2000,s:Math.random()*1.5+.5}));
+let tgt={x:0,y:0,active:false};
+g.addEventListener('pointerdown',e=>{tgt.active=true;set(e);});
+g.addEventListener('pointermove',e=>{if(tgt.active)set(e);});
+g.addEventListener('pointerup',()=>tgt.active=false);
+function set(e){tgt.x=(e.clientX-W/2);tgt.y=(e.clientY-H/2);}
+let zoom=1,offX=0,offY=0,dir=0,last=0;
+function loop(t){
+  const dt=(t-last)||16;last=t;
+  const dx=tgt.x-p.x,dy=tgt.y-p.y,dl=Math.hypot(dx,dy);
+  if(dl>1){dir=Math.atan2(dy,dx);const sp=2;p.x+=dx/dl*sp;p.y+=dy/dl*sp;}
+  zoom+=((1)-zoom)*.1;offX=W/2-p.x*zoom;offY=H/2-p.y*zoom;
+
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#060616';ctx.fillRect(0,0,W,H);
+  ctx.setTransform(zoom,0,0,zoom,offX,offY);
+  ctx.fillStyle='#222';stars.forEach(s=>{ctx.fillRect((s.x-p.x*.1), (s.y-p.y*.1), s.s/zoom, s.s/zoom);});
+
+  drawHead(p.x*zoom+offX,p.y*zoom+offY,p.r*zoom,dir);
+  document.getElementById('mass').textContent=(p.r*5)|0;
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
