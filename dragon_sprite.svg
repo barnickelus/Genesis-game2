@@ -1,0 +1,87 @@
+
+<!-- white-clay 3‑D dragon head – vectorised from user photos (5 angles) -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1280 256"
+     width="1280" height="256" style="background:#0f1114">
+
+  <!-- ─────────────  COMMON STYLES  ───────────── -->
+  <defs>
+    <!-- subtle clay‑white gradient -->
+    <linearGradient id="clay" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"  stop-color="#fafafa"/>
+      <stop offset="100%" stop-color="#dcdcdc"/>
+    </linearGradient>
+
+    <!-- ===============  SYMBOLS  =============== -->
+    <!-- 1 ▸ Right-side view -->
+    <symbol id="head-right" viewBox="0 0 256 256">
+      <path d="
+        M38 168
+        C26 120 52 78 108 54
+        C150 37 200 38 238 58
+        L245 62 246 98 238 102
+        C246 133 235 162 200 185
+        C162 210 108 215 58 195
+        Z" fill="url(#clay)"/>
+
+      <!-- eye-scoop -->
+      <path d="M161 108 L200 90 L173 132 Z"
+            fill="#ffffff" opacity=".25"/>
+
+      <!-- nostril -->
+      <circle cx="233" cy="118" r="7" fill="#000" opacity=".08"/>
+
+      <!-- three back-swept horns -->
+      <path d="M126 38
+               C160 10 190 4 224 20
+               C206 32 186 44 172 49 Z"
+            fill="url(#clay)"/>
+      <path d="M98 58
+               C127 33 154 29 185 42
+               C168 54 145 61 130 64 Z"
+            fill="url(#clay)"/>
+      <path d="M80 82
+               C110 63 132 63 156 76
+               C140 86 116 92 98 94 Z"
+            fill="url(#clay)"/>
+    </symbol>
+
+    <!-- 2 ▸ ¾-right -->
+    <symbol id="head-qtrR" viewBox="0 0 256 256">
+      <use href="#head-right" transform="translate(0) scale(.84 1)"/>
+    </symbol>
+
+    <!-- 3 ▸ front/top-down mix -->
+    <symbol id="head-front" viewBox="0 0 256 256">
+      <path d="
+        M48 200
+        C24 132 56 70 102 46
+        C134 30 174 30 206 46
+        C252 70 284 132 260 200
+        C232 238 72 238 48 200 Z"
+        fill="url(#clay)"/>
+
+      <!-- ridge horns -->
+      <path d="M128 46 C138 20 158 16 176 30 L196 62 128 76 Z" fill="#eee"/>
+      <path d="M96 58 L128 76 80 90 Z" fill="#eee"/>
+    </symbol>
+
+    <!-- 4 ▸ ¾-left -->
+    <symbol id="head-qtrL" viewBox="0 0 256 256">
+      <use href="#head-qtrR" transform="scale(-1 1) translate(-256 0)"/>
+    </symbol>
+
+    <!-- 5 ▸ left -->
+    <symbol id="head-left" viewBox="0 0 256 256">
+      <use href="#head-right" transform="scale(-1 1) translate(-256 0)"/>
+    </symbol>
+  </defs>
+
+  <!-- ─────────────  SPRITE‑SHEET  ───────────── -->
+  <use href="#head-right" x="0"    y="0"/>
+  <use href="#head-qtrR"  x="256"  y="0"/>
+  <use href="#head-front" x="512"  y="0"/>
+  <use href="#head-qtrL"  x="768"  y="0"/>
+  <use href="#head-left"  x="1024" y="0"/>
+
+</svg>
