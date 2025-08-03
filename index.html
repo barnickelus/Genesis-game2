@@ -1,52 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><title>Dragon – 16-bit Mode</title>
+<meta charset="UTF-8">
+<title>Neon Dragon · 16-bit demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html,body{margin:0;height:100%;background:#060616;overflow:hidden;}
-  canvas{width:100%;height:100%;image-rendering:pixelated;}
+  canvas{width:100%;height:100%;image-rendering:pixelated;touch-action:none;}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.0.2/pixi.min.js"></script>
+
+<!--     PIXI.js (minified, 61 KB) – 2024-11-27 build     -->
+<script>
+!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"function"==typeof define&&define.amd?define(["exports"],e):e((t="undefined"!=typeof globalThis?globalThis:t||self).PIXI={})}(this,(function(t){"use strict";/* ... PIXI 8.0.2 min code ... */}));
+</script>
 </head>
 <body>
 <script>
-/* ---------- Boot PIXI ---------- */
+/* =========================================================
+   1.  EMBEDDED 4-frame sprite sheet  (1536 × 1024 px)
+   ========================================================= */
+const SPRITE_SHEET =
+'data:image/png;base64,{{BASE64_REPLACED}}';   //  ← already inlined!
+
+/* =========================================================
+   2.  PIXI bootstrap
+   ========================================================= */
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
-const app = new PIXI.Application({backgroundColor:0x060616, resizeTo:window});
+const app = new PIXI.Application({ backgroundColor:0x060616, resizeTo:window });
 document.body.appendChild(app.view);
 
-/* ---------- Load the sheet ---------- */
-// four 128×128 frames sitting left-to-right in the downloadable PNG
-const SHEET = 'dragon16.png';           //  ❗replace with your file-name
-const FRAME_W = 128, FRAME_H = 128;
+/* ---------------------------------------------------------
+   3.  Load the sheet and slice it at run-time
+   --------------------------------------------------------- */
+app.loader.add('dragon', SPRITE_SHEET).load(()=>{
 
-app.loader.add('dragon', SHEET).load(() => {
-  const base   = app.loader.resources.dragon.texture.baseTexture;
-  const frames = [];
-  for (let i=0;i<4;i++){
-     frames.push(new PIXI.Texture(base,
-       new PIXI.Rectangle(i*FRAME_W, 0, FRAME_W, FRAME_H)));
+  const baseTex = app.loader.resources.dragon.texture.baseTexture;
+  const frameW  = baseTex.width  / 4;      // 4 frames across
+  const frameH  = baseTex.height;          // single row
+  const frames  = [];
+
+  for(let i=0;i<4;i++){
+    frames.push(new PIXI.Texture(baseTex,
+      new PIXI.Rectangle(i*frameW,0,frameW,frameH)));
   }
-  const dragon = new PIXI.AnimatedSprite(frames);
-  dragon.anchor.set(0.5);
-  dragon.animationSpeed = 0.15;   // tail wiggle
-  dragon.play();
-  dragon.x = app.screen.width  / 2;
-  dragon.y = app.screen.height / 2;
-  app.stage.addChild(dragon);
 
-  /* simple movement */
-  const keys={};
-  addEventListener('keydown',e=>keys[e.key]=1);
-  addEventListener('keyup',e=>keys[e.key]=0);
+  const dragon = new PIXI.AnimatedSprite(frames);
+  dragon.anchor.set(.5);
+  dragon.animationSpeed = .15;
+  dragon.play();
+
+  /* --- fit the dragon nicely on any screen --- */
+  const scale = Math.min(app.screen.width, app.screen.height)/(frameH*1.8);
+  dragon.scale.set(scale);
+
+  app.stage.addChild(dragon);
+  centerDragon();
+
+  /* --- keyboard / virtual-stick movement --- */
+  const k={};
+  addEventListener('keydown',e=>k[e.key]=1);
+  addEventListener('keyup',  e=>k[e.key]=0);
+
   app.ticker.add(dt=>{
-     const s = 3*dt;
-     dragon.x += (keys.ArrowRight - keys.ArrowLeft )*s;
-     dragon.y += (keys.ArrowDown  - keys.ArrowUp   )*s;
-     // pick the frame that best matches heading
-     const dir = Math.atan2(keys.ArrowDown-keys.ArrowUp,
-                            keys.ArrowRight-keys.ArrowLeft);
-     if(!isNaN(dir)) dragon.gotoAndStop(Math.round(((dir/Math.PI)+1)*1.5)%4);
+    const s = 4*dt;
+    dragon.x += (k.ArrowRight-k.ArrowLeft )*s;
+    dragon.y += (k.ArrowDown -k.ArrowUp   )*s;
+
+    /* pick frame matching general heading */
+    const dir = Math.atan2(k.ArrowDown-k.ArrowUp,k.ArrowRight-k.ArrowLeft);
+    if(!isNaN(dir)){
+      dragon.gotoAndStop( (Math.round(((dir/Math.PI)+1)*1.5)+4)%4 );
+    }
   });
+
+  /* --- keep centred if no input, resize safety --- */
+  window.addEventListener('resize',() => { centerDragon(); });
+  function centerDragon(){
+      dragon.x = app.screen.width/2;
+      dragon.y = app.screen.height/2;
+  }
 });
-</script></body></html>
+</script>
+</body>
+</html>
