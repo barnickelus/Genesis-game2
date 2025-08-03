@@ -2,38 +2,58 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis Evolution — Dragon-Radar Build (fixed)</title>
+<title>Genesis Evolution — Dragon-Radar Build (all-in-one)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>
  html,body{margin:0;height:100%;background:#060616;overflow:hidden;font-family:"Inter",Arial,sans-serif;}
- canvas{width:100%;height:100%;display:block;touch-action:none;background:#000}
- /* (unchanged HUD CSS) */
+ canvas{width:100%;height:100%;display:block;touch-action:none;background:#000;}
+ #hud{position:fixed;top:14px;left:18px;color:#fff;font-size:15px;text-shadow:0 0 4px rgba(255,255,255,.3);z-index:2;}
+ #compass{position:fixed;top:60px;left:18px;color:#aaa;font-size:12px;line-height:12px;letter-spacing:1px;text-shadow:0 0 2px #000;z-index:2;}
+ #effBar{position:fixed;bottom:14px;left:18px;width:220px;height:18px;border-radius:9px;background:rgba(255,255,255,.12);z-index:2;}
+ #effFill{width:100%;height:100%;border-radius:9px;background:#00e4b8;}
+ #pauseBtn{position:fixed;top:14px;right:18px;font-size:22px;color:#fff;cursor:pointer;user-select:none;z-index:2;}
+ #radarWrap{position:fixed;top:48px;right:18px;width:70px;height:70px;display:none;z-index:2;}
+ #radar{width:70px;height:70px;border:1px solid #555;border-radius:4px;background:rgba(0,0,0,.4);}
+ #zoomSlider{position:fixed;top:130px;right:18px;width:70px;transform:rotate(-90deg);z-index:2;}
 </style>
 </head>
 <body>
-<!-- (HTML markup identical to the last file) -->
 <canvas id="game"></canvas>
+
+<!-- HUD -->
 <div id="hud">Mass: <span id="mass">10</span>&nbsp; Score: <span id="score">0</span>&nbsp; <span id="level">1</span></div>
-<!-- … rest of markup unchanged … -->
+<div id="compass">N<br>E&nbsp;&nbsp;W<br>&nbsp;S</div>
+<div id="effBar"><div id="effFill"></div></div>
+<div id="pauseBtn">⏸︎</div>
+<div id="radarWrap"><canvas id="radar" width="70" height="70"></canvas></div>
+<input id="zoomSlider" type="range" min="0.5" max="2" step="0.01" value="1">
+
+<!-- audio (use your own mp3/ogg) -->
+<audio id="backgroundMusic" src="background-music.mp3" loop></audio>
+<audio id="eatSnd"  src="eat.mp3"></audio>
+<audio id="hurtSnd" src="hurt.mp3"></audio>
+<audio id="frenzySnd" src="frenzy.mp3"></audio>
+<audio id="speedSnd"  src="speed.mp3"></audio>
+<audio id="radarSnd"  src="radar.mp3"></audio>
 
 <script>
-/* === CONSTANTS  (unchanged) === */
-const MASS_THRESH=600,TITAN_LEVEL=10,TITAN_MAX=6,
-      SPECTRE_MAX=3,REAPER_MAX=3,C_RING_DIST=1600;
-const SPECTRE_SPEED_MS=6000,SPECTRE_SPEED_MULT=1.25,
-      SPEED_MS=6000,SPEED_CD_MIN=15000,SPEED_CD_RAND=15000,
-      RADAR_CD_MIN=25000,RADAR_CD_RAND=15000,
-      RADAR_PADDING=4,ZOOM_EASE=0.25;
-const MASS_SPEED_FACTOR=.0012,EX_TAIL=.10,MAX_TAIL=60,
-      SAFE_MASS=70,BLINK_MS=300;
+/* === CONSTANTS & TUNABLES === */
+const MASS_THRESH=600, TITAN_LEVEL=10, TITAN_MAX=6,
+      SPECTRE_MAX=3, REAPER_MAX=3, C_RING_DIST=1600;
+const SPECTRE_SPEED_MS=6000, SPECTRE_SPEED_MULT=1.25,
+      SPEED_MS=6000, SPEED_CD_MIN=15000, SPEED_CD_RAND=15000,
+      RADAR_CD_MIN=25000, RADAR_CD_RAND=15000,
+      RADAR_PADDING=4, ZOOM_EASE=0.25;
+const MASS_SPEED_FACTOR=.0012, EXTRA_TAIL=.10, MAX_TAIL=60,
+      SAFE_MASS=70, BLINK_MS=300;
 
-/* === CANVAS & ZOOM === */
+/* === CANVAS === */
 const canvas=document.getElementById("game"),ctx=canvas.getContext("2d",{alpha:false});
-ctx.imageSmoothingEnabled=false;let W,H;function res(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}res();addEventListener("resize",res);
-let z=1,slider=1;document.getElementById("zoomSlider").oninput=e=>slider=parseFloat(e.target.value);
+ctx.imageSmoothingEnabled=false;let W,H;function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;}resize();addEventListener("resize",resize);
+let zoom=1,sliderZoom=1;document.getElementById("zoomSlider").oninput=e=>sliderZoom=parseFloat(e.target.value);
 
-/* === HUD refs (FIX #1) === */
+/* === HUD refs === */
 const massEl=document.getElementById("mass"),
       scoreEl=document.getElementById("score"),
       levelEl=document.getElementById("level");
@@ -41,48 +61,53 @@ const pauseBtn=document.getElementById("pauseBtn"),
       radarWrap=document.getElementById("radarWrap"),
       rctx=document.getElementById("radar").getContext("2d");
 
-/* === STATE objects (unchanged) === */
+/* === GAME STATE === */
 let player={x:0,y:0,r:15,mass:10,tail:[],base:2.5,blink:0,boost:0,dir:0};
-let target={x:0,y:0,go:false},off={x:0,y:0};
+let target={x:0,y:0,go:false},offset={x:0,y:0};
 const food=[],foes=[],titans=[],spectres=[],reapers=[];
 let pill={x:0,y:0,r:10,on:false,cd:0};
-let speed={x:0,y:0,r:11,on:false,cd:0};
+let speedTok={x:0,y:0,r:11,on:false,cd:0};
 let radarTok={x:0,y:0,r:11,on:false,cd:0};
-let frenzy=false,F_TIME=0,radar=false,paused=false;
-let titanTim=0,titanKill=0,specKill=0,level=1;
+let frenzy=false,frenzyTime=0,radar=false,paused=false;
+let titanTimer=0,titanKill=0,specKill=0,level=1;
 
-/* === BACKGROUND helpers (unchanged) === */
-const stars=[...Array(120)].map(()=>({x:Math.random()*4e3-2e3,y:Math.random()*4e3-2e3,s:Math.random()*1.5+.5}));
-function starfield(){ctx.fillStyle="#222";for(const s of stars){const sx=(s.x-player.x*.1)*z+off.x,sy=(s.y-player.y*.1)*z+off.y;if(sx<0||sx>W||sy<0||sy>H)continue;ctx.fillRect(sx,sy,s.s,s.s)}}
+/* === BACKGROUND STARS === */
+const stars=[...Array(120)].map(()=>({x:Math.random()*4000-2000,y:Math.random()*4000-2000,s:Math.random()*1.5+.5}));
 
-/* === Utility fns  (unchanged) === */
+/* === UTILS === */
 const rand=v=>Math.random()*v-v/2,
       dist=(a,b,c,d)=>Math.hypot(a-c,b-d),
       lerp=(a,b,t)=>a+(b-a)*t,
-      onScr=(x,y,r)=>!(x+r<player.x-W/(2*z)||x-r>player.x+W/(2*z)||y+r<player.y-H/(2*z)||y-r>player.y+H/(2*z));
-function glow(x,y,r,c,a){if(r*z<.8||!onScr(x,y,r))return;ctx.globalAlpha=a;ctx.shadowBlur=12*z;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,2*Math.PI);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1}
-function floor(x,y,r,col){if(r*z<1||!onScr(x,y,r*3))return;ctx.save();ctx.translate(x,y+r*.6);ctx.scale(2.6,.55);ctx.globalAlpha=.18;ctx.shadowBlur=60*z;ctx.shadowColor=col;const g=ctx.createRadialGradient(0,0,r*.4,0,0,r*1.6);g.addColorStop(0,col);g.addColorStop(1,"transparent");ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r*1.6,0,2*Math.PI);ctx.fill();ctx.restore();ctx.globalAlpha=1}
+      onScr=(x,y,r)=>!(x+r<player.x-W/(2*zoom)||x-r>player.x+W/(2*zoom)||y+r<player.y-H/(2*zoom)||y-r>player.y+H/(2*zoom));
+function mix(a,b,t){return`rgb(${a[0]+(b[0]-a[0])*t},${a[1]+(b[1]-a[1])*t},${a[2]+(b[2]-a[2])*t})`}
 
-/* === GRID helper (FIX #2 – restored) === */
+/* === DRAW HELPERS === */
+function glow(x,y,r,c,a){if(r*zoom<.8||!onScr(x,y,r))return;ctx.globalAlpha=a;ctx.shadowBlur=12*zoom;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,2*Math.PI);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;}
+function floorGlow(x,y,r,col){if(r*zoom<1||!onScr(x,y,r*3))return;
+  ctx.save();ctx.translate(x,y+r*.6);ctx.scale(2.6,.55);ctx.globalAlpha=.18;
+  ctx.shadowBlur=60*zoom;ctx.shadowColor=col;
+  const g=ctx.createRadialGradient(0,0,r*.4,0,0,r*1.6);g.addColorStop(0,col);g.addColorStop(1,"transparent");
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r*1.6,0,2*Math.PI);ctx.fill();ctx.restore();ctx.globalAlpha=1;}
 function tesseract(){
-  const step=(z<=0.8?60:120),depth=6;ctx.lineWidth=1.2;
-  for(let k=0;k<depth;k++){
-    const s=1+k*0.15,op=0.8-0.12*k;ctx.strokeStyle=`rgba(34,34,34,${op})`;
+  const step=(zoom<=.8?60:120),d=6;ctx.lineWidth=1.2;
+  for(let z=0;z<d;z++){
+    ctx.strokeStyle=`rgba(34,34,34,${.8-.12*z})`;
     for(let i=-4;i<=4;i++)for(let j=-4;j<=4;j++){
-      const x=i*step*s,y=j*step*s;if(!onScr(x,y,step*s*1.4))continue;
-      ctx.beginPath();ctx.rect(x,y,step*s,step*s);ctx.stroke();
+      const x=i*step*(1+z*.15),y=j*step*(1+z*.15);
+      if(!onScr(x,y,step*(1+z*.15)*1.4))continue;
+      ctx.strokeRect(x,y,step*(1+z*.15),step*(1+z*.15));
     }
   }
 }
 
-/* === DRAGON draw (unchanged) === */
+/* === DRAGON DRAW === */
 function dragon(x,y,r,ang,glowCol){
   ctx.save();ctx.translate(x,y);
-  const side=Math.cos(ang)>=0?1:-1;
-  ctx.rotate(ang);ctx.scale(side*r/28,r/28*(.8+.2*Math.abs(Math.cos(ang))));
-  ctx.shadowBlur=16;ctx.shadowColor=glowCol;ctx.fillStyle="#00e4b8";
+  const flip=Math.cos(ang)>=0?1:-1;ctx.rotate(ang);ctx.scale(flip*r/28,r/28*(.8+.2*Math.abs(Math.cos(ang))));
+  ctx.fillStyle="#00e4b8";ctx.shadowBlur=16;ctx.shadowColor=glowCol;
   ctx.beginPath();
-    ctx.moveTo(10,-6);ctx.quadraticCurveTo(18,-10,20,-2);ctx.quadraticCurveTo(16,4,9,0);
+    ctx.moveTo(10,-6);ctx.quadraticCurveTo(18,-10,20,-2);
+    ctx.quadraticCurveTo(16,4,9,0);
     ctx.lineTo(6,3);ctx.lineTo(5,6);ctx.quadraticCurveTo(2,8,-2,8);
     ctx.quadraticCurveTo(-4,6,-3,3);ctx.lineTo(-2,1+2*Math.abs(Math.sin(ang)));
     ctx.quadraticCurveTo(-15,5,-20,0);ctx.quadraticCurveTo(-18,-6,-6,-10);
@@ -90,70 +115,136 @@ function dragon(x,y,r,ang,glowCol){
   ctx.closePath();ctx.fill();ctx.restore();
 }
 
-/* === SPAWN fns (unchanged) === */
+/* === SPAWNERS === */
 function spawnFood(){while(food.length<60)food.push({x:rand(1800),y:rand(1800),r:6})}
 function spawnFoe(){foes.push({x:rand(2000),y:rand(2000),r:(player.mass>=MASS_THRESH?14:10)+Math.random()*20})}
 function spawnTitan(){const a=Math.random()*Math.PI*2,d=700+Math.random()*500;titans.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:25+Math.random()*35,hop:0})}
 function spawnSpectre(){const a=Math.random()*Math.PI*2,d=600+Math.random()*400;spectres.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:22+Math.random()*25,dash:0})}
 function spawnReaper(){const a=Math.random()*Math.PI*2,d=800+Math.random()*600;reapers.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:38+Math.random()*28,charge:0})}
 
-/* === POINTER === */
-canvas.onpointerdown=e=>{if(paused)return;target={x:(e.clientX-off.x)/z,y:(e.clientY-off.y)/z,go:true}};
-canvas.onpointermove=e=>{if(target.go&&!paused)Object.assign(target,{x:(e.clientX-off.x)/z,y:(e.clientY-off.y)/z})}
-canvas.onpointerup=()=>target.go=false;pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?"▶︎":"⏸︎"}
+/* === INPUT === */
+canvas.onpointerdown=e=>{if(paused)return;target={x:(e.clientX-offset.x)/zoom,y:(e.clientY-offset.y)/zoom,go:true};};
+canvas.onpointermove=e=>{if(target.go&&!paused){target.x=(e.clientX-offset.x)/zoom;target.y=(e.clientY-offset.y)/zoom}};
+canvas.onpointerup=()=>target.go=false;pauseBtn.onclick=()=>{paused=!paused;pauseBtn.textContent=paused?"▶︎":"⏸︎"};
 
 /* === GAME LOOP === */
-let last=0;requestAnimationFrame(function loop(ts){
-  if(paused){last=ts;return requestAnimationFrame(loop)}
-  const dt=ts-last||16;last=ts;
+let last=0;function loop(ts){
+  if(paused){last=ts;return requestAnimationFrame(loop);}const dt=ts-last||16;last=ts;
 
-  /* Zoom & camera */
-  z=lerp(z,Math.min(slider,Math.max(.5,H/(player.r*4))),ZOOM_EASE);
-  off.x=W/2-player.x*z;off.y=H/2-player.y*z;
+  /* zoom & offset */
+  zoom=lerp(zoom,Math.min(sliderZoom,Math.max(.5,H/(player.r*4))),ZOOM_EASE);
+  offset.x=W/2-player.x*zoom;offset.y=H/2-player.y*zoom;
 
-  /* Movement */
-  const vx=(target.go?target.x:player.x)-player.x,vy=(target.go?target.y:player.y)-player.y,len=Math.hypot(vx,vy);
-  if(len>.5)player.dir=Math.atan2(vy,vx);
+  /* movement */
+  const dx=(target.go?target.x:player.x)-player.x,dy=(target.go?target.y:player.y)-player.y,len=Math.hypot(dx,dy);
+  if(len>.5)player.dir=Math.atan2(dy,dx);
   if(player.boost>0)player.boost=Math.max(0,player.boost-dt);
-  const mul=(player.boost>0?SPECTRE_SPEED_MULT:1)*(1+player.mass*MASS_SPEED_FACTOR);
-  if(len>1){player.x+=vx/len*player.base*mul;player.y+=vy/len*player.base*mul}
+  const speedMul=(player.boost>0?SPECTRE_SPEED_MULT:1)*(1+player.mass*MASS_SPEED_FACTOR);
+  if(len>1){player.x+=dx/len*player.base*speedMul;player.y+=dy/len*player.base*speedMul;}
   player.mass=Math.max(5,player.mass-(.000009*player.r*player.r+(player.mass<150?.002:.003))*dt);
 
-  /* Spawners */
+  /* spawners */
   spawnFood();while(foes.length<(player.mass>=MASS_THRESH?18:12))spawnFoe();
-  /* (titans / spectres / reapers spawn unchanged – code same as last good build) */
+  if(level>=TITAN_LEVEL){while(titans.length<TITAN_MAX)spawnTitan();titanTimer+=dt;if(titanTimer>20000){titanTimer=0;titans.length=0;}}
+  if(titanKill>=10)while(spectres.length<SPECTRE_MAX)spawnSpectre();
+  if(!pill.on&&!frenzy){pill.cd+=dt;if(pill.cd>25000+Math.random()*10000)pill={x:rand(1800),y:rand(1800),r:10,on:true,cd:0};}
+  if(!speedTok.on){speedTok.cd+=dt;if(speedTok.cd>SPEED_CD_MIN+Math.random()*SPEED_CD_RAND)speedTok={x:rand(1800),y:rand(1800),r:11,on:true,cd:0};}
+  if(!radar&& !radarTok.on){radarTok.cd+=dt;if(radarTok.cd>RADAR_CD_MIN+Math.random()*RADAR_CD_RAND)radarTok={x:rand(1800),y:rand(1800),r:11,on:true,cd:0};}
 
-  /* ================== ENEMY AI  (FIX #3) ================== */
+  /* FOOD collision */
+  for(let i=food.length-1;i>=0;i--){const f=food[i];if(dist(player.x,player.y,f.x,f.y)<player.r+f.r){player.mass+=f.r;food.splice(i,1);}}
+
+  /* TOKEN collisions */
+  if(speedTok.on&&dist(player.x,player.y,speedTok.x,speedTok.y)<player.r+speedTok.r){
+    speedTok.on=false;speedTok.cd=0;player.boost=SPEED_MS;document.getElementById('speedSnd').play().catch(()=>{});
+  }
+  if(radarTok.on&&dist(player.x,player.y,radarTok.x,radarTok.y)<player.r+radarTok.r){
+    radarTok.on=false;radar=true;radarWrap.style.display="block";document.getElementById('radarSnd').play().catch(()=>{});
+  }
+  if(pill.on&&dist(player.x,player.y,pill.x,pill.y)<player.r+pill.r){
+    pill.on=false;frenzy=true;frenzyTime=10000;document.getElementById('frenzySnd').play().catch(()=>{});
+    for(let i=0;i<40;i++){const a=Math.random()*Math.PI*2,d=120+Math.random()*120;food.push({cx:player.x,cy:player.y,ang:a,d,angV:.004+Math.random()*.003,r:5,orb:1})}
+  }
+
+  /* ENEMY AI */
   foes.forEach((o,i)=>{
-    const d=dist(player.x,player.y,o.x,o.y),dir=o.r<player.r?-1:1;
-    if(d<250){o.x+=(player.x-o.x)/d*dir;o.y+=(player.y-o.y)/d*dir}
-    if(player.r>o.r&&d<player.r){player.mass+=o.r*2.5;foes.splice(i,1)}
-    else if(o.r>player.r&&d<o.r){if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.04*dt)}
+    const d=dist(player.x,player.y,o.x,o.y),pull=o.r<player.r?-1:1;
+    if(d<250){o.x+=(player.x-o.x)/d*pull;o.y+=(player.y-o.y)/d*pull;}
+    if(player.r>o.r&&d<player.r){player.mass+=o.r*2.5;foes.splice(i,1);}
+    else if(o.r>player.r&&d<o.r){if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.04*dt);}
   });
-  /* (full titan / spectre / reaper AI loops put back exactly as before) */
+  titans.forEach((t,i)=>{
+    const d=dist(player.x,player.y,t.x,t.y);
+    if(d>2000){titans.splice(i,1);spawnTitan();return;}
+    if(player.r>t.r&&d<player.r){player.mass+=t.r*5;titans.splice(i,1);titanKill++;return;}
+    if(t.r>player.r&&d<t.r){if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.1*dt);}
+    t.hop-=dt;if(t.hop<=0){t.hop=700;const hop=t.r>player.r?120:-80;t.x+=(player.x-t.x)/d*hop;t.y+=(player.y-t.y)/d*hop;}
+  });
+  spectres.forEach((s,i)=>{
+    s.dash-=dt;const d=dist(player.x,player.y,s.x,s.y),ignore=player.mass<SAFE_MASS;
+    if(d>2200){spectres.splice(i,1);spawnSpectre();return;}
+    if(!ignore&&d<player.r){player.mass+=s.r*7;player.boost=SPECTRE_SPEED_MS;spectres.splice(i,1);specKill++;if(specKill%6===0&&reapers.length<REAPER_MAX)spawnReaper();return;}
+    if(!ignore&&d<s.r&&s.r>player.r){if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.2*dt);}
+    const jump=ignore?-100:(s.r>player.r?160:-100);if(s.dash<=0){s.dash=400;s.x+=(player.x-s.x)/d*jump;s.y+=(player.y-s.y)/d*jump;}
+  });
+  reapers.forEach((r,i)=>{
+    r.charge-=dt;const d=dist(player.x,player.y,r.x,r.y),ignore=player.mass<SAFE_MASS;
+    if(d>2400){reapers.splice(i,1);return;}
+    if(!ignore&&d<player.r){player.mass+=r.r*10;reapers.splice(i,1);return;}
+    if(!ignore&&d<r.r&&r.r>player.r){if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-.25*dt);}
+    const step=ignore?-100:(r.r>player.r?130:-100);if(r.charge<=0){r.charge=300;r.x+=(player.x-r.x)/d*step;r.y+=(player.y-r.y)/d*step;}
+  });
 
-  /* Token collisions (unchanged) */
-  /* … speed pill / radar pill / frenzy pill logic same as previous file … */
+  /* frenzy orbs spin */
+  if(frenzy){frenzyTime-=dt;if(frenzyTime<=0){frenzy=false;food.forEach(f=>delete f.orb);}}
+  food.forEach(f=>{if(f.orb){f.ang+=f.angV*dt;f.x=f.cx+Math.cos(f.ang)*f.d;f.y=f.cy+Math.sin(f.ang)*f.d;}});
 
-  /* Tail & size */
-  player.r=10+player.mass/15;level=Math.floor(player.mass/100)+1;
-  player.tail.unshift({x:player.x,y:player.y});while(player.tail.length>Math.ceil(player.mass/3*(1+EX_TAIL)))player.tail.pop();
+  /* tail */
+  player.tail.unshift({x:player.x,y:player.y});while(player.tail.length>Math.ceil(player.mass/3*(1+EXTRA_TAIL)))player.tail.pop();
 
-  /* -------------- RENDER -------------- */
-  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);ctx.fillStyle="#060616";ctx.fillRect(0,0,W,H);starfield();
-  ctx.setTransform(z,0,0,z,off.x,off.y);tesseract();
+  /* -------- RENDER -------- */
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);ctx.fillStyle="#060616";ctx.fillRect(0,0,W,H);
+  /* stars */
+  ctx.fillStyle="#222";for(const s of stars){const sx=(s.x-player.x*.1)*zoom+offset.x,sy=(s.y-player.y*.1)*zoom+offset.y;if(sx<0||sx>W||sy<0||sy>H)continue;ctx.fillRect(sx,sy,s.s,s.s);}
+  ctx.setTransform(zoom,0,0,zoom,offset.x,offset.y);tesseract();
 
-  /* (all glow draws identical to previous file) */
+  /* objects */
+  food.forEach(f=>glow(f.x,f.y,f.r,f.orb?"#ff39ff":"#ff0",f.orb?.8:.65));
+  foes.forEach(o=>glow(o.x,o.y,o.r,"#bb0000",.8));
+  titans.forEach(t=>glow(t.x,t.y,t.r,"#cc00ff",.9));
+  spectres.forEach(s=>glow(s.x,s.y,s.r,"#ff39ff",.9));
+  reapers.forEach(r=>glow(r.x,r.y,r.r,"#ff8800",.9));
+  if(pill.on)glow(pill.x,pill.y,pill.r,"#00aaff",.95);
+  if(speedTok.on){const ph=(Math.sin(ts*.008)+1)/2;glow(speedTok.x,speedTok.y,speedTok.r,mix([255,0,187],[255,0,102],ph),.92);}
+  if(radarTok.on){const ph=(Math.sin(ts*.009)+1)/2;glow(radarTok.x,radarTok.y,radarTok.r,mix([0,228,184],[0,255,222],ph),.9);}
 
-  const glowCol=player.boost>0?"#ff0066":frenzy?"#ff39ff":"#00e4b8";
-  floor(player.x,player.y,player.r,glowCol);
-  const skip=Math.max(1,Math.ceil(player.tail.length/MAX_TAIL));for(let i=0;i<player.tail.length;i+=skip){const p=player.tail[i];glow(p.x,p.y,player.r*(1-i/player.tail.length),"#00e4b8",.25)}
-  dragon(player.x,player.y,player.r,player.dir,glowCol);
+  const gcol=player.boost>0?"#ff0066":frenzy?"#ff39ff":"#00e4b8";
+  floorGlow(player.x,player.y,player.r,gcol);
+  const skip=Math.max(1,Math.ceil(player.tail.length/MAX_TAIL));
+  for(let i=0;i<player.tail.length;i+=skip){const p=player.tail[i];glow(p.x,p.y,player.r*(1-i/player.tail.length),"#00e4b8",.25);}
+  dragon(player.x,player.y,player.r,player.dir,gcol);
 
-  /* radar & HUD draws unchanged */
+  /* frenzy aura */
+  if(frenzy){ctx.globalAlpha=.15;const g=ctx.createRadialGradient(player.x,player.y,player.r*.8,player.x,player.y,player.r*8);g.addColorStop(0,"#ff39ff");g.addColorStop(1,"transparent");ctx.fillStyle=g;ctx.beginPath();ctx.arc(player.x,player.y,player.r*8,0,2*Math.PI);ctx.fill();ctx.globalAlpha=1;}
+
+  /* radar */
+  if(radar){
+    rctx.clearRect(0,0,70,70);rctx.strokeStyle="#666";rctx.lineWidth=1;rctx.beginPath();rctx.moveTo(35,0);rctx.lineTo(35,70);rctx.moveTo(0,35);rctx.lineTo(70,35);rctx.stroke();
+    const max=Math.max(C_RING_DIST,Math.abs(player.x),Math.abs(player.y))||1,sc=(30-RADAR_PADDING)/max;
+    const dot=(o,col)=>{const x=35+o.x*sc,y=35+o.y*sc;if(x<0||x>70||y<0||y>70)return;rctx.fillStyle=col;rctx.fillRect(x-2,y-2,4,4);}
+    dot(player,"#00e4b8");titans.forEach(t=>dot(t,"#cc00ff"));spectres.forEach(s=>dot(s,"#ff39ff"));reapers.forEach(r=>dot(r,"#ff8800"));
+  }
+
+  /* HUD text */
+  massEl.textContent=player.mass.toFixed(0);scoreEl.textContent=Math.floor(player.mass*10);levelEl.textContent=level;
+  document.getElementById("effFill").style.width=player.boost>0?"100%":"0%";
 
   requestAnimationFrame(loop);
-});
+}
+requestAnimationFrame(loop);
+
+/* Autoplay bg music on first interaction */
+addEventListener("pointerdown",()=>{const a=document.getElementById("backgroundMusic");if(a&&a.paused)a.play().catch(()=>{});},{once:true});
 </script>
 </body>
 </html>
