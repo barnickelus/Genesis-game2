@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis Evolution — Star-Frenzy Build (DragonHead)</title>
+<title>Genesis Evolution — Star-Frenzy (DragonHead v1)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>
@@ -34,75 +34,36 @@
 
 <script>
 /* ----------------------------------------------------------
-   DragonHead module: glowing neon head, faces any heading
+   DragonHead module (rotates to any heading)
    ---------------------------------------------------------- */
-// ==== NEW (DragonHead) ====
 const DragonHead = (() => {
-  const BASE  = '#00e4b8',
-        RIDGE = '#00d7ff',
-        GLOW  = '#00ffff',
-        EYE   = '#ffca00',
-        TONG  = '#ff3a80';
-
-  const path = new Path2D(`
-      M  40 -6   Q  52 -16  34 -24
-      L  20 -30  Q  30 -44  12 -40
-      L   0 -46  Q  -3 -32  10 -24
-      L -10 -16  Q -22  -8 -20   0
-      Q -10   6  -2   8   10   6
-      L  22  12  Q  24  26  40  18
-      Q  60  10  54  -2  Z`);
-
-  function neonStroke(ctx,w){
-    ctx.lineWidth = w;
-    ctx.lineCap   = 'round';
-    ctx.strokeStyle = RIDGE;
-    ctx.shadowBlur  = w * 4;
-    ctx.shadowColor = GLOW;
-    ctx.stroke(path);
-    ctx.shadowBlur  = 0;
+  const BASE='#00e4b8',RIDGE='#00d7ff',GLOW='#00ffff',EYE='#ffca00',TONG='#ff3a80';
+  const path=new Path2D(`M  40 -6 Q  52 -16  34 -24 L  20 -30 Q  30 -44  12 -40
+                         L   0 -46 Q  -3 -32  10 -24 L -10 -16 Q -22  -8 -20   0
+                         Q -10   6  -2   8   10   6 L  22  12 Q  24  26  40  18
+                         Q  60  10  54  -2 Z`);
+  const neonStroke=(c,w)=>{c.lineWidth=w;c.lineCap='round';c.strokeStyle=RIDGE;
+                           c.shadowBlur=w*4;c.shadowColor=GLOW;c.stroke(path);c.shadowBlur=0;};
+  function draw(c,x,y,r,heading,blink=0){
+    c.save();c.translate(x,y);c.rotate(heading);const s=r/32;c.scale(s,s);
+    neonStroke(c,6);
+    const g=c.createLinearGradient(-32,0,32,0);g.addColorStop(0,BASE);g.addColorStop(1,RIDGE);
+    c.fillStyle=g;c.fill(path);
+    c.fillStyle=blink?'#fff':EYE;c.beginPath();c.ellipse(18,-4,4,3,0,0,Math.PI*2);c.fill();
+    c.lineWidth=3;c.strokeStyle=blink?'#fff':'#000';c.beginPath();c.moveTo(8,6);c.lineTo(28,-2);c.stroke();
+    c.fillStyle=TONG;c.beginPath();c.moveTo(28,-2);c.lineTo(42,6);c.lineTo(22,12);c.closePath();c.fill();
+    c.restore();
   }
-
-  function draw(ctx,x,y,r,heading,blink=0){
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.rotate(heading);
-    const s = r / 32;
-    ctx.scale(s,s);
-
-    neonStroke(ctx,6);
-
-    const grad = ctx.createLinearGradient(-32,0,32,0);
-    grad.addColorStop(0, BASE);
-    grad.addColorStop(1, RIDGE);
-    ctx.fillStyle = grad;
-    ctx.fill(path);
-
-    ctx.fillStyle = blink ? '#ffffff' : EYE;
-    ctx.beginPath();
-    ctx.ellipse(18,-4,4,3,0,0,Math.PI*2);
-    ctx.fill();
-
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = blink ? '#ffffff' : '#000';
-    ctx.beginPath(); ctx.moveTo(8,6); ctx.lineTo(28,-2); ctx.stroke();
-    ctx.fillStyle = TONG;
-    ctx.beginPath(); ctx.moveTo(28,-2); ctx.lineTo(42,6); ctx.lineTo(22,12); ctx.closePath(); ctx.fill();
-
-    ctx.restore();
-  }
-  return { draw };
+  return{draw};
 })();
-// ==== /NEW (DragonHead) ====
-
 
 /* === CONSTANTS & TUNABLES === */
 const MASS_THRESH=600,TITAN_LEVEL=10,TITAN_MAX=6,TITAN_RESPAWN_MS=20000,
       SPECTRE_MAX=3,REAPER_MAX=3,C_RING_DIST=1600;
 const SPECTRE_SPEED_MS=6000,SPECTRE_SPEED_MULT=1.25,
       RADAR_PADDING=4,ZOOM_EASE=0.25;
-const MASS_SPEED_FACTOR =0.0012, EXTRA_TAIL_PCT=0.10, MAX_TAIL_DRAW=60,
-      SAFE_PLAYER_MASS=70, BLINK_MS=300;
+const MASS_SPEED_FACTOR=0.0012,EXTRA_TAIL_PCT=0.10,MAX_TAIL_DRAW=60,
+      SAFE_PLAYER_MASS=70,BLINK_MS=300;
 
 /* === CANVAS & ZOOM === */
 const canvas=document.getElementById("game"),ctx=canvas.getContext("2d",{alpha:false});
@@ -116,11 +77,7 @@ const pauseBtn=document.getElementById("pauseBtn"),radarWrap=document.getElement
       rctx=document.getElementById("radar").getContext("2d");
 
 /* === WORLD DATA === */
-let player={
-  x:0,y:0,r:15,mass:10,tail:[],baseSpeed:2.5,
-  blink:0,speedBoost:0,
-  heading:0            // ==== NEW (DragonHead) ====
-};
+let player={x:0,y:0,r:15,mass:10,tail:[],baseSpeed:2.5,blink:0,speedBoost:0,heading:0};
 let target={x:0,y:0,active:false},offset={x:0,y:0};
 const food=[],foes=[],titans=[],spectres=[],reapers=[],beacons=[];
 let pill={x:0,y:0,r:10,active:false,cd:0};
@@ -141,11 +98,7 @@ const lerp=(a,b,t)=>a+(b-a)*t,
 
 /* === PARTICLES === */
 const particles=[];
-function spawnBurst(x,y,c){
-  for(let i=0;i<12;i++){
-    particles.push({x,y,dx:rand(2),dy:rand(2),r:3,ttl:600,col:c});
-  }
-}
+function spawnBurst(x,y,c){for(let i=0;i<12;i++)particles.push({x,y,dx:rand(2),dy:rand(2),r:3,ttl:600,col:c});}
 
 /* === SPAWNERS === */
 function spawnFood(){while(food.length<60)food.push({x:rand(1800),y:rand(1800),r:6});}
@@ -187,8 +140,7 @@ function loop(ts){
         dy=(target.active?target.y:player.y)-player.y,
         dLen=Math.hypot(dx,dy);
 
-  // ==== NEW (DragonHead): update heading when moving ====
-  if(dLen>0.5) player.heading = Math.atan2(dy,dx);
+  if(dLen>0.5)player.heading=Math.atan2(dy,dx);
 
   if(player.speedBoost>0)player.speedBoost=Math.max(0,player.speedBoost-dt);
   const sp=player.baseSpeed*(player.speedBoost>0?SPECTRE_SPEED_MULT:1)*(frenzy?1.3:1)*(1+player.mass*MASS_SPEED_FACTOR);
@@ -198,7 +150,7 @@ function loop(ts){
   /* camera transform */
   offset.x=W/2-player.x*zoom;offset.y=H/2-player.y*zoom;
 
-  /* STARFIELD */
+  /* ---------- RENDER BACKGROUND & GRID ---------- */
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);
   ctx.fillStyle="#060616";ctx.fillRect(0,0,W,H);
   ctx.fillStyle="#222";
@@ -207,21 +159,117 @@ function loop(ts){
     if(sx<0||sx>W||sy<0||sy>H)continue;
     ctx.fillRect(sx,sy,s.s,s.s);
   }
-
-  /* world space draw */
   ctx.setTransform(zoom,0,0,zoom,offset.x,offset.y);
   tesseract();
 
-  /* --- (game logic: food / foes / titans / spectres / reapers / pill ...)
-       (unchanged – omitted here for brevity, full logic still present)
-  --- */
+  /* ---------- FOOD ---------- */
+  for(let i=food.length-1;i>=0;i--){
+    const f=food[i];
+    if(dist(player.x,player.y,f.x,f.y)<player.r+f.r){
+      player.mass+=f.r;food.splice(i,1);
+      spawnBurst(f.x,f.y,"#ff0");
+      document.getElementById('eatSnd').play().catch(()=>{});
+    }
+  }
+  spawnFood();
 
-  /* size / level / tail */
-  player.r=10+player.mass/15;level=Math.floor(player.mass/100)+1;
-  player.tail.unshift({x:player.x,y:player.y});while(player.tail.length>Math.ceil(player.mass/3*(1+EXTRA_TAIL_PCT)))player.tail.pop();
+  /* ---------- FOES (simple blobs) ---------- */
+  while(foes.length<(player.mass>=MASS_THRESH?18:12))spawnFoe();
+  foes.forEach((o,i)=>{
+    const d=dist(player.x,player.y,o.x,o.y);
+    if(player.r>o.r&&d<player.r){
+      player.mass+=o.r*2.5;foes.splice(i,1);spawnBurst(o.x,o.y,"#f00");
+      document.getElementById('eatSnd').play().catch(()=>{});
+      return;
+    }
+    if(o.r>player.r&&d<o.r){
+      if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-0.04*dt);
+      document.getElementById('hurtSnd').play().catch(()=>{});
+    }
+    const c=1;
+    if(o.r<player.r&&d<250){o.x-=(player.x-o.x)/d*c;o.y-=(player.y-o.y)/d*c;}
+    else if(o.r>player.r&&d<250){o.x+=(player.x-o.x)/d*c;o.y+=(player.y-o.y)/d*c;}
+  });
+
+  /* ---------- TITANS ---------- */
+  if(level>=TITAN_LEVEL){
+    while(titans.length<TITAN_MAX)spawnTitan();
+    titanTimer+=dt;if(titanTimer>TITAN_RESPAWN_MS){titanTimer=0;titans.length=0;}
+  }
+  titans.forEach((o,i)=>{
+    const d=dist(player.x,player.y,o.x,o.y);
+    if(d>2000){titans.splice(i,1);spawnTitan();return;}
+    if(player.r>o.r&&d<player.r){
+      player.mass+=o.r*5;titans.splice(i,1);titanKill++;spawnBurst(o.x,o.y,"#cc00ff");return;
+    }
+    if(o.r>player.r&&d<o.r){
+      if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-0.1*dt);
+      document.getElementById('hurtSnd').play().catch(()=>{});
+    }
+    o.hop-=dt;if(o.hop<=0){o.hop=700;const hop=o.r>player.r?120:-80;o.x+=(player.x-o.x)/d*hop;o.y+=(player.y-o.y)/d*hop;}
+  });
+
+  /* ---------- SPECTRES ---------- */
+  if(titanKill>=10)while(spectres.length<SPECTRE_MAX)spawnSpectre();
+  spectres.forEach((s,i)=>{
+    s.dash-=dt;const d=dist(player.x,player.y,s.x,s.y),ignore=player.mass<SAFE_PLAYER_MASS;
+    if(d>2200){spectres.splice(i,1);spawnSpectre();return;}
+    if(!ignore&&d<player.r){
+      player.mass+=s.r*7;player.speedBoost=SPECTRE_SPEED_MS;spectres.splice(i,1);
+      document.getElementById('eatSnd').play().catch(()=>{});
+      spectreKill++;if(spectreKill%6===0&&reapers.length<REAPER_MAX)spawnReaper();return;
+    }
+    if(!ignore&&d<s.r&&s.r>player.r){
+      if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-0.2*dt);
+      document.getElementById('hurtSnd').play().catch(()=>{});
+    }
+    const jump=ignore?-100:(s.r>player.r?160:-100);
+    if(s.dash<=0){s.dash=400;s.x+=(player.x-s.x)/d*jump;s.y+=(player.y-s.y)/d*jump;}
+  });
+
+  /* ---------- REAPERS ---------- */
+  reapers.forEach((r,i)=>{
+    r.charge-=dt;const d=dist(player.x,player.y,r.x,r.y),ignore=player.mass<SAFE_PLAYER_MASS;
+    if(d>2400){reapers.splice(i,1);return;}
+    if(!ignore&&d<player.r){
+      player.mass+=r.r*10;reapers.splice(i,1);spawnBurst(r.x,r.y,"#ff8800");return;
+    }
+    if(!ignore&&d<r.r&&r.r>player.r){
+      if(player.blink<50)player.blink=BLINK_MS;player.mass=Math.max(5,player.mass-0.25*dt);
+      document.getElementById('hurtSnd').play().catch(()=>{});
+    }
+    const step=ignore?-100:(r.r>player.r?130:-100);
+    if(r.charge<=0){r.charge=300;r.x+=(player.x-r.x)/d*step;r.y+=(player.y-r.y)/d*step;}
+  });
+
+  /* ---------- PILL & FRENZY ---------- */
+  if(pill.active&&dist(player.x,player.y,pill.x,pill.y)<player.r+pill.r){
+    frenzy=true;F_TIME=10000;pill.active=false;frenzyOrbsLeft=40;
+    document.getElementById('frenzySnd').play().catch(()=>{});
+    for(let i=0;i<40;i++){
+      const a=Math.random()*Math.PI*2,r=120+Math.random()*120;
+      food.push({cx:player.x,cy:player.y,ang:a,baseR:r,angV:0.004+Math.random()*0.003,
+        x:player.x+Math.cos(a)*r,y:player.y+Math.sin(a)*r,r:5,frenzy:true,col:"#ff39ff"});
+    }
+  }
+  if(frenzy){F_TIME-=dt;if(F_TIME<=0){frenzy=false;food.forEach(f=>f.frenzy=false);} }
+  food.forEach(f=>{if(f.frenzy){f.ang+=f.angV*dt;f.x=f.cx+Math.cos(f.ang)*f.baseR;f.y=f.cy+Math.sin(f.ang)*f.baseR;}});
+
+  if(!pill.active&&!frenzy){pill.cd+=dt;if(pill.cd>25000+Math.random()*10000)spawnPill();}
+
+  /* ---------- BEACONS (radar unlock) ---------- */
+  beacons.forEach(b=>{if(dist(player.x,player.y,b.x,b.y)<player.r+b.r){beacons.length=0;radarActive=true;radarWrap.style.display="block";}});
+
+  /* ---------- SIZE, LEVEL & TAIL ---------- */
+  player.r=10+player.mass/15;
+  level=Math.floor(player.mass/100)+1;
+  player.tail.unshift({x:player.x,y:player.y});
+  while(player.tail.length>Math.ceil(player.mass/3*(1+EXTRA_TAIL_PCT)))player.tail.pop();
   if(player.blink>0)player.blink-=dt;
 
-  /* DRAW world objects */
+  /* ---------- DRAW EVERYTHING ---------- */
+
+  /* food & enemies glows */
   food.forEach(f=>glow(f.x,f.y,f.r,f.frenzy?f.col:"#ff0",f.frenzy?0.8:0.65));
   foes.forEach(o=>glow(o.x,o.y,o.r,"#f00",0.8));
   titans.forEach(o=>glow(o.x,o.y,o.r,"#cc00ff",0.9));
@@ -232,36 +280,48 @@ function loop(ts){
   /* tail */
   const skip=Math.max(1,Math.ceil(player.tail.length/MAX_TAIL_DRAW));
   for(let i=0;i<player.tail.length;i+=skip){
-    const p=player.tail[i];glow(p.x,p.y,player.r*(1-i/player.tail.length),mixHex("#00e4b8","#ff39ff",i/player.tail.length),0.3);}
-  /* aurora ring */
+    const p=player.tail[i];
+    glow(p.x,p.y,player.r*(1-i/player.tail.length),mixHex("#00e4b8","#ff39ff",i/player.tail.length),0.3);
+  }
+
+  /* frenzy aura ring */
   if(frenzy){
     ctx.globalAlpha=0.15;
-    const grad=ctx.createRadialGradient(player.x,player.y,player.r*0.8,player.x,player.y,player.r*8);
-    grad.addColorStop(0,"#ff39ff");grad.addColorStop(1,"transparent");
-    ctx.fillStyle=grad;ctx.beginPath();ctx.arc(player.x,player.y,player.r*8,0,Math.PI*2);ctx.fill();
+    const g=ctx.createRadialGradient(player.x,player.y,player.r*0.8,player.x,player.y,player.r*8);
+    g.addColorStop(0,"#ff39ff");g.addColorStop(1,"transparent");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(player.x,player.y,player.r*8,0,Math.PI*2);ctx.fill();
     ctx.globalAlpha=1;
   }
-  glow(player.x,player.y,player.r,player.blink>0?(player.blink%200<100?"#fff":"#ff44ff"):"#00e4b8",1);
 
-  /* ==== NEW (DragonHead): render head on top of body ==== */
-  DragonHead.draw(
-      ctx,
-      player.x,
-      player.y,
-      player.r*0.75,          // head ~75 % body dia
-      player.heading,
-      player.blink>0 ? 1 : 0  // blink flash
-  );
+  /* body glow */
+  glow(player.x,player.y,player.r,
+       player.blink>0?(player.blink%200<100?"#fff":"#ff44ff"):"#00e4b8",1);
 
-  /* PARTICLES */
-  particles.forEach((p,i)=>{
-    p.x+=p.dx;p.y+=p.dy;p.ttl-=dt;
-    glow(p.x,p.y,p.r,p.col,0.6);
-    if(p.ttl<=0)particles.splice(i,1);
-  });
+  /* DRAGON HEAD */
+  DragonHead.draw(ctx,player.x,player.y,player.r*0.75,player.heading,player.blink>0?1:0);
 
-  /* radar (unchanged) */
-  if(radarActive){ /* ... */ }
+  /* particles */
+  particles.forEach((p,i)=>{p.x+=p.dx;p.y+=p.dy;p.ttl-=dt;glow(p.x,p.y,p.r,p.col,0.6);if(p.ttl<=0)particles.splice(i,1);});
+
+  /* radar */
+  if(radarActive){
+    rctx.clearRect(0,0,70,70);rctx.strokeStyle="#666";rctx.lineWidth=1;
+    rctx.beginPath();rctx.moveTo(35,0);rctx.lineTo(35,70);rctx.moveTo(0,35);rctx.lineTo(70,35);rctx.stroke();
+    const mc=Math.max(C_RING_DIST,Math.abs(player.x),Math.abs(player.y))||1,scale=(30-RADAR_PADDING)/mc;
+    rctx.fillStyle="#00e4b8";rctx.beginPath();rctx.arc(35+player.x*scale,35+player.y*scale,3,0,Math.PI*2);rctx.fill();
+    const drawPip=(arr,color,shape)=>{
+      rctx.fillStyle=color;
+      arr.forEach(o=>{
+        const x=35+o.x*scale,y=35+o.y*scale;if(x<0||x>70||y<0||y>70)return;
+        if(shape==="diamond"){rctx.beginPath();rctx.moveTo(x,y-2);rctx.lineTo(x+2,y);rctx.lineTo(x,y+2);rctx.lineTo(x-2,y);rctx.fill();}
+        else if(shape==="triangle"){rctx.beginPath();rctx.moveTo(x,y-2);rctx.lineTo(x+2,y+2);rctx.lineTo(x-2,y+2);rctx.fill();}
+        else{rctx.fillRect(x-2,y-2,4,4);}
+      });
+    };
+    drawPip(titans,"#cc00ff","diamond");
+    drawPip(spectres,"#ff39ff","triangle");
+    drawPip(reapers,"#ff8800","square");
+  }
 
   /* HUD */
   massEl.textContent=player.mass.toFixed(0);
@@ -272,7 +332,7 @@ function loop(ts){
 }
 requestAnimationFrame(loop);
 
-/* autoplay music */
+/* autoplay music (once user interacts) */
 addEventListener("pointerdown",()=>{const a=document.getElementById("backgroundMusic");if(a&&a.paused)a.play().catch(()=>{});},{once:true});
 </script>
 </body>
