@@ -2,132 +2,224 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis Evolution — Star-Frenzy (Dragon Avatar)</title>
+<title>Genesis Evolution — Star-Frenzy (Math-Dragon, patched)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>
- html,body{margin:0;height:100%;background:#060616;overflow:hidden;font-family:"Inter",Arial,sans-serif;}
- canvas{width:100%;height:100%;display:block;touch-action:none;background:#000;}
- #hud{position:fixed;top:14px;left:18px;color:#fff;font-size:15px;text-shadow:0 0 4px rgba(255,255,255,.3);z-index:2;}
- #compass{position:fixed;top:60px;left:18px;color:#aaa;font-size:12px;line-height:12px;letter-spacing:1px;text-shadow:0 0 2px #000;z-index:2;}
- #effBar{position:fixed;bottom:14px;left:18px;width:220px;height:18px;border-radius:9px;background:rgba(255,255,255,.12);z-index:2;}
- #effFill{width:100%;height:100%;border-radius:9px;background:#00e4b8;}
- #pauseBtn{position:fixed;top:14px;right:18px;font-size:22px;color:#fff;cursor:pointer;user-select:none;z-index:2;}
- #radarWrap{position:fixed;top:48px;right:18px;width:70px;height:70px;display:none;z-index:2;}
- #radar{width:70px;height:70px;border:1px solid #555;border-radius:4px;background:rgba(0,0,0,.4);}
- #zoomSlider{position:fixed;top:130px;right:18px;width:70px;transform:rotate(-90deg);z-index:2;}
+ html,body{margin:0;height:100%;background:#060616;overflow:hidden;font-family:Inter,Arial,sans-serif}
+ canvas{width:100%;height:100%;display:block;touch-action:none;background:#000}
+ #hud{position:fixed;top:14px;left:18px;color:#fff;font-size:15px;text-shadow:0 0 4px #0008;z-index:2}
+ #zoomSlider{position:fixed;top:130px;right:18px;width:70px;transform:rotate(-90deg);z-index:2}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-
-<div id="hud">Mass: <span id="mass">10</span>&nbsp; Score: <span id="score">0</span>&nbsp; <span id="level">1</span></div>
-<div id="compass">N<br>E&nbsp;&nbsp;W<br>&nbsp;S</div>
-<div id="effBar"><div id="effFill"></div></div>
-<div id="pauseBtn">⏸︎</div>
-<div id="radarWrap"><canvas id="radar" width="70" height="70"></canvas></div>
+<div id="hud">Mass: <span id="mass">10</span>  Score: <span id="score">0</span>  lvl <span id="lvl">1</span></div>
 <input id="zoomSlider" type="range" min="0.5" max="2" step="0.01" value="1">
 
 <script>
-/* === Load dragon avatar === */
-const dragonImg = new Image();
-dragonImg.src = "dragon.png"; // Ensure this file is in the same folder as the HTML
+/* ======= CONSTS & HELPERS ======= */
+const TWO = Math.PI * 2;
+const RAND = v => Math.random() * v - v / 2;
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+const lerp = (a, b, t) => a + (b - a) * t;
+const hsv  = (h, s, l) => `hsl(${h} ${s}% ${l}%)`;
 
-/* === Canvas setup === */
-const canvas=document.getElementById("game"),ctx=canvas.getContext("2d",{alpha:false});
-let W,H;function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;}resize();addEventListener("resize",resize);
-ctx.imageSmoothingEnabled=false;
+/* ======= CANVAS ======= */
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d', { alpha: false });
+let W, H;
+function resize() { W = cv.width = innerWidth; H = cv.height = innerHeight; }
+resize();
+addEventListener('resize', resize);
 
-let zoom=1,sliderZoom=1;
-document.getElementById("zoomSlider").addEventListener("input",e=>sliderZoom=parseFloat(e.target.value));
+let sliderZoom = 1, zoom = 1;
+document.getElementById('zoomSlider').oninput = e => sliderZoom = +e.target.value;
 
-/* === World setup === */
-let player={x:0,y:0,r:15,mass:10,tail:[],blink:0};
-let offset={x:0,y:0},paused=false,target={x:0,y:0,active:false},food=[];
+/* ======= WORLD STATE ======= */
+const player = { x: 0, y: 0, mass: 10, r: 15, tail: [], blink: 0, frenzy: 0 };
+let target   = { x: 0, y: 0, active: false };
+let offset   = { x: 0, y: 0 };
+const food   = [];
+const foes   = [];
+let score = 0, last = 0;
 
-/* === Helpers === */
-const dist=(a,b,c,d)=>Math.hypot(a-c,b-d);
-const lerp=(a,b,t)=>a+(b-a)*t;
+/* ======= STARFIELD (bug fixed) ======= */
+const stars = Array.from({ length: 120 }, () => ({
+  x: RAND(2000),
+  y: RAND(2000),
+  s: Math.random() * 1.2 + 0.4
+}));
 
-/* === Events === */
-canvas.addEventListener("pointerdown",e=>{const p=toWorld(e);target={x:p.x,y:p.y,active:true};});
-canvas.addEventListener("pointermove",e=>{if(target.active){const p=toWorld(e);target={x:p.x,y:p.y,active:true};}});
-canvas.addEventListener("pointerup",()=>target.active=false);
-const toWorld=e=>({x:(e.clientX-offset.x)/zoom,y:(e.clientY-offset.y)/zoom});
+/* ======= INPUT ======= */
+const toWorld = e => ({ x: (e.clientX - offset.x) / zoom, y: (e.clientY - offset.y) / zoom });
+cv.addEventListener('pointerdown', e => { const p = toWorld(e); target = { x: p.x, y: p.y, active: true }; });
+cv.addEventListener('pointermove', e => { if (target.active) { const p = toWorld(e); target.x = p.x; target.y = p.y; } });
+cv.addEventListener('pointerup', () => target.active = false);
 
-/* === Spawners === */
-function spawnFood(){while(food.length<50)food.push({x:Math.random()*3000-1500,y:Math.random()*3000-1500,r:6});}
+/* ======= SPAWNERS ======= */
+function spawnFood() { while (food.length < 80) food.push({ x: RAND(1800), y: RAND(1800), r: 6 }); }
+function spawnFoe()  { foes.push({ x: RAND(2000), y: RAND(2000), r: 10 + Math.random() * 22, vx: RAND(0.8), vy: RAND(0.8) }); }
+while (foes.length < 12) spawnFoe();
 
-/* === Drawing === */
-function glow(x,y,r,c,a){ctx.globalAlpha=a;ctx.shadowBlur=12*zoom;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,2*Math.PI);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;}
-function floorGlow(x,y,r){
-  ctx.save();ctx.translate(x,y+r*0.6);
-  ctx.scale(2.7,0.55);
-  ctx.globalAlpha=0.25;
-  ctx.shadowBlur=60*zoom;
-  ctx.shadowColor="#00e4b8";
-  const g=ctx.createRadialGradient(0,0,r*0.4,0,0,r*1.6);
-  g.addColorStop(0,"rgba(0,228,184,0.9)");
-  g.addColorStop(1,"rgba(0,228,184,0)");
-  ctx.fillStyle=g;
-  ctx.beginPath();ctx.arc(0,0,r*1.6,0,2*Math.PI);ctx.fill();
-  ctx.restore();ctx.globalAlpha=1;
+/* ======= GLOW HELPERS ======= */
+function glow(x, y, r, c, a) {
+  if (r * zoom < 0.7) return;
+  ctx.globalAlpha = a;
+  ctx.shadowBlur  = 12 * zoom;
+  ctx.shadowColor = c;
+  ctx.fillStyle   = c;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TWO);
+  ctx.fill();
+  ctx.shadowBlur = ctx.globalAlpha = 0;
+}
+function floorGlow(x, y, r) {
+  if (r * zoom < 1) return;
+  ctx.save();
+  ctx.translate(x, y + r * .6);
+  ctx.scale(2.5, .55);
+  ctx.globalAlpha = .28;
+  const g = ctx.createRadialGradient(0, 0, r * .4, 0, 0, r * 1.4);
+  g.addColorStop(0, 'rgba(0,228,184,.9)');
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 1.4, 0, TWO);
+  ctx.fill();
+  ctx.restore();
 }
 
-/* === Loop === */
-let last=0;
-requestAnimationFrame(function loop(ts){
-  const dt=(ts-last)||16;last=ts;
-
-  zoom = lerp(zoom, sliderZoom, 0.2);
-  const dx=(target.active?target.x:player.x)-player.x,dy=(target.active?target.y:player.y)-player.y,len=Math.hypot(dx,dy);
-  const spd=2.4;
-  if(len>1){player.x+=dx/len*spd;player.y+=dy/len*spd;}
-  player.mass=Math.max(5,player.mass-(0.000009*player.r*player.r+(player.mass<150?0.002:0.003))*dt);
-  player.r = 10 + player.mass / 15;
-  player.tail.unshift({x:player.x,y:player.y});
-  while(player.tail.length > 30) player.tail.pop();
-  if(player.blink>0) player.blink-=dt;
-
-  offset.x=W/2-player.x*zoom;offset.y=H/2-player.y*zoom;
-
-  spawnFood();
-
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle="#060616";
-  ctx.fillRect(0,0,W,H);
-  ctx.setTransform(zoom,0,0,zoom,offset.x,offset.y);
-
-  food.forEach(f=>glow(f.x,f.y,f.r,"#ff0",0.65));
-  food.forEach((f,i)=>{if(dist(player.x,player.y,f.x,f.y)<player.r+f.r){player.mass+=f.r;food.splice(i,1);}});
-
-  floorGlow(player.x,player.y,player.r);
-
-  const skip=Math.max(1,Math.ceil(player.tail.length/30));
-  for(let i=0;i<player.tail.length;i+=skip){
-    const p=player.tail[i];
-    glow(p.x,p.y,player.r*(1-i/player.tail.length),"#00e4b8",0.3);
+/* ======= PROCEDURAL DRAGON (no PNG) ======= */
+function drawDragon(x, y, r, blink) {
+  const seg = 48, len = r * 3.2;
+  for (let i = 0; i < seg; i++) {
+    const t  = i / seg;
+    const a  = Math.sin(t * Math.PI * 1.2) * 0.7;
+    const px = x + Math.cos(a) * len * (t - .5);
+    const py = y + Math.sin(a) * len * (t - .5) * .6;
+    const pr = r * (1 - Math.pow(t, 1.8)) * .9;
+    glow(px, py, pr, hsv(190 + 140 * t, 100, 60), .33);
   }
-
-  // ✅ Draw the dragon avatar
-  const size = player.r * 4.5;
+  /* head */
   ctx.save();
-  ctx.translate(player.x, player.y);
-  ctx.drawImage(dragonImg, -size/2, -size/2, size, size);
-  if (player.blink > 0 && player.blink % 200 < 100) {
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-size/2, -size/2, size, size);
-  }
+  ctx.translate(x + len * .48, y - .18 * r);
+  ctx.rotate(-.15);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(r * 1.0, -r * .3);
+  ctx.lineTo(r * 1.1, -r * .05);
+  ctx.lineTo(r * 1.0,  r * .28);
+  ctx.closePath();
+  const grd = ctx.createLinearGradient(0, -r * .4, r * 1.1, r * .4);
+  grd.addColorStop(0, '#00e4b8'); grd.addColorStop(1, '#ff39ff');
+  ctx.fillStyle = grd; ctx.fill();
+  ctx.fillStyle = blink ? '#fff' : '#ffff77';
+  ctx.fillRect(r * .55, -r * .06, r * .25, r * .12);
   ctx.restore();
+}
 
-  document.getElementById("mass").textContent = player.mass.toFixed(0);
-  document.getElementById("score").textContent = Math.floor(player.mass*10);
-  document.getElementById("level").textContent = Math.floor(player.mass/100)+1;
+/* ======= MAIN LOOP ======= */
+function loop(ts) {
+  const dt = (ts - last) || 16; last = ts;
+
+  /* camera */
+  zoom = lerp(zoom, sliderZoom, .2);
+  offset.x = W / 2 - player.x * zoom;
+  offset.y = H / 2 - player.y * zoom;
+
+  /* movement */
+  const dx = (target.active ? target.x : player.x) - player.x;
+  const dy = (target.active ? target.y : player.y) - player.y;
+  const dL = Math.hypot(dx, dy);
+  const sp = (player.frenzy ? 3.7 : 2.7) * (1 + player.mass * .001);
+  if (dL > 1) { player.x += dx / dL * sp; player.y += dy / dL * sp; }
+
+  /* mass & size */
+  const decay = .000009 * player.r * player.r + (player.mass < 150 ? .002 : .003);
+  player.mass = Math.max(5, player.mass - decay * dt);
+  player.r    = 10 + player.mass / 15;
+  if (player.frenzy > 0) player.frenzy = Math.max(0, player.frenzy - dt);
+
+  /* spawn & collect food */
+  spawnFood();
+  food.forEach((f, i) => {
+    if (dist(player.x, player.y, f.x, f.y) < player.r + f.r) {
+      player.mass += f.r;
+      score += 10 * (player.frenzy ? 2 : 1);
+      food.splice(i, 1);
+    }
+  });
+
+  /* foes */
+  while (foes.length < 18) spawnFoe();
+  foes.forEach((o, i) => {
+    o.x += o.vx; o.y += o.vy;
+    const d = dist(player.x, player.y, o.x, o.y);
+    if (o.r < player.r && d < 320) { o.vx -= (player.x - o.x) / d * .05; o.vy -= (player.y - o.y) / d * .05; }
+    if (o.r > player.r && d < 260) { o.vx += (player.x - o.x) / d * .08; o.vy += (player.y - o.y) / d * .08; }
+    if (d < player.r && player.r > o.r) { player.mass += o.r * 2.2; score += 75 * (player.frenzy ? 2 : 1); foes.splice(i, 1); }
+    else if (d < o.r && o.r > player.r) { player.mass = Math.max(5, player.mass - o.r * .6); player.blink = 200; }
+  });
+
+  /* frenzy pill */
+  if (!window.pill) window.pill = { x: RAND(1600), y: RAND(1600), r: 10, active: false, cd: 0 };
+  const p = window.pill;
+  if (!p.active) { p.cd += dt; if (p.cd > 25000 + Math.random() * 10000) { p.x = RAND(1600); p.y = RAND(1600); p.active = true; p.cd = 0; } }
+  if (p.active) {
+    const ph = (Math.sin(ts * .006) + 1) / 2;
+    glow(p.x, p.y, p.r, hsv(200 + 160 * ph, 100, 60), .9);
+    if (dist(player.x, player.y, p.x, p.y) < player.r + p.r) { p.active = false; player.frenzy = 6000; }
+  }
+
+  /* -------- RENDER -------- */
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#060616';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#222';
+  stars.forEach(s => {
+    const sx = (s.x - player.x * .1) * zoom + offset.x;
+    const sy = (s.y - player.y * .1) * zoom + offset.y;
+    if (sx < 0 || sx > W || sy < 0 || sy > H) return;
+    ctx.fillRect(sx, sy, s.s, s.s);
+  });
+
+  ctx.setTransform(zoom, 0, 0, zoom, offset.x, offset.y);
+
+  food.forEach(f => glow(f.x, f.y, f.r, '#ff0', .65));
+  foes.forEach(o => glow(o.x, o.y, o.r, '#f00', .85));
+
+  if (player.frenzy > 0) {
+    const f = player.frenzy / 6000;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = `rgba(255,57,255,${f})`;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r + 40 * (1 - f), 0, TWO);
+    ctx.stroke();
+  }
+
+  floorGlow(player.x, player.y, player.r);
+
+  player.tail.unshift({ x: player.x, y: player.y });
+  while (player.tail.length > 40) player.tail.pop();
+  const skip = Math.max(1, Math.ceil(player.tail.length / 50));
+  for (let i = 0; i < player.tail.length; i += skip) {
+    const t = i / player.tail.length;
+    glow(player.tail[i].x, player.tail[i].y, player.r * (1 - t), hsv(190 + 140 * t, 100, 60), .28);
+  }
+
+  drawDragon(player.x, player.y, player.r, player.blink > 0 && (player.blink % 200 < 100));
+
+  /* HUD */
+  mass.textContent = player.mass.toFixed(0);
+  score.textContent = Math.floor(score);
+  lvl.textContent = Math.floor(player.mass / 100) + 1;
 
   requestAnimationFrame(loop);
-});
+}
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
