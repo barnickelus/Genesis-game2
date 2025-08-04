@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="600" height="120"
+     viewBox="0 0 600 120">
+  <!--
+    5 frames, each 120×120px:
+    frame0 = east,   frame1 = NE,    frame2 = north,
+    frame3 = NW,     frame4 = west
+  -->
+  <style>path{fill:none;stroke:#000;stroke-width:3}</style>
+
+  <!-- side→ -->
+  <g transform="translate(60,60)">
+    <path d="M 46 -4 Q 60 -18 40 -28 L 24 -34 Q 32 -50 12 -46
+             L  2 -50 Q -2 -34 12 -26 L -12 -16 Q -28 -8 -24 4
+             Q -10 10  4  8 L 22 14 Q 26 28 46 20 Q 68 12 60 0 Z"/>
+  </g>
+
+  <!-- diag→ -->
+  <g transform="translate(180,60)">
+    <path d="M 38 -3 Q 50 -12 28 -18 L 14 -22 Q 18 -34  4 -30
+             L -4 -32 Q -6 -20  8 -14 L -10 -6 Q -20 -2 -14 6
+             Q -4 10  8  8 L 20 12 Q 24 22 38 16 Q 50 10 46 0 Z"/>
+  </g>
+
+  <!-- top↑ -->
+  <g transform="translate(300,60)">
+    <path d="M   0 -28 Q 14 -22 24 -12 Q 28   0 24  12
+             Q 14  22   0  28 Q -14 22 -24  12
+             Q -28  0 -24 -12 Q -14 -22   0 -28 Z"/>
+  </g>
+
+  <!-- diag← (mirror of diag→) -->
+  <g transform="translate(420,60) scale(-1,1)">
+    <path d="M 38 -3 Q 50 -12 28 -18 L 14 -22 Q 18 -34  4 -30
+             L -4 -32 Q -6 -20  8 -14 L -10 -6 Q -20 -2 -14 6
+             Q -4 10  8  8 L 20 12 Q 24 22 38 16 Q 50 10 46 0 Z"/>
+  </g>
+
+  <!-- side← (mirror of side→) -->
+  <g transform="translate(540,60) scale(-1,1)">
+    <path d="M 46 -4 Q 60 -18 40 -28 L 24 -34 Q 32 -50 12 -46
+             L  2 -50 Q -2 -34 12 -26 L -12 -16 Q -28 -8 -24 4
+             Q -10 10  4  8 L 22 14 Q 26 28 46 20 Q 68 12 60 0 Z"/>
+  </g>
+</svg>
