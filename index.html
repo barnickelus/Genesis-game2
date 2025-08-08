@@ -330,7 +330,8 @@
           reapers   = [],
           beacons   = [],
           particles = [],
-          headParticles = [];
+          headParticles = [],
+          playerAuraParticles = [];
 
     let player = {
       x: 0, y: 0, r: 15, mass: 10, tail: [],
@@ -447,6 +448,7 @@
       beacons.length = 0;
       particles.length = 0;
       headParticles.length = 0;
+      playerAuraParticles.length = 0;
       target = { x: 0, y: 0, active: false };
       pill = { x: 0, y: 0, r: 10, active: false, cd: 0 };
       shield = { x: 0, y: 0, r: 10, active: false, cd: 0 };
@@ -904,7 +906,7 @@
           player.mass += r.r;
           player.flash = { color: '#ff8800', t: 500 };
           reapers.splice(i, 1);
-          burst(r.x, r.y, '#ff8800');
+          burst(r.x, o.y, '#ff8800');
           return;
         }
         if (!ignore && !shieldActive && d < r.r && r.r > player.r) {
@@ -1013,7 +1015,7 @@
           y: player.y + Math.sin(ang) * rd,
           dx: (Math.random() - 0.5) * 0.5,
           dy: (Math.random() - 0.5) * 0.5,
-          r: player.r * 1.1,
+          r: player.r * (0.5 + player.mass / 1000),
           ttl: 30 + Math.random() * 30,
           col: '#00e4b8'
         });
@@ -1025,6 +1027,31 @@
         p.ttl -= dt;
         glow(p.x, p.y, p.r, p.col, p.ttl / 50);
         if (p.ttl <= 0) headParticles.splice(i, 1);
+      });
+
+      for (let i = 0; i < 1; i++) {
+        const ang = Math.random() * Math.PI * 2,
+              tailLength = Math.ceil(player.mass / 3 * (1 + EXTRA_TAIL_PCT)),
+              dist = player.r * (tailLength / 3) / player.r * 10;
+        playerAuraParticles.push({
+          x: player.x + Math.cos(ang) * dist,
+          y: player.y + Math.sin(ang) * dist,
+          ang: ang,
+          dist: dist,
+          angV: 0.01 + Math.random() * 0.02,
+          r: (1 + Math.random() * 1) * (player.r / 15),
+          ttl: 500 + Math.random() * 500,
+          col: '#00e4b8'
+        });
+      }
+      if (playerAuraParticles.length > 30) playerAuraParticles.splice(30, playerAuraParticles.length - 30);
+      playerAuraParticles.forEach((p, i) => {
+        p.ang += p.angV * dt;
+        p.x = player.x + Math.cos(p.ang) * p.dist;
+        p.y = player.y + Math.sin(p.ang) * p.dist;
+        p.ttl -= dt;
+        glow(p.x, p.y, p.r, p.col, p.ttl / 1000);
+        if (p.ttl <= 0) playerAuraParticles.splice(i, 1);
       });
 
       massEl.textContent = player.mass.toFixed(0);
