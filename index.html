@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <title>Genesis Evolution — Star-Frenzy (Full Game)</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
-        rel="stylesheet" />
-  <meta name="viewport"
-        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <style>
     html, body {
       margin: 0;
@@ -571,7 +569,7 @@
       ctx.globalAlpha = 1;
     }
     function burst(x, y, c) {
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 10; i++) {
         particles.push({
           x, y,
           dx: rand(2),
@@ -917,7 +915,7 @@
         if (r.charge <= 0) {
           r.charge = 300;
           const step = ignore ? -100 : (r.r > player.r ? 130 : -100);
-          r.x += (player.x - r.x) / d * step; r.y += (player.y - r.y) / d * step;
+          r.x += (player.x - r.x) / d * step; r.y += (player.y - r.y) * d * step;
         }
         glow(r.x, r.y, r.r, '#ff8800', 0.9);
       });
@@ -995,12 +993,19 @@
              mix('#00e4b8', '#ff39ff', i / player.tail.length), 0.3);
       }
 
+      glow(
+        player.x, player.y, player.r * 1.2,
+        mix('#00e4b8', '#ff39ff', Math.min(player.mass / 500, 1)),
+        0.2 + 0.2 * Math.sin(ts / 500),
+        25 * zoom
+      );
+
       if (player.flash.t > 0) {
-        glow(player.x, player.y, player.r / 2, player.flash.color, 0.3 * (player.flash.t / 500));
+        glow(player.x, player.y, player.r / 2, player.flash.color, 0.4 * (player.flash.t / 500));
       }
 
       glow(
-        player.x, player.y, player.r,
+        player.x, player.y, player.r * (1 + 0.05 * Math.sin(ts / 400)),
         player.blink > 0 ? (player.blink % 200 < 100 ? '#fff' : '#ff44ff') : '#00e4b8',
         0.7,
         20 * zoom
@@ -1008,49 +1013,47 @@
 
       for (let i = 0; i < 3; i++) {
         const ang = Math.random() * Math.PI * 2,
-              tailLength = Math.ceil(player.mass / 3 * (1 + EXTRA_TAIL_PCT)),
-              rd = player.r * (tailLength / 3) / player.r * 10;
+              rd = player.r * (0.8 + Math.random() * 0.4);
         headParticles.push({
           x: player.x + Math.cos(ang) * rd,
           y: player.y + Math.sin(ang) * rd,
           dx: (Math.random() - 0.5) * 0.5,
           dy: (Math.random() - 0.5) * 0.5,
-          r: player.r * (0.5 + player.mass / 1000),
+          r: (1 + Math.random() * 1.5) * (player.r / 15),
           ttl: 30 + Math.random() * 30,
-          col: '#00e4b8'
+          col: Math.random() < 0.5 ? '#00e4b8' : '#ff39ff'
         });
       }
-      if (headParticles.length > 50) headParticles.splice(50, headParticles.length - 50);
+      if (headParticles.length > 40) headParticles.splice(40, headParticles.length - 40);
       headParticles.forEach((p, i) => {
         p.x += p.dx * (dt / 16);
         p.y += p.dy * (dt / 16);
         p.ttl -= dt;
-        glow(p.x, p.y, p.r, p.col, p.ttl / 50);
+        glow(p.x, p.y, p.r, p.col, p.ttl / 50, 15 * zoom);
         if (p.ttl <= 0) headParticles.splice(i, 1);
       });
 
       for (let i = 0; i < 1; i++) {
         const ang = Math.random() * Math.PI * 2,
-              tailLength = Math.ceil(player.mass / 3 * (1 + EXTRA_TAIL_PCT)),
-              dist = player.r * (tailLength / 3) / player.r * 10;
+              dist = player.r * (1 + Math.random() * 0.5);
         playerAuraParticles.push({
           x: player.x + Math.cos(ang) * dist,
           y: player.y + Math.sin(ang) * dist,
           ang: ang,
           dist: dist,
-          angV: 0.01 + Math.random() * 0.02,
-          r: (1 + Math.random() * 1) * (player.r / 15),
-          ttl: 500 + Math.random() * 500,
-          col: '#00e4b8'
+          angV: 0.015 + Math.random() * 0.01,
+          r: (1 + Math.random() * 0.5) * (player.r / 20),
+          ttl: 600 + Math.random() * 300,
+          col: Math.random() < 0.3 ? '#ff39ff' : '#00e4b8'
         });
       }
-      if (playerAuraParticles.length > 30) playerAuraParticles.splice(30, playerAuraParticles.length - 30);
+      if (playerAuraParticles.length > 20) playerAuraParticles.splice(20, playerAuraParticles.length - 20);
       playerAuraParticles.forEach((p, i) => {
         p.ang += p.angV * dt;
         p.x = player.x + Math.cos(p.ang) * p.dist;
         p.y = player.y + Math.sin(p.ang) * p.dist;
         p.ttl -= dt;
-        glow(p.x, p.y, p.r, p.col, p.ttl / 1000);
+        glow(p.x, p.y, p.r, p.col, p.ttl / 900, 10 * zoom);
         if (p.ttl <= 0) playerAuraParticles.splice(i, 1);
       });
 
