@@ -336,8 +336,7 @@
     let player = {
       x: 0, y: 0, r: 15, mass: 10, tail: [],
       baseSpeed: 2.5, blink: 0, speedBoost: 0, heading: 0,
-      colorEffect: { color: '#00e4b8', t: 0 },
-      flash: { color: '#00e4b8', t: 0 }
+      colorEffect: { color: '#00e4b8', t: 0 }
     },
     target = { x: 0, y: 0, active: false },
     offset = { x: 0, y: 0 },
@@ -440,7 +439,7 @@
     };
 
     restartBtn.onclick = () => {
-      player = { x: 0, y: 0, r: 15, mass: 10, tail: [], baseSpeed: 2.5, blink: 0, speedBoost: 0, heading: 0, colorEffect: { color: '#00e4b8', t: 0 }, flash: { color: '#00e4b8', t: 0 } };
+      player = { x: 0, y: 0, r: 15, mass: 10, tail: [], baseSpeed: 2.5, blink: 0, speedBoost: 0, heading: 0, colorEffect: { color: '#00e4b8', t: 0 } };
       food.length = 0;
       foes.length = 0;
       titans.length = 0;
@@ -572,13 +571,13 @@
       ctx.globalAlpha = 1;
     }
     function burst(x, y, c) {
-      for (let i = 0; i < 24; i++) {
+      for (let i = 0; i < 12; i++) {
         particles.push({
           x, y,
-          dx: rand(6),
-          dy: rand(6),
-          r: (3 + Math.random() * 3) * (player.r / 15),
-          ttl: 300 + Math.random() * 200,
+          dx: rand(2),
+          dy: rand(2),
+          r: 2 + Math.random() * 2,
+          ttl: 500 + Math.random() * 200,
           col: c,
           shape: Math.random() < 0.5 ? 'circle' : 'square'
         });
@@ -588,28 +587,12 @@
       rctx.clearRect(0, 0, 70, 70);
       rctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
       rctx.fillRect(0, 0, 70, 70);
-
       rctx.fillStyle = '#fff';
       rctx.beginPath();
       rctx.arc(35, 35, 2, 0, Math.PI * 2);
       rctx.fill();
 
-      const radarRange = Math.max(2000, dist(player.x, player.y, 0, 0) * 1.1),
-            scale = 66 / (radarRange * 2);
-
-      const cx = (0 - player.x) * scale + 35,
-            cy = (0 - player.y) * scale + 35;
-      if (cx >= 2 && cx <= 68 && cy >= 2 && cy <= 68) {
-        rctx.strokeStyle = '#fff';
-        rctx.lineWidth = 1;
-        rctx.beginPath();
-        rctx.moveTo(cx - 3, cy);
-        rctx.lineTo(cx + 3, cy);
-        rctx.moveTo(cx, cy - 3);
-        rctx.lineTo(cx, cy + 3);
-        rctx.stroke();
-      }
-
+      const radarRange = 2000, scale = 66 / (radarRange * 2);
       food.forEach(f => {
         const dx = (f.x - player.x) * scale + 35,
               dy = (f.y - player.y) * scale + 35;
@@ -752,9 +735,9 @@
         player.mass - (0.000009 * player.r * player.r + (player.mass < 150 ? 0.002 : 0.003)) * dt
       );
 
-      if (player.flash.t > 0) {
-        player.flash.t -= dt;
-        if (player.flash.t <= 0) player.flash.color = '#00e4b8';
+      if (player.colorEffect.t > 0) {
+        player.colorEffect.t -= dt;
+        if (player.colorEffect.t <= 0) player.colorEffect.color = '#00e4b8';
       }
 
       offset.x = W / 2 - player.x * zoom;
@@ -773,32 +756,13 @@
       ctx.setTransform(zoom, 0, 0, zoom, offset.x, offset.y);
       drawGrid();
 
-      if (particles.length > 300) particles.splice(300, particles.length - 300);
-      particles.forEach((p, i) => {
-        p.x += p.dx * (dt / 16);
-        p.y += p.dy * (dt / 16);
-        p.ttl -= dt;
-        if (p.ttl <= 0) { particles.splice(i, 1); return; }
-        if (!onScreen(p.x, p.y, p.r)) return;
-        ctx.globalAlpha = p.ttl / 500;
-        ctx.fillStyle = p.col;
-        if (p.shape === 'circle') {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
-        }
-        ctx.globalAlpha = 1;
-      });
-
       food.forEach((f, i) => {
         if (!onScreen(f.x, f.y, f.r)) return;
         if (dist(player.x, player.y, f.x, f.y) < player.r + f.r) {
           player.mass += f.r;
-          player.flash = { color: f.frenzy ? f.col : '#ff0', t: 500 };
+          player.colorEffect = { color: f.frenzy ? f.col : '#ff0', t: 500 };
           food.splice(i, 1);
-          burst(f.x, f.y, f.frenzy ? f.col : '#ff0');
+          burst(f.x, f.y, '#ff0');
           document.getElementById('eatSnd').play().catch(() => {});
         } else {
           glow(f.x, f.y, f.r, f.frenzy ? f.col : '#ff0', f.frenzy ? 0.8 : 0.65);
@@ -812,7 +776,7 @@
         const d = dist(player.x, player.y, o.x, o.y);
         if (o.r < player.r && d < player.r) {
           player.mass += o.r * 2.5;
-          player.flash = { color: '#f00', t: 500 };
+          player.colorEffect = { color: '#f00', t: 500 };
           foes.splice(i, 1);
           burst(o.x, o.y, '#f00');
           document.getElementById('eatSnd').play().catch(() => {});
@@ -843,7 +807,7 @@
         if (d > 2000) { titans.splice(i, 1); spawnTitan(); return; }
         if (player.r > o.r && d < player.r) {
           player.mass += o.r * 5;
-          player.flash = { color: '#cc00ff', t: 500 };
+          player.colorEffect = { color: '#cc00ff', t: 500 };
           titans.splice(i, 1); titanKill++;
           burst(o.x, o.y, '#cc00ff');
           return;
@@ -873,11 +837,10 @@
         if (d > 2200) { spectres.splice(i, 1); spawnSpectre(); return; }
         if (!ignore && d < player.r) {
           player.mass += s.r * 7;
-          player.flash = { color: '#ff39ff', t: 500 };
+          player.colorEffect = { color: '#ff39ff', t: 500 };
           player.speedBoost = SPECTRE_SPEED_MS;
           spectres.splice(i, 1); document.getElementById('eatSnd').play().catch(() => {});
           spectreKill++;
-          burst(s.x, s.y, '#ff39ff');
           if (spectreKill % 6 === 0 && reapers.length < REAPER_MAX) spawnReaper();
           return;
         }
@@ -905,7 +868,7 @@
         if (d > 2400) { reapers.splice(i, 1); return; }
         if (!ignore && d < player.r) {
           player.mass += r.r;
-          player.flash = { color: '#ff8800', t: 500 };
+          player.colorEffect = { color: '#ff8800', t: 500 };
           reapers.splice(i, 1);
           burst(r.x, r.y, '#ff8800');
           return;
@@ -924,10 +887,9 @@
       });
 
       if (pill.active && dist(player.x, player.y, pill.x, pill.y) < player.r + pill.r) {
-        player.flash = { color: '#00aaff', t: 500 };
+        player.colorEffect = { color: '#00aaff', t: 500 };
         frenzy = true; F_TIME = 10000; pill.active = false;
         document.getElementById('frenzySnd').play().catch(() => {});
-        burst(pill.x, pill.y, '#00aaff');
         for (let i = 0; i < 40; i++) {
           const a = Math.random() * Math.PI * 2,
                 R = 120 + Math.random() * 120;
@@ -955,12 +917,11 @@
       if (pill.active) glow(pill.x, pill.y, pill.r, '#00aaff', 0.9);
 
       if (shield.active && dist(player.x, player.y, shield.x, shield.y) < player.r + shield.r) {
-        player.flash = { color: '#ffd700', t: 500 };
+        player.colorEffect = { color: '#ffd700', t: 500 };
         shieldActive = true;
         shieldTime = SHIELD_DURATION;
         shield.active = false;
         document.getElementById('eatSnd').play().catch(() => {});
-        burst(shield.x, shield.y, '#ffd700');
       }
       if (shieldActive) {
         shieldTime -= dt;
@@ -996,49 +957,43 @@
              mix('#00e4b8', '#ff39ff', i / player.tail.length), 0.3);
       }
 
-      if (player.flash.t > 0) {
-        glow(player.x, player.y, player.r / 2, player.flash.color, 0.3 * (player.flash.t / 500));
-      }
-
-      glow(
-        player.x, player.y, player.r,
-        player.blink > 0 ? (player.blink % 200 < 100 ? '#fff' : '#ff44ff') : '#00e4b8',
-        1,
-        20 * zoom
-      );
-
       for (let i = 0; i < 3; i++) {
         const ang = Math.random() * Math.PI * 2,
               rd = player.r * (0.8 + Math.random() * 0.4);
         headParticles.push({
           x: player.x + Math.cos(ang) * rd,
           y: player.y + Math.sin(ang) * rd,
-          dx: (Math.random() - 0.5) * 0.5,
-          dy: (Math.random() - 0.5) * 0.5,
-          r: (1 + Math.random() * 1.5) * (player.r / 15),
-          ttl: 30 + Math.random() * 30,
-          col: '#00e4b8'
+          dx: (Math.random() - 0.5) * 0.5, dy: (Math.random() - 0.5) * 0.5,
+          r: 1 + Math.random() * 1.5, ttl: 30 + Math.random() * 30
         });
       }
-      headParticles.forEach((p, i) => {
-        p.x += p.dx * (dt / 16);
-        p.y += p.dy * (dt / 16);
-        p.ttl -= dt;
-        glow(p.x, p.y, p.r, p.col, p.ttl / 50);
-        if (p.ttl <= 0) headParticles.splice(i, 1);
+      particles.forEach((p, i) => {
+        p.x += p.dx;
+        p.y += p.dy;
+        p.ttl--;
+        ctx.globalAlpha = p.ttl / (p.shape === 'circle' ? 60 : 80);
+        ctx.fillStyle = p.col;
+        ctx.beginPath();
+        if (p.shape === 'circle') {
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        } else {
+          ctx.rect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+        }
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        if (p.ttl <= 0) particles.splice(i, 1);
       });
 
-      for (let i = 0; i < 1; i++) {
+      for (let i = 0; i < 2; i++) {
         const ang = Math.random() * Math.PI * 2,
-              tailLength = Math.ceil(player.mass / 3 * (1 + EXTRA_TAIL_PCT)),
-              dist = player.r * (tailLength / 3) / player.r * 10;
+              dist = player.r * (1 + Math.random() * 0.5);
         playerAuraParticles.push({
           x: player.x + Math.cos(ang) * dist,
           y: player.y + Math.sin(ang) * dist,
           ang: ang,
           dist: dist,
           angV: 0.01 + Math.random() * 0.02,
-          r: (1 + Math.random() * 1) * (player.r / 15),
+          r: 1 + Math.random() * 1,
           ttl: 500 + Math.random() * 500,
           col: '#00e4b8'
         });
@@ -1051,6 +1006,13 @@
         glow(p.x, p.y, p.r, p.col, p.ttl / 1000);
         if (p.ttl <= 0) playerAuraParticles.splice(i, 1);
       });
+
+      glow(
+        player.x, player.y, player.r,
+        player.blink > 0 ? (player.blink % 200 < 100 ? '#fff' : '#ff44ff') : (player.colorEffect.t > 0 ? player.colorEffect.color : '#00e4b8'),
+        1,
+        20 * zoom
+      );
 
       massEl.textContent = player.mass.toFixed(0);
       scoreEl.textContent = Math.floor(player.mass * 10);
