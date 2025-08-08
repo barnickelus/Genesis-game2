@@ -8,9 +8,10 @@
   html, body {
     margin: 0;
     padding: 0;
-    background: #000; /* Dark space background */
+    background: #000; /* Dark space background for neon pop */
     overflow: hidden;
     touch-action: none;
+    font-family: monospace;
   }
   canvas {
     display: block;
@@ -24,12 +25,25 @@
     background: rgba(0,0,0,0.4);
     padding: 2px 4px;
     border-radius: 3px;
+    z-index: 10;
+  }
+  #hud {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    color: #fff;
+    font: 14px monospace;
+    background: rgba(0,0,0,0.4);
+    padding: 4px 6px;
+    border-radius: 3px;
+    z-index: 10;
   }
 </style>
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
 <div id="fps">FPS: 0</div>
+<div id="hud">Score: 0</div>
 <script>
 // =======================
 // Setup & Globals
@@ -48,8 +62,14 @@ window.addEventListener('resize', () => {
   canvas.height = H;
 });
 
-// Utility: convert degrees to radians
+// =======================
+// Utility Functions
+// =======================
 const toRad = angle => angle * Math.PI / 180;
+const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+function randRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
 
 // =======================
 // Color Cycling
@@ -70,177 +90,302 @@ let player = {
   tail: [],
   tailLength: 20,
   speed: 4,
-  growth: 0,
   vx: 0,
   vy: 0,
-  pulse: 0
+  pulse: 0,
+  score: 0
 };
 
-// =======================
-// Drag Control
-// =======================
+// Drag control (touch)
 let touchX = player.x, touchY = player.y;
 canvas.addEventListener('touchmove', e => {
   const t = e.touches[0];
   touchX = t.clientX;
   touchY = t.clientY;
 });
+canvas.addEventListener('mousemove', e => { // Mouse for desktop testing
+  touchX = e.clientX;
+  touchY = e.clientY;
+});
 
 // =======================
-// Tail & Particle Systems
+// Enemy & Food & Power-ups
 // =======================
-let particles = [];
-let afterimages = [];
+let enemies = [];
+let foods = [];
+let powerUps = [];
 
-function spawnParticle(x, y, color) {
-  particles.push({
+function spawnEnemy() {
+  let side = Math.floor(Math.random() * 4);
+  let x, y;
+  if (side === 0) { x = 0; y = randRange(0, H); }
+  else if (side === 1) { x = W; y = randRange(0, H); }
+  else if (side === 2) { x = randRange(0, W); y = 0; }
+  else { x = randRange(0, W); y = H; }
+  enemies.push({
     x, y,
-    vx: (Math.random()-0.5)*2,
-    vy: (Math.random()-0.5)*2,
-    life: 1,
-    color
+    size: randRange(10, 20),
+    speed: randRange(1.5, 2.5)
+  });
+}
+
+function spawnFood() {
+  foods.push({
+    x: randRange(20, W-20),
+    y: randRange(20, H-20),
+    size: 6
+  });
+}
+
+function spawnPowerUp() {
+  let types = ['radar', 'frenzy', 'speed'];
+  let type = types[Math.floor(Math.random()*types.length)];
+  powerUps.push({
+    x: randRange(30, W-30),
+    y: randRange(30, H-30),
+    size: 8,
+    type
   });
 }
 
 // =======================
-// FPS Counter
+// Game State & Timers
 // =======================
-let lastTime = performance.now();
-let frameCount = 0;
-let fps = 0;
-const fpsDisplay = document.getElementById('fps');
+let radarActive = false;
+let frenzyActive = false;
+let speedActive = false;
+let radarTimer = 0;
+let frenzyTimer = 0;
+let speedTimer = 0;
+
+// Spawn initial objects
+for (let i = 0; i < 10; i++) spawnFood();
+for (let i = 0; i < 5; i++) spawnEnemy();
+for (let i = 0; i < 2; i++) spawnPowerUp();
 
 // =======================
-// Background Grid
+// Core Update Logic
 // =======================
-function drawGrid() {
+function update(dt) {
+  // Smooth movement toward target
+  let dx = touchX - player.x;
+  let dy = touchY - player.y;
+  player.vx = dx * 0.1;
+  player.vy = dy * 0.1;
+  let moveSpeed = player.speed;
+  if (speedActive) moveSpeed *= 1.8;
+  player.x += player.vx * (dt/16) * moveSpeed;
+  player.y += player.vy * (dt/16) * moveSpeed;
+
+  // Tail handling
+  player.tail.unshift({x: player.x, y: player.y});
+  if (player.tail.length > player.tailLength) player.tail.pop();
+
+  // Enemy movement (simple chase)
+  for (let e of enemies) {
+    let edx = player.x - e.x;
+    let edy = player.y - e.y;
+    let elen = Math.hypot(edx, edy);
+    e.x += (edx / elen) * e.speed * (dt/16);
+    e.y += (edy / elen) * e.speed * (dt/16);
+  }
+
+  // Collisions with food
+  foods = foods.filter(f => {
+    if (dist(player.x, player.y, f.x, f.y) < player.size + f.size) {
+      player.score += 10;
+      player.tailLength += 2;
+      return false;
+    }
+    return true;
+  });
+  while (foods.length < 10) spawnFood();
+
+  // Collisions with power-ups
+  powerUps = powerUps.filter(p => {
+    if (dist(player.x, player.y, p.x, p.y) < player.size + p.size) {
+      if (p.type === 'radar') { radarActive = true; radarTimer = 5000; }
+      if (p.type === 'frenzy') { frenzyActive = true; frenzyTimer = 5000; }
+      if (p.type === 'speed') { speedActive = true; speedTimer = 5000; }
+      return false;
+    }
+    return true;
+  });
+  while (powerUps.length < 2) spawnPowerUp();
+
+  // Collisions with enemies
+  enemies = enemies.filter(e => {
+    if (dist(player.x, player.y, e.x, e.y) < player.size + e.size) {
+      player.score -= 20;
+      player.tailLength = Math.max(10, player.tailLength - 5);
+      return false;
+    }
+    return true;
+  });
+  while (enemies.length < 5) spawnEnemy();
+
+  // Timers
+  if (radarActive) { radarTimer -= dt; if (radarTimer <= 0) radarActive = false; }
+  if (frenzyActive) { frenzyTimer -= dt; if (frenzyTimer <= 0) frenzyActive = false; }
+  if (speedActive) { speedTimer -= dt; if (speedTimer <= 0) speedActive = false; }
+
+  // Pulse animation
+  player.pulse += dt * 0.005;
+
+  // Color cycle
+  updateHue(0.3);
+}// =======================
+// Depth Grid Drawing
+// =======================
+function drawDepthGrid() {
+  const spacing = 60;
+  const depthFactor = 0.003;
   ctx.save();
-  ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+  ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.2)`;
   ctx.lineWidth = 1;
 
-  const spacing = 50;
-  const offsetX = (player.x % spacing);
-  const offsetY = (player.y % spacing);
-
-  // Vertical lines
-  for (let x = -offsetX; x < W; x += spacing) {
+  // Orthogonal grid with vanishing point effect
+  for (let i = -W; i < W*2; i += spacing) {
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, H);
+    ctx.moveTo(i, 0);
+    ctx.lineTo(W/2 + (i - W/2) * (1 + depthFactor * (player.y - H/2)), H);
     ctx.stroke();
   }
-  // Horizontal lines
-  for (let y = -offsetY; y < H; y += spacing) {
+  for (let j = -H; j < H*2; j += spacing) {
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
+    ctx.moveTo(0, j);
+    ctx.lineTo(W, H/2 + (j - H/2) * (1 + depthFactor * (player.x - W/2)));
     ctx.stroke();
   }
   ctx.restore();
 }
 
 // =======================
-// Game Loop
+// Particle System
 // =======================
-function update(dt) {
-  // Smooth movement toward touch point
-  let dx = touchX - player.x;
-  let dy = touchY - player.y;
-  player.vx = dx * 0.1;
-  player.vy = dy * 0.1;
-  player.x += player.vx;
-  player.y += player.vy;
-
-  // Tail positions
-  player.tail.unshift({x: player.x, y: player.y});
-  if (player.tail.length > player.tailLength) player.tail.pop();
-
-  // Animate pulse
-  player.pulse += dt * 0.005;
-
-  // Update particles
-  for (let p of particles) {
+let particles = [];
+function spawnParticles(x, y, color) {
+  for (let i = 0; i < 8; i++) {
+    particles.push({
+      x, y,
+      vx: randRange(-2, 2),
+      vy: randRange(-2, 2),
+      life: randRange(300, 600),
+      color
+    });
+  }
+}
+function updateParticles(dt) {
+  particles = particles.filter(p => {
     p.x += p.vx;
     p.y += p.vy;
-    p.life -= 0.02;
-  }
-  particles = particles.filter(p => p.life > 0);
-
-  // Afterimages
-  afterimages.push({tail: [...player.tail], life: 0.5});
-  afterimages.forEach(ai => ai.life -= 0.01);
-  afterimages = afterimages.filter(ai => ai.life > 0);
-
-  // Color cycle
-  updateHue(0.3);
+    p.life -= dt;
+    return p.life > 0;
+  });
 }
-
-function draw() {
-  ctx.clearRect(0,0,W,H);
-
-  // Draw background grid
-  drawGrid();
-
-  // Draw afterimages
-  for (let ai of afterimages) {
-    ctx.globalAlpha = ai.life * 0.3;
-    ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
-    ctx.beginPath();
-    for (let i = 0; i < ai.tail.length; i++) {
-      const t = ai.tail[i];
-      if (i === 0) ctx.moveTo(t.x, t.y);
-      else ctx.lineTo(t.x, t.y);
-    }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-
-  // Draw tail
-  ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
-  ctx.lineWidth = player.size / 3;
-  ctx.beginPath();
-  for (let i = 0; i < player.tail.length; i++) {
-    const t = player.tail[i];
-    if (i === 0) ctx.moveTo(t.x, t.y);
-    else ctx.lineTo(t.x, t.y);
-  }
-  ctx.stroke();
-
-  // Draw player core
-  const pulseSize = Math.sin(player.pulse) * 2;
-  ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, player.size + pulseSize, 0, Math.PI*2);
-  ctx.fill();
-
-  // Draw particles
+function drawParticles() {
   for (let p of particles) {
-    ctx.globalAlpha = p.life;
     ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
+    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.globalAlpha = 1;
 }
 
-function loop(timestamp) {
-  const dt = timestamp - lastTime;
-  lastTime = timestamp;
-
-  frameCount++;
-  if (frameCount >= 10) {
-    fps = Math.round(1000 / dt);
-    fpsDisplay.textContent = `FPS: ${fps}`;
-    frameCount = 0;
+// =======================
+// Draw Tail & Player
+// =======================
+function drawPlayer() {
+  // Tail
+  ctx.lineWidth = 2;
+  for (let i = 0; i < player.tail.length - 1; i++) {
+    const t = player.tail[i];
+    const next = player.tail[i+1];
+    let segmentHue = (hue + i * 2) % 360;
+    ctx.strokeStyle = `hsl(${segmentHue}, 100%, 50%)`;
+    ctx.beginPath();
+    ctx.moveTo(t.x, t.y);
+    ctx.lineTo(next.x, next.y);
+    ctx.stroke();
   }
 
-  update(dt);
-  draw();
-  requestAnimationFrame(loop);
+  // Player core (breathing pulse)
+  let pulseSize = player.size + Math.sin(player.pulse) * 2;
+  ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, pulseSize, 0, Math.PI * 2);
+  ctx.fill();
 }
 
-requestAnimationFrame(loop);
+// =======================
+// Draw Enemies, Food, Power-ups
+// =======================
+function drawEnemies() {
+  ctx.fillStyle = 'red';
+  for (let e of enemies) {
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+function drawFoods() {
+  ctx.fillStyle = 'lime';
+  for (let f of foods) {
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+function drawPowerUps() {
+  for (let p of powerUps) {
+    if (p.type === 'radar') ctx.fillStyle = 'cyan';
+    if (p.type === 'frenzy') ctx.fillStyle = 'yellow';
+    if (p.type === 'speed') ctx.fillStyle = 'magenta';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// =======================
+// FPS Counter
+// =======================
+let lastFrameTime = performance.now();
+let fps = 0;
+function updateFPS(now) {
+  const delta = now - lastFrameTime;
+  fps = Math.round(1000 / delta);
+  lastFrameTime = now;
+  document.getElementById('fps').innerText = `FPS: ${fps}`;
+}
+
+// =======================
+// Main Game Loop
+// =======================
+let lastTime = performance.now();
+function gameLoop(now) {
+  let dt = now - lastTime;
+  if (dt > 50) dt = 50; // cap to avoid jump after tab switch
+  lastTime = now;
+
+  update(dt);
+  updateParticles(dt);
+  updateFPS(now);
+
+  ctx.clearRect(0, 0, W, H);
+
+  drawDepthGrid();
+  drawParticles();
+  drawFoods();
+  drawPowerUps();
+  drawEnemies();
+  drawPlayer();
+
+  document.getElementById('hud').innerText = `Score: ${player.score}`;
+
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
 </script>
 </body>
 </html>
