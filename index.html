@@ -1,664 +1,246 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Genesis Evolution — Star-Frenzy (Neon Flow, iOS-Tuned)</title>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+<meta charset="UTF-8">
+<title>Genesis Evolution — Headless Final Build</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#060616;font-family:"Inter",Arial,sans-serif;}
-  canvas#game{position:absolute;inset:0;display:block;touch-action:none;background:#000;}
-  #hud,#compass,#effBar,#pauseBtn,#radarWrap,#zoomSlider,#joystick,#perf{position:fixed;z-index:2}
-  #hud{top:14px;left:18px;color:#fff;font-size:18px;text-shadow:0 0 4px rgba(255,255,255,.5);background:rgba(0,0,0,.5);padding:8px 12px;border-radius:6px}
-  #compass{top:70px;left:18px;color:#ccc;font-size:14px;line-height:14px;letter-spacing:1px;text-shadow:0 0 3px #000;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:4px}
-  #effBar{bottom:14px;left:18px;width:220px;height:18px;border-radius:9px;background:rgba(255,255,255,.12)}
-  #effFill{width:100%;height:100%;border-radius:9px;background:#00e4b8}
-  #pauseBtn{top:14px;right:18px;font-size:22px;color:#fff;cursor:pointer;user-select:none}
-  #radarWrap{top:48px;right:18px;width:70px;height:70px;display:none}
-  #radar{width:70px;height:70px;border:1px solid #555;border-radius:4px;background:rgba(0,0,0,.4)}
-  #zoomSlider{top:130px;right:18px;width:70px;transform:rotate(-90deg)}
-  #joystick{bottom:20px;right:20px;width:110px;height:110px;display:none}
-  #joystickCanvas{width:110px;height:110px}
-  #pauseMenu{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.85);color:#fff;padding:20px;border-radius:10px;z-index:3;display:none;text-align:center}
-  #pauseMenu button{display:block;margin:10px auto;padding:8px 16px;font-size:16px;cursor:pointer;background:#333;color:#fff;border:none;border-radius:5px}
-  #pauseMenu button:hover{background:#555}
-  .high-contrast #game,.high-contrast body{filter:contrast(1.5) brightness(1.2)}
-  .high-contrast #hud,.high-contrast #compass{background:rgba(0,0,0,.85);color:#fff}
-  #perf{bottom:14px;right:18px;color:#9ad3ff;font-size:12px;background:rgba(0,0,0,.4);padding:6px 8px;border-radius:6px}
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #000; /* Dark space background */
+    overflow: hidden;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+  }
+  #fps {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    color: #0f0;
+    font: 12px monospace;
+    background: rgba(0,0,0,0.4);
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
 </style>
 </head>
 <body>
-  <canvas id="game"></canvas>
-
-  <div id="hud">Mass: <span id="mass">10</span>&nbsp; Score: <span id="score">0</span>&nbsp; <span id="level">1</span></div>
-  <div id="compass">N<br/>E&nbsp;&nbsp;W<br/>&nbsp;S</div>
-  <div id="effBar"><div id="effFill"></div></div>
-  <div id="pauseBtn">⏸︎</div>
-  <div id="radarWrap"><canvas id="radar" width="70" height="70"></canvas></div>
-  <input id="zoomSlider" type="range" min="0.5" max="2" step="0.01" value="1" />
-  <div id="joystick"><canvas id="joystickCanvas" width="110" height="110"></canvas></div>
-
-  <div id="pauseMenu">
-    <h2>Paused</h2>
-    <button id="resumeBtn">Resume</button>
-    <button id="restartBtn">Restart</button>
-    <button id="muteBtn">Mute Audio</button>
-    <button id="radarToggleBtn">Toggle Radar</button>
-    <button id="contrastBtn">Enable High Contrast</button>
-    <button id="perfBtn">Toggle Performance Mode</button>
-  </div>
-  <div id="perf">FPS: <span id="fps">60</span> • iOS mode</div>
-
-  <!-- Optional audio (kept muted by default so iOS never blocks loop) -->
-  <audio id="backgroundMusic" src="" loop preload="none"></audio>
-  <audio id="eatSnd" src="" preload="none"></audio>
-  <audio id="hurtSnd" src="" preload="none"></audio>
-  <audio id="frenzySnd" src="" preload="none"></audio>
-
+<canvas id="gameCanvas"></canvas>
+<div id="fps">FPS: 0</div>
 <script>
-(() => {
-  // ===== CONFIG (iOS-tuned) =====
-  const CFG = {
-    MAX_FOOD: 70,
-    BASE_FOE_COUNT: 12,
-    MASS_SPEED_FACTOR: 0.00105,  // slightly snappier
-    EXTRA_TAIL_PCT: 0.12,
-    MAX_TAIL_DRAW: 72,
-    BLINK_MS: 260,
-    SAFE_PLAYER_MASS: 70,
-    ZOOM_EASE: 0.24,
-    STAR_LAYERS: 3,
-    DPR_CAP: 2,
-    PERFORMANCE_MODE: false
-  };
+// =======================
+// Setup & Globals
+// =======================
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W = window.innerWidth;
+let H = window.innerHeight;
+canvas.width = W;
+canvas.height = H;
 
-  // ===== CANVAS & DPR =====
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d', { alpha: false });
-  ctx.imageSmoothingEnabled = false;
-  let DPR = Math.min(window.devicePixelRatio || 1, CFG.DPR_CAP);
-  let W=0,H=0;
+window.addEventListener('resize', () => {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W;
+  canvas.height = H;
+});
 
-  function resize(){
-    DPR = Math.min(window.devicePixelRatio || 1, CFG.DPR_CAP);
-    W = Math.floor(innerWidth);
-    H = Math.floor(innerHeight);
-    canvas.width = Math.floor(W*DPR);
-    canvas.height= Math.floor(H*DPR);
-    canvas.style.width = W+'px';
-    canvas.style.height= H+'px';
-    ctx.setTransform(DPR,0,0,DPR,0,0);
-  }
-  addEventListener('resize', (()=>{ let t; return ()=>{ clearTimeout(t); t=setTimeout(resize,100); } })());
-  resize();
+// Utility: convert degrees to radians
+const toRad = angle => angle * Math.PI / 180;
 
-  // ===== UI =====
-  const massEl=document.getElementById('mass');
-  const scoreEl=document.getElementById('score');
-  const levelEl=document.getElementById('level');
-  const fpsEl=document.getElementById('fps');
-  const radarC=document.getElementById('radar');
-  const rctx=radarC.getContext('2d');
-  const pauseBtn=document.getElementById('pauseBtn');
-  const pauseMenu=document.getElementById('pauseMenu');
-  const resumeBtn=document.getElementById('resumeBtn');
-  const restartBtn=document.getElementById('restartBtn');
-  const muteBtn=document.getElementById('muteBtn');
-  const radarToggleBtn=document.getElementById('radarToggleBtn');
-  const contrastBtn=document.getElementById('contrastBtn');
-  const perfBtn=document.getElementById('perfBtn');
-  const zoomSlider=document.getElementById('zoomSlider');
+// =======================
+// Color Cycling
+// =======================
+let hue = 200; // start color
+function updateHue(speed=0.2) {
+  hue += speed;
+  if (hue > 360) hue -= 360;
+}
 
-  // Audio (safe)
-  const bgMusic=document.getElementById('backgroundMusic');
-  const eatSnd=document.getElementById('eatSnd');
-  const hurtSnd=document.getElementById('hurtSnd');
-  const frenzySnd=document.getElementById('frenzySnd');
-  let isMuted = true;
-  function safePlay(a){ if(!a||!a.play) return; try{ a.currentTime=0; a.play(); }catch{} }
+// =======================
+// Player Object
+// =======================
+let player = {
+  x: W/2,
+  y: H/2,
+  size: 15,
+  tail: [],
+  tailLength: 20,
+  speed: 4,
+  growth: 0,
+  vx: 0,
+  vy: 0,
+  pulse: 0
+};
 
-  // ===== INPUT: joystick (mobile) + mouse throttle (desktop) =====
-  const joystickWrap=document.getElementById('joystick');
-  const joystickCanvas=document.getElementById('joystickCanvas');
-  const jctx=joystickCanvas.getContext('2d');
-  let joystickActive=false, joyX=0, joyY=0;
+// =======================
+// Drag Control
+// =======================
+let touchX = player.x, touchY = player.y;
+canvas.addEventListener('touchmove', e => {
+  const t = e.touches[0];
+  touchX = t.clientX;
+  touchY = t.clientY;
+});
 
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-  if (isMobile) joystickWrap.style.display='block';
+// =======================
+// Tail & Particle Systems
+// =======================
+let particles = [];
+let afterimages = [];
 
-  function drawJoystick(){
-    jctx.clearRect(0,0,110,110);
-    jctx.globalAlpha=.25; jctx.beginPath(); jctx.arc(55,55,52,0,Math.PI*2); jctx.fillStyle='#fff'; jctx.fill();
-    jctx.globalAlpha=1;
-    if (joystickActive){
-      jctx.beginPath(); jctx.arc(55+joyX*32,55+joyY*32,18,0,Math.PI*2); jctx.fillStyle='#00e4b8'; jctx.fill();
-    }
-  }
-  function setJoyFromTouch(t,r){
-    joyX=(t.clientX-r.left-55)/55; joyY=(t.clientY-r.top-55)/55;
-    const L=Math.hypot(joyX,joyY); if (L>1){ joyX/=L; joyY/=L; }
-  }
-  joystickCanvas.addEventListener('touchstart', e=>{
-    e.preventDefault(); joystickActive=true;
-    setJoyFromTouch(e.touches[0], joystickCanvas.getBoundingClientRect());
-  }, {passive:false});
-  joystickCanvas.addEventListener('touchmove', e=>{
-    e.preventDefault();
-    setJoyFromTouch(e.touches[0], joystickCanvas.getBoundingClientRect());
-  }, {passive:false});
-  joystickCanvas.addEventListener('touchend', ()=>{ joystickActive=false; joyX=joyY=0; }, {passive:true});
+function spawnParticle(x, y, color) {
+  particles.push({
+    x, y,
+    vx: (Math.random()-0.5)*2,
+    vy: (Math.random()-0.5)*2,
+    life: 1,
+    color
+  });
+}
 
-  // Desktop pointer → throttle toward mouse angle relative to screen center
-  let pointerActive=false, pointerX=W/2, pointerY=H/2;
-  canvas.addEventListener('pointerdown', e=>{ pointerActive=true; pointerX=e.clientX; pointerY=e.clientY; });
-  canvas.addEventListener('pointermove', e=>{ if(pointerActive){ pointerX=e.clientX; pointerY=e.clientY; } });
-  canvas.addEventListener('pointerup', ()=>{ pointerActive=false; });
+// =======================
+// FPS Counter
+// =======================
+let lastTime = performance.now();
+let frameCount = 0;
+let fps = 0;
+const fpsDisplay = document.getElementById('fps');
 
-  let sliderZoom=1, zoom=1;
-  zoomSlider.oninput = e => sliderZoom = parseFloat(e.target.value);
+// =======================
+// Background Grid
+// =======================
+function drawGrid() {
+  ctx.save();
+  ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+  ctx.lineWidth = 1;
 
-  // ===== HELPERS =====
-  const rand = v => Math.random()*v - v/2;
-  const dist = (x1,y1,x2,y2)=>Math.hypot(x2-x1,y2-y1);
-  const lerp = (a,b,t)=>a+(b-a)*t;
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  function mixRGB(a,b,t){
-    const A={r:parseInt(a.slice(1,3),16),g:parseInt(a.slice(3,5),16),b:parseInt(a.slice(5,7),16)};
-    const B={r:parseInt(b.slice(1,3),16),g:parseInt(b.slice(3,5),16),b:parseInt(b.slice(5,7),16)};
-    return `rgb(${Math.round(lerp(A.r,B.r,t))},${Math.round(lerp(A.g,B.g,t))},${Math.round(lerp(A.b,B.b,t))})`;
-  }
+  const spacing = 50;
+  const offsetX = (player.x % spacing);
+  const offsetY = (player.y % spacing);
 
-  // ===== SPRITE CACHE (perf) =====
-  function makeGlowSprite(radiusPx, stops){
-    const s=Math.ceil(radiusPx*2);
-    const off=document.createElement('canvas'); off.width=off.height=s;
-    const c=off.getContext('2d');
-    const g=c.createRadialGradient(s/2,s/2,0,s/2,s/2,radiusPx);
-    stops.forEach(([st,col])=>g.addColorStop(st,col));
-    c.fillStyle=g; c.beginPath(); c.arc(s/2,s/2,radiusPx,0,Math.PI*2); c.fill();
-    return off;
-  }
-  const SPRITES={
-    core: makeGlowSprite(64, [[0,'rgba(0,228,184,0.92)'],[0.5,'rgba(0,228,184,0.35)'],[1,'rgba(0,228,184,0)']]),
-    magenta: makeGlowSprite(64, [[0,'rgba(255,57,255,0.90)'],[0.5,'rgba(255,57,255,0.35)'],[1,'rgba(255,57,255,0)']]),
-    yellow: makeGlowSprite(48, [[0,'rgba(255,255,0,0.85)'],[1,'rgba(255,255,0,0)']]),
-    cyan: makeGlowSprite(48, [[0,'rgba(0,170,255,0.90)'],[1,'rgba(0,170,255,0)']]),
-    white: makeGlowSprite(40, [[0,'rgba(255,255,255,0.75)'],[1,'rgba(255,255,255,0)']]),
-    red: makeGlowSprite(52, [[0,'rgba(255,0,0,0.85)'],[1,'rgba(255,0,0,0)']]),
-    orange: makeGlowSprite(56, [[0,'rgba(255,136,0,0.85)'],[1,'rgba(255,136,0,0)']]),
-    purple: makeGlowSprite(56, [[0,'rgba(204,0,255,0.85)'],[1,'rgba(204,0,255,0)']])
-  };
-  function blit(sprite,x,y,r){ const s=r*2; ctx.drawImage(sprite, x-r, y-r, s, s); }
-
-  // ===== WORLD =====
-  let offset={x:0,y:0};
-  let paused=false, radarActive=false;
-
-  const food=[], foes=[], titans=[], spectres=[], reapers=[], beacons=[];
-  const particles=[], auraParticles=[], ingestOrbs=[];
-  let pill={x:0,y:0,r:10,active:false,cd:0};
-  let shield={x:0,y:0,r:10,active:false,cd:0};
-  let frenzy=false, F_TIME=0, titanTimer=0, titanKill=0, spectreKill=0, level=1, shieldActive=false, shieldTime=0;
-
-  const player={
-    x:0,y:0,r:15,mass:10,
-    vx:0,vy:0, accel:0.12, // NEW: inertial control
-    maxSpeed:3.8, drag:0.88,
-    heading:0, blink:0, speedBoost:0,
-    flash:{color:'#00e4b8',t:0},
-    tail:[]
-  };
-
-  // Stars (parallax)
-  const stars=[]; 
-  for(let l=0;l<CFG.STAR_LAYERS;l++){
-    const layer=[], count=60*(l+1);
-    for(let i=0;i<count;i++) layer.push({x:rand(5000),y:rand(5000),s:(l+1)*0.6});
-    stars.push(layer);
-  }
-
-  // NSWE beacons
-  const C_RING_DIST=1600;
-  [['N',0,-C_RING_DIST],['S',0,C_RING_DIST],['E',C_RING_DIST,0],['W',-C_RING_DIST,0]].forEach(([_,x,y])=>beacons.push({x,y,r:18}));
-
-  function spawnFood(){ while(food.length < (CFG.PERFORMANCE_MODE?50:CFG.MAX_FOOD)){ const r=5+Math.random()*3; food.push({x:rand(1800),y:rand(1800),r,frenzy:false,col:'#ff0'}); } }
-  function spawnFoe(){ foes.push({x:rand(2000),y:rand(2000),r:10+Math.random()*20, aggro:0}); }
-  function spawnTitan(){ const a=Math.random()*Math.PI*2, d=700+Math.random()*500; titans.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:25+Math.random()*35, hop:0}); }
-  function spawnSpectre(){ const a=Math.random()*Math.PI*2, d=600+Math.random()*400; spectres.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:22+Math.random()*25, dash:0}); }
-  function spawnReaper(){ const a=Math.random()*Math.PI*2, d=800+Math.random()*600; reapers.push({x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,r:38+Math.random()*28, charge:0}); }
-  function spawnPill(){ pill={x:rand(1800),y:rand(1800),r:10,active:true,cd:0}; }
-  function spawnShield(){ shield={x:rand(1800),y:rand(1800),r:10,active:true,cd:0}; }
-
-  spawnFood(); for(let i=0;i<CFG.BASE_FOE_COUNT;i++) spawnFoe();
-
-  function onScreen(x,y,r){
-    return !(x+r < player.x - W/(2*zoom) ||
-             x-r > player.x + W/(2*zoom) ||
-             y+r < player.y - H/(2*zoom) ||
-             y-r > player.y + H/(2*zoom));
-  }
-  function burst(x,y,sprite='white',count=10,v=2){
-    for(let i=0;i<count;i++){
-      particles.push({x,y,dx:rand(v),dy:rand(v),r:2+Math.random()*2,ttl:350+Math.random()*250,sprite});
-    }
-  }
-
-  function drawRadar(){
-    rctx.clearRect(0,0,70,70);
-    rctx.fillStyle='rgba(0,0,0,.4)'; rctx.fillRect(0,0,70,70);
-    rctx.fillStyle='#fff'; rctx.beginPath(); rctx.arc(35,35,2,0,Math.PI*2); rctx.fill();
-    const radarRange=2200, scale=66/(radarRange*2);
-    function plot(x,y,c,rr=1.2){
-      const dx=(x-player.x)*scale+35, dy=(y-player.y)*scale+35;
-      if (dx<2||dx>68||dy<2||dy>68) return;
-      rctx.fillStyle=c; rctx.beginPath(); rctx.arc(dx,dy,rr,0,Math.PI*2); rctx.fill();
-    }
-    food.forEach(f=>plot(f.x,f.y,f.frenzy?'#ff39ff':'#ff0',1));
-    foes.forEach(o=>plot(o.x,o.y,'#f00',1));
-    titans.forEach(o=>plot(o.x,o.y,'#cc00ff',1.3));
-    spectres.forEach(s=>plot(s.x,s.y,'#ff39ff',1.3));
-    reapers.forEach(r=>plot(r.x,r.y,'#ff8800',1.3));
-    if (pill.active)   plot(pill.x,pill.y,'#00aaff',1.3);
-    if (shield.active) plot(shield.x,shield.y,'#ffd700',1.3);
-    beacons.forEach(b=>plot(b.x,b.y,'#fff',1.3));
-  }
-
-  function drawGrid(){
-    const step = zoom <= 0.8 ? 60 : 120;
-    ctx.lineWidth=1;
-    for(let z=0; z<(CFG.PERFORMANCE_MODE?3:5); z++){
-      const s=1+z*0.18, opa=0.75-0.12*z;
-      ctx.strokeStyle=`rgba(34,34,34,${opa})`;
-      for(let i=-4;i<=4;i++){
-        for(let j=-4;j<=4;j++){
-          const x=i*step*s, y=j*step*s;
-          if(!onScreen(x,y,step*s*1.4)) continue;
-          ctx.beginPath(); ctx.rect(x,y,step*s,step*s); ctx.stroke();
-        }
-      }
-    }
-  }
-
-  // ===== Procedural dragon head (drawn IN WORLD at player pos) =====
-  function drawHead(angle, ts, size){
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(angle);
-    const pulse = (Math.sin(ts*0.004)+1)/2;
-    // backplate
-    blit(SPRITES.core, 0,0, size*0.7);
-    // silhouette lines
-    ctx.strokeStyle = mixRGB('#00e4b8','#ff39ff', pulse);
-    ctx.lineWidth = Math.max(2, size*0.06);
-    ctx.lineJoin='round'; ctx.lineCap='round';
+  // Vertical lines
+  for (let x = -offsetX; x < W; x += spacing) {
     ctx.beginPath();
-    ctx.moveTo(-size*0.45, size*0.06);
-    ctx.quadraticCurveTo(-size*0.18, -size*0.50, size*0.36, -size*0.14); // brow
-    ctx.quadraticCurveTo(size*0.15, 0, size*0.38, size*0.14); // snout
-    ctx.quadraticCurveTo(size*0.03, size*0.06, -size*0.45, size*0.06); // jaw
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
     ctx.stroke();
-    // eye & muzzle highlight
-    blit(SPRITES.magenta, size*0.17, -size*0.05, size*0.13);
-    blit(SPRITES.white, size*0.27, size*0.06, size*0.10);
-    // horn
+  }
+  // Horizontal lines
+  for (let y = -offsetY; y < H; y += spacing) {
     ctx.beginPath();
-    ctx.moveTo(-size*0.27,-size*0.08);
-    ctx.quadraticCurveTo(-size*0.38,-size*0.35,-size*0.12,-size*0.38);
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
     ctx.stroke();
-    ctx.restore();
   }
+  ctx.restore();
+}
 
-  // ===== MENU / PAUSE =====
-  function setPaused(p){
-    paused=p;
-    pauseBtn.textContent = paused? '▶︎':'⏸︎';
-    pauseMenu.style.display = paused? 'block':'none';
-    if (bgMusic && !isMuted){ try{ paused? bgMusic.pause() : bgMusic.play(); }catch{} }
+// =======================
+// Game Loop
+// =======================
+function update(dt) {
+  // Smooth movement toward touch point
+  let dx = touchX - player.x;
+  let dy = touchY - player.y;
+  player.vx = dx * 0.1;
+  player.vy = dy * 0.1;
+  player.x += player.vx;
+  player.y += player.vy;
+
+  // Tail positions
+  player.tail.unshift({x: player.x, y: player.y});
+  if (player.tail.length > player.tailLength) player.tail.pop();
+
+  // Animate pulse
+  player.pulse += dt * 0.005;
+
+  // Update particles
+  for (let p of particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.02;
   }
-  pauseBtn.onclick=()=>setPaused(!paused);
-  resumeBtn.onclick=()=>setPaused(false);
-  radarToggleBtn.onclick=()=>{
-    radarActive=!radarActive;
-    document.getElementById('radarWrap').style.display = radarActive?'block':'none';
-  };
-  contrastBtn.onclick=()=>{
-    document.body.classList.toggle('high-contrast');
-    contrastBtn.textContent = document.body.classList.contains('high-contrast') ? 'Disable High Contrast' : 'Enable High Contrast';
-  };
-  perfBtn.onclick=()=>{ CFG.PERFORMANCE_MODE = !CFG.PERFORMANCE_MODE; };
-  muteBtn.onclick=()=>{
-    isMuted=!isMuted;
-    muteBtn.textContent = isMuted? 'Unmute Audio' : 'Mute Audio';
-    [bgMusic,eatSnd,hurtSnd,frenzySnd].forEach(a=>{ if(a) a.muted=isMuted; });
-  };
-  restartBtn.onclick=()=>{
-    Object.assign(player,{x:0,y:0,r:15,mass:10,vx:0,vy:0,accel:0.12,maxSpeed:3.8,drag:0.88,heading:0,blink:0,speedBoost:0,flash:{color:'#00e4b8',t:0},tail:[]});
-    food.length=foes.length=titans.length=spectres.length=reapers.length=beacons.length=particles.length=auraParticles.length=ingestOrbs.length=0;
-    [['N',0,-C_RING_DIST],['S',0,C_RING_DIST],['E',C_RING_DIST,0],['W',-C_RING_DIST,0]].forEach(([_,x,y])=>beacons.push({x,y,r:18}));
-    spawnFood(); for(let i=0;i<CFG.BASE_FOE_COUNT;i++) spawnFoe();
-    pill={x:0,y:0,r:10,active:false,cd:0};
-    shield={x:0,y:0,r:10,active:false,cd:0};
-    frenzy=false; F_TIME=0; paused=false; radarActive=false; titanTimer=0; titanKill=0; spectreKill=0; level=1; shieldActive=false; shieldTime=0;
-    document.getElementById('radarWrap').style.display='none';
-    pauseMenu.style.display='none'; pauseBtn.textContent='⏸︎';
-  };
+  particles = particles.filter(p => p.life > 0);
 
-  // ===== LOOP =====
-  let last=0, fps=60, fpsClock=0, frames=0;
+  // Afterimages
+  afterimages.push({tail: [...player.tail], life: 0.5});
+  afterimages.forEach(ai => ai.life -= 0.01);
+  afterimages = afterimages.filter(ai => ai.life > 0);
 
-  function loop(ts){
-    if (!last) last = ts;
-    const dt = clamp(ts-last, 8, 32); // stable dt for iOS
-    last = ts;
+  // Color cycle
+  updateHue(0.3);
+}
 
-    if (!paused){
-      // Zoom follows mass; user slider caps it
-      zoom = lerp(zoom, Math.min(sliderZoom, Math.max(0.5, H/(player.r*4))), CFG.ZOOM_EASE);
+function draw() {
+  ctx.clearRect(0,0,W,H);
 
-      // INPUT → velocity (feels better on touch)
-      let inX=0, inY=0, throttle=0;
-      if (isMobile && joystickActive){
-        inX = joyX; inY = joyY; throttle = Math.min(1, Math.hypot(inX,inY));
-      } else if (!isMobile && pointerActive){
-        // vector from screen center to pointer
-        const dx = (pointerX - W/2), dy = (pointerY - H/2);
-        const L = Math.hypot(dx,dy);
-        if (L>4){ inX = dx/L; inY = dy/L; throttle = clamp(L / 140, 0, 1); }
-      }
-      if (throttle>0){
-        player.vx += inX * player.accel * (1 + (player.mass*CFG.MASS_SPEED_FACTOR));
-        player.vy += inY * player.accel * (1 + (player.mass*CFG.MASS_SPEED_FACTOR));
-        player.heading = Math.atan2(inY,inX);
-      }
-      const boost = (player.speedBoost>0 ? 1.25 : 1) * (frenzy?1.3:1);
-      const maxV = player.maxSpeed * boost;
-      // clamp speed
-      const sp = Math.hypot(player.vx, player.vy);
-      if (sp > maxV){ const s = maxV/sp; player.vx*=s; player.vy*=s; }
-      // friction
-      player.vx *= player.drag; player.vy *= player.drag;
-      player.x += player.vx; player.y += player.vy;
+  // Draw background grid
+  drawGrid();
 
-      if (player.speedBoost>0) player.speedBoost = Math.max(0, player.speedBoost - dt);
-
-      // mass decay
-      player.mass = Math.max(5, player.mass - (0.000009*player.r*player.r + (player.mass<150?0.002:0.003))*dt);
-      if (player.flash.t>0){ player.flash.t-=dt; if (player.flash.t<=0) player.flash.color='#00e4b8'; }
-
-      // camera offset
-      offset.x = W/2 - player.x*zoom;
-      offset.y = H/2 - player.y*zoom;
-
-      // CLEAR
-      ctx.setTransform(1,0,0,1,0,0);
-      ctx.clearRect(0,0,W,H);
-      ctx.fillStyle='#060616'; ctx.fillRect(0,0,W,H);
-
-      // PARALLAX
-      for (let l=0;l<stars.length;l++){
-        const par = 0.08 + l*0.08;
-        const layer = stars[l];
-        ctx.fillStyle='#222';
-        for (const s of layer){
-          const sx = (s.x - player.x*par)*zoom + offset.x;
-          const sy = (s.y - player.y*par)*zoom + offset.y;
-          if (sx<0||sx>W||sy<0||sy>H) continue;
-          ctx.fillRect(sx, sy, s.s, s.s);
-        }
-      }
-
-      // WORLD SPACE
-      ctx.setTransform(zoom,0,0,zoom,offset.x,offset.y);
-      drawGrid();
-
-      // PARTICLES
-      for (let i=particles.length-1;i>=0;i--){
-        const p=particles[i]; p.x+=p.dx; p.y+=p.dy; p.ttl-=dt;
-        if (p.ttl<=0){ particles.splice(i,1); continue; }
-        if (!onScreen(p.x,p.y,p.r)) continue;
-        blit(SPRITES[p.sprite]||SPRITES.white, p.x, p.y, p.r*1.6);
-      }
-      if (particles.length>240) particles.splice(0, particles.length-240);
-
-      // FOOD
-      for (let i=food.length-1;i>=0;i--){
-        const f=food[i];
-        if (f.frenzy && f.cx!==undefined){
-          f.ang += f.angV*dt;
-          f.x = f.cx + Math.cos(f.ang)*f.baseR;
-          f.y = f.cy + Math.sin(f.ang)*f.baseR;
-        }
-        if (!onScreen(f.x,f.y,f.r)) continue;
-        const d=dist(player.x,player.y,f.x,f.y);
-        if (d < player.r + f.r){
-          player.mass += f.r;
-          player.flash = {color: f.frenzy? f.col : '#ff0', t: 500};
-          // ingest orbs (subsurface food glow)
-          const spr = f.frenzy? 'magenta':'yellow';
-          for (let k=0;k<6;k++) ingestOrbs.push({tIdx:0, life:700, r:2.5+Math.random()*2, sprite:spr});
-          food.splice(i,1);
-          burst(f.x,f.y, spr==='magenta'?'magenta':'yellow', 10, 1.6);
-          safePlay(eatSnd);
-        } else {
-          blit(f.frenzy? SPRITES.magenta : SPRITES.yellow, f.x,f.y, f.r*2.2);
-        }
-      }
-      spawnFood();
-
-      // FOES (less clingy)
-      while (foes.length < CFG.BASE_FOE_COUNT + Math.floor(level/5)) spawnFoe();
-      for (let i=foes.length-1;i>=0;i--){
-        const o=foes[i]; if (!onScreen(o.x,o.y,o.r)) continue;
-        const d=dist(player.x,player.y,o.x,o.y);
-        const tooFar = d>650; if (tooFar){ o.aggro=0; }
-        if (o.r<player.r && d<player.r){
-          player.mass += o.r*2.5; player.flash={color:'#f00',t:500};
-          foes.splice(i,1); burst(o.x,o.y,'red',12,1.8); safePlay(eatSnd); continue;
-        }
-        if (!shieldActive && o.r>player.r && d<o.r){
-          if (player.blink<50) player.blink=CFG.BLINK_MS;
-          player.mass = Math.max(5, player.mass - 0.04*dt); safePlay(hurtSnd);
-        }
-        // simple behavior: timid if smaller; hunts briefly if bigger
-        const c = 1;
-        if (o.r<player.r && d<240){ o.x -= (player.x-o.x)/d * c; o.y -= (player.y-o.y)/d * c; }
-        else if (o.r>player.r && d<260){ o.aggro = 600; }
-        if (o.aggro>0){ o.aggro-=dt; o.x += (player.x-o.x)/d * 0.8; o.y += (player.y-o.y)/d * 0.8; }
-        blit(SPRITES.red, o.x,o.y, o.r*1.9);
-      }
-
-      // TITANS
-      const TITAN_LEVEL=10, TITAN_MAX=6, TITAN_RESPAWN_MS=20000;
-      if (level>=TITAN_LEVEL){
-        while (titans.length < Math.min(TITAN_MAX, 3 + Math.floor((level-TITAN_LEVEL)/5))) spawnTitan();
-        titanTimer+=dt; if (titanTimer>TITAN_RESPAWN_MS){ titanTimer=0; titans.length=0; }
-      }
-      for (let i=titans.length-1;i>=0;i--){
-        const o=titans[i]; if (!onScreen(o.x,o.y,o.r)) continue;
-        const d=dist(player.x,player.y,o.x,o.y);
-        if (d>2000){ titans.splice(i,1); spawnTitan(); continue; }
-        if (player.r>o.r && d<player.r){
-          player.mass += o.r*5; player.flash={color:'#cc00ff',t:500};
-          titans.splice(i,1); titanKill++; burst(o.x,o.y,'purple',14,1.6); continue;
-        }
-        if (!shieldActive && o.r>player.r && d<o.r){
-          if (player.blink<50) player.blink=CFG.BLINK_MS;
-          player.mass=Math.max(5, player.mass - 0.1*dt); safePlay(hurtSnd);
-        }
-        o.hop-=dt; if (o.hop<=0){
-          o.hop=700; const hop = o.r>player.r ? 120 : -80;
-          o.x += (player.x-o.x)/d * hop; o.y += (player.y-o.y)/d * hop;
-        }
-        blit(SPRITES.purple, o.x,o.y, o.r*2.0);
-      }
-
-      // SPECTRES
-      const SPECTRE_MAX=3;
-      if (titanKill>=10){ while (spectres.length < Math.min(SPECTRE_MAX, 2 + Math.floor(titanKill/10))) spawnSpectre(); }
-      for (let i=spectres.length-1;i>=0;i--){
-        const s=spectres[i]; if (!onScreen(s.x,s.y,s.r)) continue;
-        s.dash-=dt;
-        const d=dist(player.x,player.y,s.x,s.y), ignore = player.mass < CFG.SAFE_PLAYER_MASS;
-        if (d>2200){ spectres.splice(i,1); spawnSpectre(); continue; }
-        if (!ignore && d<player.r){
-          player.mass += s.r*7; player.flash={color:'#ff39ff',t:500}; player.speedBoost=6000;
-          spectres.splice(i,1); spectreKill++; burst(s.x,s.y,'magenta',14,1.8); safePlay(eatSnd);
-          if (spectreKill%6===0 && reapers.length<3) spawnReaper();
-          continue;
-        }
-        if (!ignore && !shieldActive && d<s.r && s.r>player.r){
-          if (player.blink<50) player.blink=CFG.BLINK_MS;
-          player.mass=Math.max(5, player.mass - 0.2*dt); safePlay(hurtSnd);
-        }
-        if (s.dash<=0){ s.dash=400; const jump = ignore? -100: (s.r>player.r?160:-100);
-          s.x += (player.x-s.x)/d * jump; s.y += (player.y-s.y)/d * jump;
-        }
-        blit(SPRITES.magenta, s.x,s.y, s.r*2.0);
-      }
-
-      // REAPERS (fixed math; no undefined vars)
-      for (let i=reapers.length-1;i>=0;i--){
-        const r=reapers[i]; if (!onScreen(r.x,r.y,r.r)) continue;
-        r.charge-=dt;
-        const d=dist(player.x,player.y,r.x,r.y), ignore = player.mass < CFG.SAFE_PLAYER_MASS;
-        if (d>2400){ reapers.splice(i,1); continue; }
-        if (!ignore && d<player.r){
-          player.mass += r.r; player.flash={color:'#ff8800',t:500};
-          reapers.splice(i,1); burst(r.x,r.y,'orange',16,1.8); continue;
-        }
-        if (!ignore && !shieldActive && d<r.r && r.r>player.r){
-          if (player.blink<50) player.blink=CFG.BLINK_MS;
-          player.mass=Math.max(5, player.mass - 0.25*dt); safePlay(hurtSnd);
-        }
-        if (r.charge<=0){
-          r.charge=300; const step = ignore? -100 : (r.r>player.r?130:-100);
-          r.x += (player.x-r.x)/d * step; r.y += (player.y-r.y)/d * step;
-        }
-        blit(SPRITES.orange, r.x,r.y, r.r*2.0);
-      }
-
-      // Power items
-      if (pill.active){
-        blit(SPRITES.cyan, pill.x,pill.y, pill.r*2.2);
-        if (dist(player.x,player.y,pill.x,pill.y) < player.r+pill.r){
-          player.flash={color:'#00aaff',t:500}; frenzy=true; F_TIME=10000; pill.active=false;
-          burst(pill.x,pill.y,'cyan',16,1.8); safePlay(frenzySnd);
-          // spawn orbiting frenzy food
-          for(let i=0;i<40;i++){
-            const a=Math.random()*Math.PI*2, R=120+Math.random()*120;
-            food.push({cx:player.x,cy:player.y,ang:a,baseR:R,angV:.004+Math.random()*.003,
-              x:player.x+Math.cos(a)*R, y:player.y+Math.sin(a)*R, r:5, frenzy:true, col:'#ff39ff'});
-          }
-        }
-      } else if (!frenzy){ pill.cd+=dt; if (pill.cd>25000+Math.random()*10000) spawnPill(); }
-
-      if (shield.active){
-        blit(SPRITES.yellow, shield.x,shield.y, shield.r*2.2);
-        if (dist(player.x,player.y,shield.x,shield.y) < player.r+shield.r){
-          player.flash={color:'#ffd700',t:500}; shieldActive=true; shieldTime=5000; shield.active=false;
-          burst(shield.x,shield.y,'yellow',14,1.6); safePlay(eatSnd);
-        }
-      } else if (!shieldActive){ shield.cd+=dt; if (shield.cd>30000+Math.random()*15000) spawnShield(); }
-      if (shieldActive){ shieldTime-=dt; if (shieldTime<=0) shieldActive=false; }
-
-      if (frenzy){ F_TIME-=dt; if (F_TIME<=0){ frenzy=false; food.forEach(f=>f.frenzy=false); } }
-
-      // Beacons
-      for (let i=beacons.length-1;i>=0;i--){
-        const b=beacons[i]; if (!onScreen(b.x,b.y,b.r)) continue;
-        if (dist(player.x,player.y,b.x,b.y) < player.r+b.r){
-          beacons.length=0; radarActive=true; document.getElementById('radarWrap').style.display='block';
-        }
-        blit(SPRITES.white, b.x,b.y, b.r*2.1);
-      }
-
-      // Player mass/level & tail
-      player.r = 10 + player.mass/15;
-      level = Math.floor(player.mass/100)+1;
-
-      player.tail.unshift({x:player.x,y:player.y});
-      while (player.tail.length > Math.ceil(player.mass/3*(1+CFG.EXTRA_TAIL_PCT))) player.tail.pop();
-
-      // Tail draw (sparse)
-      const skipTail = Math.max(1, Math.ceil(player.tail.length/CFG.MAX_TAIL_DRAW));
-      for (let i=0;i<player.tail.length;i+=skipTail){
-        const p=player.tail[i];
-        const rr = player.r*(1 - i/player.tail.length);
-        const sprite = i/player.tail.length < .5 ? SPRITES.core : SPRITES.magenta;
-        blit(sprite, p.x, p.y, rr*1.15);
-      }
-
-      // Ingest orbs riding the tail
-      if (player.tail.length>3){
-        for (let i=ingestOrbs.length-1;i>=0;i--){
-          const orb=ingestOrbs[i];
-          orb.life-=dt; if (orb.life<=0){ ingestOrbs.splice(i,1); continue; }
-          orb.tIdx = Math.min(player.tail.length-1, orb.tIdx + 1 + (frenzy?1:0));
-          const seg = player.tail[orb.tIdx];
-          if (seg){
-            const fade = clamp(orb.life/700,0,1);
-            const r = orb.r*(0.6+0.8*fade)*(1+0.15*Math.sin(ts*.02+i));
-            blit(SPRITES[orb.sprite], seg.x, seg.y, r);
-          }
-        }
-      }
-
-      // Player body + flashes
-      const pulse = 0.2 + 0.2*Math.sin(ts/500);
-      blit(SPRITES.core, player.x, player.y, player.r*(1.25+pulse));
-      blit(SPRITES.magenta, player.x, player.y, player.r*(0.88+0.05*Math.sin(ts/400)));
-      if (player.flash.t>0){
-        const col = player.flash.color;
-        const spr = col==='#ff0'? 'yellow' :
-                    col==='#00aaff'? 'cyan' :
-                    col==='#ffd700'? 'yellow' :
-                    col==='#ff39ff'? 'magenta' :
-                    col==='#ff8800'? 'orange' :
-                    col==='#cc00ff'? 'purple' : 'core';
-        blit(SPRITES[spr], player.x, player.y, player.r*0.95*(player.flash.t/500)+6);
-      }
-      if (player.blink>0){
-        player.blink-=dt; if ((player.blink%200)<100){ blit(SPRITES.white, player.x, player.y, player.r*1.05); }
-      }
-
-      // Aura particles (kept modest)
-      if (auraParticles.length<18){
-        const ang=Math.random()*Math.PI*2, d=player.r*(1+Math.random()*0.5);
-        auraParticles.push({ang,dist:d,angV:0.015+Math.random()*0.01,r:(1+Math.random()*0.6)*(player.r/20),ttl:800+Math.random()*400,sprite:Math.random()<0.3?'magenta':'core'});
-      }
-      for (let i=auraParticles.length-1;i>=0;i--){
-        const p=auraParticles[i]; p.ang+=p.angV*dt; p.ttl-=dt;
-        const x=player.x+Math.cos(p.ang)*p.dist, y=player.y+Math.sin(p.ang)*p.dist;
-        blit(SPRITES[p.sprite], x,y, p.r*1.8);
-        if (p.ttl<=0) auraParticles.splice(i,1);
-      }
-
-      // Draw dragon head on top of body (in world) for perfect alignment
-      drawHead(player.heading, ts, player.r);
-
-      // HUD
-      massEl.textContent = player.mass.toFixed(0);
-      scoreEl.textContent = Math.floor(player.mass*10);
-      levelEl.textContent = level;
-
-      if (radarActive) drawRadar();
-
-      // Joystick
-      drawJoystick();
+  // Draw afterimages
+  for (let ai of afterimages) {
+    ctx.globalAlpha = ai.life * 0.3;
+    ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+    ctx.beginPath();
+    for (let i = 0; i < ai.tail.length; i++) {
+      const t = ai.tail[i];
+      if (i === 0) ctx.moveTo(t.x, t.y);
+      else ctx.lineTo(t.x, t.y);
     }
-
-    // FPS
-    frames++; fpsClock+=dt; if (fpsClock>=500){ fps=Math.round(frames*1000/fpsClock); fpsEl.textContent=fps; frames=0; fpsClock=0; }
-
-    requestAnimationFrame(loop);
+    ctx.stroke();
   }
+  ctx.globalAlpha = 1;
+
+  // Draw tail
+  ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+  ctx.lineWidth = player.size / 3;
+  ctx.beginPath();
+  for (let i = 0; i < player.tail.length; i++) {
+    const t = player.tail[i];
+    if (i === 0) ctx.moveTo(t.x, t.y);
+    else ctx.lineTo(t.x, t.y);
+  }
+  ctx.stroke();
+
+  // Draw player core
+  const pulseSize = Math.sin(player.pulse) * 2;
+  ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, player.size + pulseSize, 0, Math.PI*2);
+  ctx.fill();
+
+  // Draw particles
+  for (let p of particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function loop(timestamp) {
+  const dt = timestamp - lastTime;
+  lastTime = timestamp;
+
+  frameCount++;
+  if (frameCount >= 10) {
+    fps = Math.round(1000 / dt);
+    fpsDisplay.textContent = `FPS: ${fps}`;
+    frameCount = 0;
+  }
+
+  update(dt);
+  draw();
   requestAnimationFrame(loop);
+}
 
-  // iOS audio unlock
-  function unlockAudio(){ if(bgMusic && !isMuted){ try{ bgMusic.play(); }catch{} } removeEventListener('touchstart',unlockAudio); removeEventListener('pointerdown',unlockAudio); }
-  addEventListener('touchstart',unlockAudio,{once:true});
-  addEventListener('pointerdown',unlockAudio,{once:true});
-})();
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
