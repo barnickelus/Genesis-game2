@@ -330,13 +330,11 @@
           reapers   = [],
           beacons   = [],
           particles = [],
-          headParticles = [],
-          playerAuraParticles = [];
+          headParticles = [];
 
     let player = {
       x: 0, y: 0, r: 15, mass: 10, tail: [],
       baseSpeed: 2.5, blink: 0, speedBoost: 0, heading: 0,
-      colorEffect: { color: '#00e4b8', t: 0 },
       flash: { color: '#00e4b8', t: 0 }
     },
     target = { x: 0, y: 0, active: false },
@@ -440,7 +438,7 @@
     };
 
     restartBtn.onclick = () => {
-      player = { x: 0, y: 0, r: 15, mass: 10, tail: [], baseSpeed: 2.5, blink: 0, speedBoost: 0, heading: 0, colorEffect: { color: '#00e4b8', t: 0 }, flash: { color: '#00e4b8', t: 0 } };
+      player = { x: 0, y: 0, r: 15, mass: 10, tail: [], baseSpeed: 2.5, blink: 0, speedBoost: 0, heading: 0, flash: { color: '#00e4b8', t: 0 } };
       food.length = 0;
       foes.length = 0;
       titans.length = 0;
@@ -449,7 +447,6 @@
       beacons.length = 0;
       particles.length = 0;
       headParticles.length = 0;
-      playerAuraParticles.length = 0;
       target = { x: 0, y: 0, active: false };
       pill = { x: 0, y: 0, r: 10, active: false, cd: 0 };
       shield = { x: 0, y: 0, r: 10, active: false, cd: 0 };
@@ -1003,7 +1000,7 @@
       glow(
         player.x, player.y, player.r,
         player.blink > 0 ? (player.blink % 200 < 100 ? '#fff' : '#ff44ff') : '#00e4b8',
-        1,
+        0.7,
         20 * zoom
       );
 
@@ -1016,41 +1013,18 @@
           y: player.y + Math.sin(ang) * rd,
           dx: (Math.random() - 0.5) * 0.5,
           dy: (Math.random() - 0.5) * 0.5,
-          r: (1 + Math.random() * 1.5) * (player.r / 15),
+          r: player.r * 1.1,
           ttl: 30 + Math.random() * 30,
           col: '#00e4b8'
         });
       }
+      if (headParticles.length > 50) headParticles.splice(50, headParticles.length - 50);
       headParticles.forEach((p, i) => {
         p.x += p.dx * (dt / 16);
         p.y += p.dy * (dt / 16);
         p.ttl -= dt;
         glow(p.x, p.y, p.r, p.col, p.ttl / 50);
         if (p.ttl <= 0) headParticles.splice(i, 1);
-      });
-
-      for (let i = 0; i < 1; i++) {
-        const ang = Math.random() * Math.PI * 2,
-              tailLength = Math.ceil(player.mass / 3 * (1 + EXTRA_TAIL_PCT)),
-              dist = player.r * (tailLength / 3) / player.r * 10;
-        playerAuraParticles.push({
-          x: player.x + Math.cos(ang) * dist,
-          y: player.y + Math.sin(ang) * dist,
-          ang: ang,
-          dist: dist,
-          angV: 0.01 + Math.random() * 0.02,
-          r: (1 + Math.random() * 1) * (player.r / 15),
-          ttl: 500 + Math.random() * 500,
-          col: '#00e4b8'
-        });
-      }
-      playerAuraParticles.forEach((p, i) => {
-        p.ang += p.angV * dt;
-        p.x = player.x + Math.cos(p.ang) * p.dist;
-        p.y = player.y + Math.sin(p.ang) * p.dist;
-        p.ttl -= dt;
-        glow(p.x, p.y, p.r, p.col, p.ttl / 1000);
-        if (p.ttl <= 0) playerAuraParticles.splice(i, 1);
       });
 
       massEl.textContent = player.mass.toFixed(0);
