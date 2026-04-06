@@ -2,49 +2,58 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>Genesis Evolution</title>
+  <title>Genesis Evolution — Star-Frenzy</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet"/>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     html,body{height:100%;overflow:hidden;background:#020810;font-family:'Rajdhani',sans-serif}
     canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+    #dragonHead{position:absolute;pointer-events:none;z-index:3}
+    #headCanvas{display:block}
     #hud{position:fixed;top:0;left:0;right:0;z-index:10;pointer-events:none;padding:12px 16px;display:flex;justify-content:space-between;align-items:flex-start}
-    #hudLeft{display:flex;flex-direction:column;gap:6px}
-    #stageName{font-family:'Orbitron',monospace;font-size:14px;letter-spacing:3px;text-transform:uppercase;color:#0ff;text-shadow:0 0 12px #0ff,0 0 30px rgba(0,255,255,.3)}
-    #massInfo{font-size:22px;font-weight:700;color:#fff;text-shadow:0 0 6px rgba(255,255,255,.4)}
+    #hudLeft{display:flex;flex-direction:column;gap:4px}
+    #stageName{font-family:'Orbitron',monospace;font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#0ff;text-shadow:0 0 12px #0ff,0 0 30px rgba(0,255,255,.3)}
+    #massInfo{font-size:20px;font-weight:700;color:#fff;text-shadow:0 0 6px rgba(255,255,255,.4)}
     #massInfo span{color:#0ff}
-    #evoBarWrap{width:240px;height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+    #scoreInfo{font-size:13px;color:rgba(255,255,255,.45);letter-spacing:1px}
+    #evoBarWrap{width:220px;height:7px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
     #evoBar{height:100%;width:0%;border-radius:4px;transition:width .3s,background .5s}
-    #evoLabel{font-size:11px;color:rgba(255,255,255,.45);letter-spacing:1px;margin-top:2px}
+    #evoLabel{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:1px}
     #hudRight{text-align:right;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
-    #score{font-family:'Orbitron',monospace;font-size:16px;color:#fff;letter-spacing:2px}
-    #abilityInfo{font-size:12px;color:rgba(0,255,255,.6);letter-spacing:1px;max-width:200px;text-align:right}
+    #abilityInfo{font-size:12px;color:rgba(0,255,255,.55);letter-spacing:1px;max-width:220px;text-align:right}
     #evoFlash{position:fixed;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .15s}
     #evoAnnounce{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:21;pointer-events:none;text-align:center;opacity:0;transition:opacity .4s}
-    #evoAnnounce h1{font-family:'Orbitron',monospace;font-size:28px;letter-spacing:6px;margin-bottom:6px;text-shadow:0 0 30px currentColor}
-    #evoAnnounce p{font-size:14px;color:rgba(255,255,255,.6);letter-spacing:2px}
-    #pauseBtn{position:fixed;bottom:16px;right:16px;z-index:10;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.4);color:#fff;font-size:18px;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center}
-    #pauseMenu{position:fixed;inset:0;z-index:30;background:rgba(2,8,16,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;backdrop-filter:blur(8px)}
-    #pauseMenu h2{font-family:'Orbitron',monospace;font-size:20px;color:#0ff;letter-spacing:4px;margin-bottom:10px}
-    #pauseMenu button{width:180px;padding:10px;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;color:#fff;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;cursor:pointer;letter-spacing:1px;transition:all .2s}
+    #evoAnnounce h1{font-family:'Orbitron',monospace;font-size:26px;letter-spacing:6px;margin-bottom:6px;text-shadow:0 0 30px currentColor}
+    #evoAnnounce p{font-size:13px;color:rgba(255,255,255,.55);letter-spacing:2px}
+    #pauseBtn{position:fixed;top:14px;right:16px;z-index:10;font-size:22px;color:#fff;cursor:pointer;user-select:none;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);pointer-events:auto}
+    #radarWrap{position:fixed;top:58px;right:16px;width:76px;height:76px;display:none;z-index:10;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.3);backdrop-filter:blur(4px)}
+    #radar{width:76px;height:76px}
+    #zoomSlider{position:fixed;top:145px;right:16px;width:76px;transform:rotate(-90deg);z-index:10;opacity:.5}
+    #joystick{position:fixed;bottom:20px;right:20px;width:100px;height:100px;display:none;z-index:10}
+    #joystickCanvas{width:100px;height:100px}
+    #pauseMenu{position:fixed;inset:0;z-index:30;background:rgba(2,8,16,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;backdrop-filter:blur(10px)}
+    #pauseMenu h2{font-family:'Orbitron',monospace;font-size:20px;color:#0ff;letter-spacing:4px;margin-bottom:8px}
+    #pauseMenu button{width:170px;padding:9px;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;color:#fff;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;cursor:pointer;letter-spacing:1px;transition:all .2s}
     #pauseMenu button:hover{background:rgba(0,255,255,.12);border-color:#0ff}
-    #minimap{position:fixed;bottom:16px;left:16px;z-index:10;width:90px;height:90px;border-radius:6px;border:1px solid rgba(255,255,255,.1);overflow:hidden;background:rgba(0,0,0,.3);backdrop-filter:blur(4px)}
-    #minimapCanvas{width:90px;height:90px}
+    #minimap{position:fixed;bottom:14px;left:14px;z-index:10;width:86px;height:86px;border-radius:6px;border:1px solid rgba(255,255,255,.1);overflow:hidden;background:rgba(0,0,0,.3);backdrop-filter:blur(4px)}
+    #minimapCanvas{width:86px;height:86px}
+    .high-contrast canvas,.high-contrast body{filter:contrast(1.4) brightness(1.15)}
   </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="dragonHead"><canvas id="headCanvas"></canvas></div>
 
 <div id="hud">
   <div id="hudLeft">
     <div id="stageName">SPORE</div>
     <div id="massInfo">Mass: <span id="massVal">10</span></div>
+    <div id="scoreInfo">Score: <span id="scoreVal">0</span></div>
     <div id="evoBarWrap"><div id="evoBar"></div></div>
     <div id="evoLabel">Next: Flagellate — 80</div>
   </div>
   <div id="hudRight">
-    <div id="score">0</div>
     <div id="abilityInfo"></div>
   </div>
 </div>
@@ -52,1446 +61,722 @@
 <div id="evoFlash"></div>
 <div id="evoAnnounce"><h1 id="evoTitle"></h1><p id="evoSub"></p></div>
 
-<button id="pauseBtn">⏸</button>
+<div id="pauseBtn">⏸</div>
+
+<div id="radarWrap"><canvas id="radar" width="76" height="76"></canvas></div>
+<input id="zoomSlider" type="range" min="0.4" max="2" step="0.01" value="1"/>
+
+<div id="joystick"><canvas id="joystickCanvas" width="100" height="100"></canvas></div>
+
 <div id="pauseMenu">
   <h2>PAUSED</h2>
   <button id="resumeBtn">Resume</button>
   <button id="restartBtn">Restart</button>
+  <button id="muteBtn">Mute Audio</button>
+  <button id="radarToggleBtn">Toggle Radar</button>
+  <button id="contrastBtn">High Contrast</button>
 </div>
 
-<div id="minimap"><canvas id="minimapCanvas" width="90" height="90"></canvas></div>
+<div id="minimap"><canvas id="minimapCanvas" width="86" height="86"></canvas></div>
+
+<audio id="backgroundMusic" src="background-music.mp3" loop preload="auto"></audio>
+<audio id="eatSnd" src="eat.mp3" preload="auto"></audio>
+<audio id="hurtSnd" src="hurt.mp3" preload="auto"></audio>
+<audio id="frenzySnd" src="frenzy.mp3" preload="auto"></audio>
 
 <script>
-// ════════════════════════════════════════════════════════════════
-// GENESIS EVOLUTION — Full Ecosystem Game
-// ════════════════════════════════════════════════════════════════
+  window.TILE=48; window.SCALE=4; window.COLS=32; window.ROWS=5;
+</script>
 
-const C = document.getElementById('game');
-const ctx = C.getContext('2d', { alpha: false });
-let W, H;
-function resize() { W = C.width = innerWidth; H = C.height = innerHeight; }
-addEventListener('resize', resize); resize();
+<!-- 3D Head -->
+<script type="module">
+  import*as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js';
+  import{GLTFLoader}from 'https://cdn.jsdelivr.net/npm/three@0.153.0/examples/jsm/loaders/GLTFLoader.js';
+  const T=window.TILE,S=window.SCALE;
+  const hc=document.getElementById('headCanvas');
+  const r=new THREE.WebGLRenderer({canvas:hc,alpha:true,antialias:true});
+  r.setSize(T*S,T*S);
+  const sc=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(40,1,.1,100);
+  cam.position.set(0,0,5);
+  const dl=new THREE.DirectionalLight(0xffffff,1.25);
+  dl.position.set(1,2,3);sc.add(dl);sc.add(new THREE.AmbientLight(0xffffff,.35));
+  let hm=null;
+  new GLTFLoader().load('dragon-head.glb',g=>{
+    hm=g.scene;const b=new THREE.Box3().setFromObject(hm);const sz=b.getSize(new THREE.Vector3()).length();
+    hm.scale.setScalar(2/Math.max(sz,.0001));b.setFromObject(hm);hm.position.copy(b.getCenter(new THREE.Vector3()).negate());
+    hm.rotation.order='YXZ';sc.add(hm);
+  },undefined,e=>console.error('GLTF:',e));
+  window.renderHead=(yaw,pitch)=>{if(!hm)return;hm.rotation.y=yaw;hm.rotation.x=pitch;r.render(sc,cam);};
+</script>
+
+<!-- Main Game -->
+<script>
+const TILE=window.TILE,SCALE=window.SCALE,COLS=window.COLS,ROWS=window.ROWS;
+const C=document.getElementById('game');
+const ctx=C.getContext('2d',{alpha:false});
+ctx.imageSmoothingEnabled=false;
+let W,H;
+function resize(){W=C.width=innerWidth;H=C.height=innerHeight;}
+addEventListener('resize',resize);resize();
 
 // ── UTILS ──
-const TAU = Math.PI * 2;
-const rand  = (lo, hi) => lo + Math.random() * (hi - lo);
-const randI = (lo, hi) => Math.floor(rand(lo, hi));
-const dist  = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
-const ang   = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
-const lerp  = (a, b, t) => a + (b - a) * t;
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const hsl   = (h, s, l, a=1) => `hsla(${h},${s}%,${l}%,${a})`;
+const TAU=Math.PI*2;
+const rnd=(lo,hi)=>lo+Math.random()*(hi-lo);
+const rndI=(lo,hi)=>Math.floor(rnd(lo,hi));
+const dst=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y);
+const ang=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+const hsl=(h,s,l,a=1)=>`hsla(${h},${s}%,${l}%,${a})`;
 
 // ── EVOLUTION STAGES ──
-// Each stage defines: name, mass threshold, color palette, visual shape, abilities
-const STAGES = [
-  {
-    name: 'SPORE',
-    threshold: 0,
-    next: 80,
-    color: '#44ffaa',
-    accent: '#22cc77',
-    glow: '#00ff88',
-    description: 'A simple organism. Consume to grow.',
-    ability: null,
-    abilityText: '',
-    drawBody: 'spore',
-    speed: 3.2,
-    baseR: 8
-  },
-  {
-    name: 'FLAGELLATE',
-    threshold: 80,
-    next: 250,
-    color: '#00e4ff',
-    accent: '#0099cc',
-    glow: '#00ccff',
-    description: 'Evolved flagellum. CLICK to dash.',
-    ability: 'dash',
-    abilityText: '[Click] Dash burst',
-    drawBody: 'flagellate',
-    speed: 3.5,
-    baseR: 10
-  },
-  {
-    name: 'JELLYFISH',
-    threshold: 250,
-    next: 600,
-    color: '#cc66ff',
-    accent: '#9933cc',
-    glow: '#bb44ff',
-    description: 'Tentacles stun nearby prey. Passive sting aura.',
-    ability: 'sting',
-    abilityText: 'Passive: Sting aura slows nearby enemies',
-    drawBody: 'jellyfish',
-    speed: 2.8,
-    baseR: 14
-  },
-  {
-    name: 'SERPENT',
-    threshold: 600,
-    next: 1400,
-    color: '#ff6633',
-    accent: '#cc3300',
-    glow: '#ff4400',
-    description: 'Long body, devastating tail whip. CLICK to lash.',
-    ability: 'tailwhip',
-    abilityText: '[Click] Tail whip — damages nearby foes',
-    drawBody: 'serpent',
-    speed: 3.8,
-    baseR: 12
-  },
-  {
-    name: 'LEVIATHAN',
-    threshold: 1400,
-    next: 3000,
-    color: '#3399ff',
-    accent: '#1166cc',
-    glow: '#2288ff',
-    description: 'Massive armored form. Gravity pull draws in prey.',
-    ability: 'gravity',
-    abilityText: 'Passive: Gravity well pulls in small organisms',
-    drawBody: 'leviathan',
-    speed: 2.5,
-    baseR: 20
-  },
-  {
-    name: 'COSMIC WYRM',
-    threshold: 3000,
-    next: Infinity,
-    color: '#ffcc00',
-    accent: '#ff8800',
-    glow: '#ffaa00',
-    description: 'Apex predator. CLICK to fire star bolts.',
-    ability: 'projectile',
-    abilityText: '[Click] Fire star bolts at cursor',
-    drawBody: 'wyrm',
-    speed: 3.2,
-    baseR: 18
-  }
+const STAGES=[
+  {name:'SPORE',threshold:0,next:80,color:'#44ffaa',accent:'#22cc77',glow:'#00ff88',desc:'A simple organism. Consume to grow.',ability:null,abilityText:'',drawBody:'spore',speed:3.2,baseR:8},
+  {name:'FLAGELLATE',threshold:80,next:250,color:'#00e4ff',accent:'#0099cc',glow:'#00ccff',desc:'Evolved flagellum. TAP to dash.',ability:'dash',abilityText:'[Tap] Dash burst',drawBody:'flagellate',speed:3.5,baseR:10},
+  {name:'JELLYFISH',threshold:250,next:600,color:'#cc66ff',accent:'#9933cc',glow:'#bb44ff',desc:'Tentacles stun nearby prey.',ability:'sting',abilityText:'Passive: Sting aura',drawBody:'jellyfish',speed:2.8,baseR:14},
+  {name:'SERPENT',threshold:600,next:1400,color:'#ff6633',accent:'#cc3300',glow:'#ff4400',desc:'Devastating tail whip. TAP to lash.',ability:'tailwhip',abilityText:'[Tap] Tail whip',drawBody:'serpent',speed:3.8,baseR:12},
+  {name:'LEVIATHAN',threshold:1400,next:3000,color:'#3399ff',accent:'#1166cc',glow:'#2288ff',desc:'Gravity pull draws in prey.',ability:'gravity',abilityText:'Passive: Gravity well',drawBody:'leviathan',speed:2.5,baseR:20},
+  {name:'COSMIC WYRM',threshold:3000,next:Infinity,color:'#ffcc00',accent:'#ff8800',glow:'#ffaa00',desc:'Apex form. TAP to fire star bolts.',ability:'projectile',abilityText:'[Tap] Star bolts',drawBody:'wyrm',speed:3.2,baseR:18}
 ];
 
-// ── ORGANISM TYPES ──
-// Each type has base size range, colors, behavior patterns, spawn rules
-const ORG_TYPES = {
-  plankton:   { name:'Plankton',   minR:3,  maxR:6,   color:'#88ff44', glow:'#66cc22', speed:0.3, hp:1,  mass:3,  behavior:'drift',     spawnDist:800,  maxCount:50 },
-  cell:       { name:'Cell',       minR:5,  maxR:10,  color:'#ffee44', glow:'#ccaa00', speed:0.6, hp:2,  mass:8,  behavior:'swarm',     spawnDist:900,  maxCount:30 },
-  jelly:      { name:'Jelly',      minR:8,  maxR:16,  color:'#ff66cc', glow:'#cc3399', speed:0.5, hp:4,  mass:15, behavior:'pulse',     spawnDist:1000, maxCount:15 },
-  predator:   { name:'Predator',   minR:12, maxR:24,  color:'#ff4444', glow:'#cc0000', speed:1.8, hp:8,  mass:30, behavior:'chase',     spawnDist:1200, maxCount:10 },
-  angler:     { name:'Angler',     minR:14, maxR:28,  color:'#ff8800', glow:'#cc5500', speed:0.4, hp:12, mass:45, behavior:'ambush',    spawnDist:1400, maxCount:6  },
-  whale:      { name:'Whale',      minR:30, maxR:55,  color:'#4488ff', glow:'#2255cc', speed:0.7, hp:30, mass:80, behavior:'passive',   spawnDist:1600, maxCount:4  },
-  siren:      { name:'Siren',      minR:18, maxR:35,  color:'#ff39ff', glow:'#cc00cc', speed:1.2, hp:20, mass:55, behavior:'lure',      spawnDist:1500, maxCount:5  },
-  apex:       { name:'Apex',       minR:40, maxR:70,  color:'#ff2200', glow:'#aa0000', speed:1.5, hp:50, mass:120,behavior:'apex',      spawnDist:2000, maxCount:2  }
+// ── ORGANISM TYPES (including Mirror) ──
+const ORG_TYPES={
+  plankton:{name:'Plankton',minR:3,maxR:6,color:'#88ff44',glow:'#66cc22',speed:.3,hp:1,mass:3,behavior:'drift',spawnDist:800,maxCount:50},
+  cell:{name:'Cell',minR:5,maxR:10,color:'#ffee44',glow:'#ccaa00',speed:.6,hp:2,mass:8,behavior:'swarm',spawnDist:900,maxCount:30},
+  jelly:{name:'Jelly',minR:8,maxR:16,color:'#ff66cc',glow:'#cc3399',speed:.5,hp:4,mass:15,behavior:'pulse',spawnDist:1000,maxCount:15},
+  predator:{name:'Predator',minR:12,maxR:24,color:'#ff4444',glow:'#cc0000',speed:1.8,hp:8,mass:30,behavior:'chase',spawnDist:1200,maxCount:10},
+  angler:{name:'Angler',minR:14,maxR:28,color:'#ff8800',glow:'#cc5500',speed:.4,hp:12,mass:45,behavior:'ambush',spawnDist:1400,maxCount:6},
+  whale:{name:'Whale',minR:30,maxR:55,color:'#4488ff',glow:'#2255cc',speed:.7,hp:30,mass:80,behavior:'passive',spawnDist:1600,maxCount:4},
+  siren:{name:'Siren',minR:18,maxR:35,color:'#ff39ff',glow:'#cc00cc',speed:1.2,hp:20,mass:55,behavior:'lure',spawnDist:1500,maxCount:5},
+  apex:{name:'Apex',minR:40,maxR:70,color:'#ff2200',glow:'#aa0000',speed:1.5,hp:50,mass:120,behavior:'apex',spawnDist:2000,maxCount:2},
+  mirror:{name:'Mirror',minR:12,maxR:22,color:'#ffffff',glow:'#00ffff',speed:1.2,hp:20,mass:60,behavior:'mirror',spawnDist:1200,maxCount:2}
 };
 
 // ── GAME STATE ──
-let player, organisms, projectiles, particles, floatTexts;
-let paused = false, gameTime = 0, totalScore = 0;
-let shakeX = 0, shakeY = 0, shakeInt = 0, shakeDur = 0;
-let evoFlashTimer = 0, evoAnnounceTimer = 0;
-let abilityCooldown = 0;
-let offset = { x: 0, y: 0 }, zoom = 1;
+let player,organisms,projectiles,particles,floatTexts;
+let paused=false,gameTime=0,totalScore=0;
+let shakeX=0,shakeY=0,shakeInt=0,shakeDur=0;
+let evoFlashTimer=0,evoAnnounceTimer=0;
+let abilityCooldown=0;
+let offset={x:0,y:0},zoom=1,sliderZoom=1;
+let isMuted=false,radarActive=false;
+let joystickActive=false,joystickX=0,joystickY=0;
+let behaviorMemory=[];
 
-function initGame() {
-  player = {
-    x: 0, y: 0, r: 8, mass: 10, vx: 0, vy: 0,
-    heading: 0, stage: 0, tail: [],
-    blink: 0, stingAura: 0, gravPull: 0,
-    dashing: false, dashTimer: 0,
-    totalConsumed: 0, killCount: 0
-  };
-  organisms = [];
-  projectiles = [];
-  particles = [];
-  floatTexts = [];
-  totalScore = 0;
-  abilityCooldown = 0;
-  evoFlashTimer = 0;
-  evoAnnounceTimer = 0;
-  gameTime = 0;
+// Pill / shield / frenzy / beacons from original
+let pill={x:0,y:0,r:10,active:false,cd:0};
+let shield={x:0,y:0,r:10,active:false,cd:0};
+let frenzy=false,F_TIME=0;
+let shieldActive=false,shieldTime=0;
+const SHIELD_DURATION=5000;
+const C_RING_DIST=1600;
+let beacons=[];
+
+function initGame(){
+  player={x:0,y:0,r:8,mass:10,vx:0,vy:0,heading:0,stage:0,tail:[],blink:0,dashing:false,dashTimer:0,totalConsumed:0,killCount:0,speedBoost:0,flash:{color:'#00e4b8',t:0}};
+  organisms=[];projectiles=[];particles=[];floatTexts=[];
+  totalScore=0;abilityCooldown=0;evoFlashTimer=0;evoAnnounceTimer=0;gameTime=0;
+  behaviorMemory=[];
+  frenzy=false;F_TIME=0;shieldActive=false;shieldTime=0;
+  pill={x:0,y:0,r:10,active:false,cd:0};
+  shield={x:0,y:0,r:10,active:false,cd:0};
+  beacons=[];
+  ['N','S','E','W'].forEach(d=>{const P={N:[0,-C_RING_DIST],S:[0,C_RING_DIST],E:[C_RING_DIST,0],W:[-C_RING_DIST,0]}[d];beacons.push({x:P[0],y:P[1],r:18});});
   spawnInitial();
 }
 
-function spawnInitial() {
-  spawnOrganisms('plankton', 40);
-  spawnOrganisms('cell', 20);
-  spawnOrganisms('jelly', 8);
-  spawnOrganisms('predator', 5);
-  spawnOrganisms('angler', 3);
-  spawnOrganisms('whale', 2);
-  spawnOrganisms('siren', 2);
-  spawnOrganisms('apex', 1);
+function spawnInitial(){
+  spawnOrganisms('plankton',40);spawnOrganisms('cell',20);spawnOrganisms('jelly',8);
+  spawnOrganisms('predator',5);spawnOrganisms('angler',3);spawnOrganisms('whale',2);
+  spawnOrganisms('siren',2);spawnOrganisms('apex',1);
 }
 
-function spawnOrganisms(type, count) {
-  const T = ORG_TYPES[type];
-  for (let i = 0; i < count; i++) {
-    const r = rand(T.minR, T.maxR);
-    const a = Math.random() * TAU;
-    const d = rand(200, T.spawnDist);
+function spawnOrganisms(type,count){
+  const T=ORG_TYPES[type];
+  // Mirror limiter
+  if(type==='mirror'){const c=organisms.filter(o=>o.type==='mirror').length;if(c>=2)return;}
+  for(let i=0;i<count;i++){
+    if(type==='mirror'){const c2=organisms.filter(o=>o.type==='mirror').length;if(c2>=2)return;}
+    const r2=rnd(T.minR,T.maxR);const a=Math.random()*TAU;const d=rnd(200,T.spawnDist);
     organisms.push({
-      type, x: player.x + Math.cos(a)*d, y: player.y + Math.sin(a)*d,
-      r, baseR: r, hp: T.hp, maxHp: T.hp,
-      vx: 0, vy: 0, heading: Math.random()*TAU,
-      state: 'idle', stateTimer: 0,
-      stunTimer: 0, // for jelly sting
-      wanderAng: Math.random()*TAU,
-      pulsePhase: Math.random()*TAU,
-      ambushReady: type==='angler',
-      lureAng: Math.random()*TAU,
-      trail: [],
-      flashTimer: 0
+      type,x:player.x+Math.cos(a)*d,y:player.y+Math.sin(a)*d,
+      r:r2,baseR:r2,hp:T.hp,maxHp:T.hp,
+      vx:0,vy:0,heading:Math.random()*TAU,
+      state:'idle',stateTimer:0,stunTimer:0,
+      wanderAng:Math.random()*TAU,pulsePhase:Math.random()*TAU,
+      ambushReady:type==='angler',lureAng:Math.random()*TAU,
+      trail:[],flashTimer:0
     });
   }
 }
 
-function getStage() { return STAGES[player.stage]; }
-function getEffectiveR(org) { return org.r; }
-
-// Is organism smaller than player (prey)?
-function isPrey(org) { return org.r < player.r * 0.85; }
-// Is organism larger than player (predator)?
-function isPredator(org) { return org.r > player.r * 1.15; }
+function getStage(){return STAGES[player.stage];}
+function isPrey(org){return org.r<player.r*0.85;}
+function isPredator(org){return org.r>player.r*1.15;}
 
 // ── INPUT ──
-let pointer = { x: 0, y: 0, active: false, clicked: false };
-let keys = {};
-
-C.addEventListener('pointerdown', e => {
-  pointer.active = true;
-  pointer.clicked = true;
-  const wx = (e.clientX - offset.x) / zoom;
-  const wy = (e.clientY - offset.y) / zoom;
-  pointer.x = wx; pointer.y = wy;
+let pointer={x:0,y:0,active:false,clicked:false};
+const toWorld=e=>({x:(e.clientX-offset.x)/zoom,y:(e.clientY-offset.y)/zoom});
+C.addEventListener('pointerdown',e=>{
+  if(paused)return;
+  pointer.active=true;pointer.clicked=true;
+  const w=toWorld(e);pointer.x=w.x;pointer.y=w.y;
 });
-C.addEventListener('pointermove', e => {
-  if (!pointer.active) return;
-  pointer.x = (e.clientX - offset.x) / zoom;
-  pointer.y = (e.clientY - offset.y) / zoom;
+C.addEventListener('pointermove',e=>{
+  if(!pointer.active||paused)return;
+  const w=toWorld(e);pointer.x=w.x;pointer.y=w.y;
 });
-C.addEventListener('pointerup', () => { pointer.active = false; });
-addEventListener('keydown', e => keys[e.key] = true);
-addEventListener('keyup', e => keys[e.key] = false);
+C.addEventListener('pointerup',()=>{pointer.active=false;});
 
-document.getElementById('pauseBtn').onclick = () => { paused = !paused; document.getElementById('pauseMenu').style.display = paused ? 'flex' : 'none'; };
-document.getElementById('resumeBtn').onclick = () => { paused = false; document.getElementById('pauseMenu').style.display = 'none'; };
-document.getElementById('restartBtn').onclick = () => { paused = false; document.getElementById('pauseMenu').style.display = 'none'; initGame(); };
+document.getElementById('zoomSlider').oninput=e=>sliderZoom=parseFloat(e.target.value);
 
-// ── PARTICLES / FX ──
-function emitBurst(x, y, color, count=10, spd=2) {
-  for (let i = 0; i < count; i++) {
-    const a = Math.random()*TAU, s = rand(0.5, spd);
-    particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, r: rand(1,4), life: rand(300,600), maxLife: 600, color, type: 'circle' });
+// Pause menu
+document.getElementById('pauseBtn').onclick=()=>{
+  paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  document.getElementById('pauseMenu').style.display=paused?'flex':'none';
+  const bg=document.getElementById('backgroundMusic');if(bg&&!isMuted)paused?bg.pause():bg.play().catch(()=>{});
+};
+document.getElementById('resumeBtn').onclick=()=>{paused=false;document.getElementById('pauseBtn').textContent='⏸';document.getElementById('pauseMenu').style.display='none';const bg=document.getElementById('backgroundMusic');if(bg&&!isMuted)bg.play().catch(()=>{});};
+document.getElementById('restartBtn').onclick=()=>{paused=false;document.getElementById('pauseBtn').textContent='⏸';document.getElementById('pauseMenu').style.display='none';initGame();};
+document.getElementById('muteBtn').onclick=()=>{
+  isMuted=!isMuted;document.getElementById('muteBtn').textContent=isMuted?'Unmute':'Mute Audio';
+  const bg=document.getElementById('backgroundMusic');if(bg)bg.muted=isMuted;
+  ['eatSnd','hurtSnd','frenzySnd'].forEach(id=>{const s=document.getElementById(id);if(s)s.muted=isMuted;});
+};
+document.getElementById('radarToggleBtn').onclick=()=>{radarActive=!radarActive;document.getElementById('radarWrap').style.display=radarActive?'block':'none';};
+document.getElementById('contrastBtn').onclick=()=>{document.body.classList.toggle('high-contrast');};
+
+// Joystick
+const jC=document.getElementById('joystickCanvas'),jctx=jC?jC.getContext('2d'):null;
+function drawJoystick(){
+  if(!jctx)return;jctx.clearRect(0,0,100,100);
+  jctx.fillStyle='rgba(255,255,255,.12)';jctx.beginPath();jctx.arc(50,50,48,0,TAU);jctx.fill();
+  jctx.strokeStyle='rgba(0,228,184,.25)';jctx.lineWidth=2;jctx.beginPath();jctx.arc(50,50,48,0,TAU);jctx.stroke();
+  if(joystickActive){
+    jctx.fillStyle='rgba(0,228,184,.6)';jctx.beginPath();jctx.arc(50+joystickX*30,50+joystickY*30,16,0,TAU);jctx.fill();
   }
 }
-function emitRing(x, y, color, radius, count=16) {
-  for (let i = 0; i < count; i++) {
-    const a = (i/count)*TAU;
-    particles.push({ x: x+Math.cos(a)*radius, y: y+Math.sin(a)*radius, vx: Math.cos(a)*1.5, vy: Math.sin(a)*1.5, r: 2, life: 400, maxLife: 400, color, type: 'circle' });
-  }
+jC?.addEventListener('touchstart',e=>{if(paused)return;e.preventDefault();const t=e.touches[0],r2=jC.getBoundingClientRect();joystickX=(t.clientX-r2.left-50)/50;joystickY=(t.clientY-r2.top-50)/50;const L=Math.hypot(joystickX,joystickY);if(L>1){joystickX/=L;joystickY/=L;}joystickActive=true;pointer.active=true;});
+jC?.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0],r2=jC.getBoundingClientRect();joystickX=(t.clientX-r2.left-50)/50;joystickY=(t.clientY-r2.top-50)/50;const L=Math.hypot(joystickX,joystickY);if(L>1){joystickX/=L;joystickY/=L;}});
+jC?.addEventListener('touchend',()=>{joystickActive=false;joystickX=0;joystickY=0;pointer.active=false;});
+if(/Mobi|Android/i.test(navigator.userAgent))document.getElementById('joystick').style.display='block';
+
+// Audio unlock
+function unlockAudio(){const bg=document.getElementById('backgroundMusic');if(bg&&bg.paused&&!isMuted)bg.play().catch(()=>{});}
+addEventListener('touchstart',unlockAudio,{once:true});
+addEventListener('pointerdown',unlockAudio,{once:true});
+
+// ── FX ──
+function emitBurst(x,y,color,count=10,spd=2){
+  for(let i=0;i<count;i++){const a=Math.random()*TAU,s=rnd(.5,spd);particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r:rnd(1,4),life:rnd(300,600),maxLife:600,color,type:'circle'});}
 }
-function emitFloatText(x, y, text, color) {
-  floatTexts.push({ x, y, text, color, life: 1200, maxLife: 1200 });
+function emitRing(x,y,color,radius,count=16){
+  for(let i=0;i<count;i++){const a=(i/count)*TAU;particles.push({x:x+Math.cos(a)*radius,y:y+Math.sin(a)*radius,vx:Math.cos(a)*1.5,vy:Math.sin(a)*1.5,r:2,life:400,maxLife:400,color,type:'circle'});}
 }
-function shake(int, dur) { shakeInt = Math.max(shakeInt, int); shakeDur = Math.max(shakeDur, dur); }
+function emitFloatText(x,y,text,color){floatTexts.push({x,y,text,color,life:1200,maxLife:1200});}
+function shake(i2,dur){shakeInt=Math.max(shakeInt,i2);shakeDur=Math.max(shakeDur,dur);}
+function playSound(id){const s=document.getElementById(id);if(s&&!isMuted)s.play().catch(()=>{});}
+
+// ── NEBULA BG ──
+const nebC2=document.createElement('canvas');nebC2.width=nebC2.height=512;
+(function(){const nc=nebC2.getContext('2d');nc.fillStyle='#020810';nc.fillRect(0,0,512,512);
+[{x:100,y:80,r:200,c:'rgba(0,80,120,0.07)'},{x:400,y:120,r:180,c:'rgba(100,0,120,0.06)'},{x:250,y:350,r:250,c:'rgba(0,60,100,0.08)'},{x:50,y:420,r:160,c:'rgba(80,40,0,0.05)'},{x:380,y:400,r:190,c:'rgba(0,100,80,0.05)'}].forEach(b=>{const g=nc.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);g.addColorStop(0,b.c);g.addColorStop(1,'transparent');nc.fillStyle=g;nc.fillRect(0,0,512,512);});
+const id=nc.getImageData(0,0,512,512);for(let i=0;i<id.data.length;i+=4){const n=(Math.random()-.5)*6;id.data[i]+=n;id.data[i+1]+=n;id.data[i+2]+=n;}nc.putImageData(id,0,0);})();
+
+// Stars
+const STARS=[];
+const starCols=['#fff','#adf','#fda','#faf','#aff','#ddf'];
+for(let i=0;i<200;i++)STARS.push({x:rnd(-4000,4000),y:rnd(-4000,4000),s:rnd(.3,2),depth:rnd(.03,.15),tw:rnd(.5,3),ph:rnd(0,TAU),col:starCols[rndI(0,6)]});
 
 // ── EVOLUTION ──
-function checkEvolution() {
-  const s = player.stage;
-  if (s < STAGES.length - 1 && player.mass >= STAGES[s+1].threshold) {
-    player.stage = s + 1;
-    const stage = STAGES[player.stage];
-
-    // Big flash + announcement
-    evoFlashTimer = 1500;
-    evoAnnounceTimer = 3000;
-    const flash = document.getElementById('evoFlash');
-    flash.style.background = `radial-gradient(circle, ${stage.color}88 0%, transparent 70%)`;
-    flash.style.opacity = '1';
-    setTimeout(() => flash.style.opacity = '0', 200);
-
-    document.getElementById('evoTitle').textContent = stage.name;
-    document.getElementById('evoTitle').style.color = stage.color;
-    document.getElementById('evoSub').textContent = stage.description;
-    const ann = document.getElementById('evoAnnounce');
-    ann.style.opacity = '1';
-    setTimeout(() => ann.style.opacity = '0', 2800);
-
-    // Big particle explosion
-    emitBurst(player.x, player.y, stage.color, 40, 5);
-    emitRing(player.x, player.y, stage.glow, player.r * 2, 24);
-    emitRing(player.x, player.y, '#fff', player.r * 1.2, 16);
-    shake(8, 400);
-
-    // Spawn more creatures for new stage
-    if (player.stage >= 2) spawnOrganisms('predator', 4);
-    if (player.stage >= 3) spawnOrganisms('siren', 3);
-    if (player.stage >= 4) { spawnOrganisms('whale', 3); spawnOrganisms('apex', 2); }
-    if (player.stage >= 5) spawnOrganisms('apex', 3);
+function checkEvolution(){
+  const s=player.stage;
+  if(s<STAGES.length-1&&player.mass>=STAGES[s+1].threshold){
+    player.stage=s+1;const st=STAGES[player.stage];
+    evoFlashTimer=1500;evoAnnounceTimer=3000;
+    const fl=document.getElementById('evoFlash');
+    fl.style.background=`radial-gradient(circle,${st.color}88 0%,transparent 70%)`;fl.style.opacity='1';setTimeout(()=>fl.style.opacity='0',200);
+    document.getElementById('evoTitle').textContent=st.name;document.getElementById('evoTitle').style.color=st.color;
+    document.getElementById('evoSub').textContent=st.desc;
+    const ann=document.getElementById('evoAnnounce');ann.style.opacity='1';setTimeout(()=>ann.style.opacity='0',2800);
+    emitBurst(player.x,player.y,st.color,40,5);emitRing(player.x,player.y,st.glow,player.r*2,24);emitRing(player.x,player.y,'#fff',player.r*1.2,16);shake(8,400);
+    playSound('frenzySnd');
+    if(player.stage>=2)spawnOrganisms('predator',4);
+    if(player.stage>=3){spawnOrganisms('siren',3);if(Math.random()<.5)spawnOrganisms('mirror',1);}
+    if(player.stage>=4){spawnOrganisms('whale',3);spawnOrganisms('apex',2);if(Math.random()<.5)spawnOrganisms('mirror',1);}
+    if(player.stage>=5){spawnOrganisms('apex',3);spawnOrganisms('mirror',1);}
   }
 }
 
-// ── ABILITY SYSTEM ──
-function useAbility() {
-  if (abilityCooldown > 0) return;
-  const stage = getStage();
-  if (!stage.ability) return;
-
-  switch (stage.ability) {
-    case 'dash':
-      player.dashing = true;
-      player.dashTimer = 200;
-      abilityCooldown = 800;
-      emitBurst(player.x, player.y, stage.color, 8, 3);
-      shake(2, 80);
-      break;
-
-    case 'tailwhip': {
-      abilityCooldown = 1200;
-      // Damage all organisms in a radius behind player
-      const whipR = player.r * 4;
-      const behindAng = player.heading + Math.PI;
-      organisms.forEach(org => {
-        const d = dist(player, org);
-        if (d < whipR) {
-          const aToOrg = ang(player, org);
-          const diff = Math.abs(Math.atan2(Math.sin(aToOrg - behindAng), Math.cos(aToOrg - behindAng)));
-          if (diff < Math.PI * 0.6) {
-            org.hp -= 3;
-            org.flashTimer = 200;
-            org.stunTimer = 800;
-            const push = 8;
-            org.vx += Math.cos(aToOrg) * push;
-            org.vy += Math.sin(aToOrg) * push;
-            emitBurst(org.x, org.y, '#ff4400', 6, 2);
-          }
-        }
-      });
-      // Visual arc
-      for (let i = 0; i < 20; i++) {
-        const a = behindAng - Math.PI*0.6 + (i/20)*Math.PI*1.2;
-        const d = whipR * rand(0.5, 1);
-        particles.push({ x: player.x+Math.cos(a)*d, y: player.y+Math.sin(a)*d, vx: Math.cos(a)*2, vy: Math.sin(a)*2, r: 3, life: 300, maxLife: 300, color: '#ff6633', type: 'circle' });
-      }
-      shake(5, 200);
-      break;
+// ── ABILITIES ──
+function useAbility(){
+  if(abilityCooldown>0)return;const stage=getStage();if(!stage.ability)return;
+  switch(stage.ability){
+    case'dash':player.dashing=true;player.dashTimer=200;abilityCooldown=800;emitBurst(player.x,player.y,stage.color,8,3);shake(2,80);break;
+    case'tailwhip':{
+      abilityCooldown=1200;const whipR=player.r*4;const behindAng=player.heading+Math.PI;
+      organisms.forEach(org=>{const d2=dst(player,org);if(d2<whipR){const a2=ang(player,org);const diff=Math.abs(Math.atan2(Math.sin(a2-behindAng),Math.cos(a2-behindAng)));if(diff<Math.PI*.6){org.hp-=3;org.flashTimer=200;org.stunTimer=800;org.vx+=Math.cos(a2)*8;org.vy+=Math.sin(a2)*8;emitBurst(org.x,org.y,'#ff4400',6,2);}}});
+      for(let i=0;i<20;i++){const a2=behindAng-Math.PI*.6+(i/20)*Math.PI*1.2;const d2=whipR*rnd(.5,1);particles.push({x:player.x+Math.cos(a2)*d2,y:player.y+Math.sin(a2)*d2,vx:Math.cos(a2)*2,vy:Math.sin(a2)*2,r:3,life:300,maxLife:300,color:'#ff6633',type:'circle'});}
+      shake(5,200);playSound('hurtSnd');break;
     }
-
-    case 'projectile': {
-      abilityCooldown = 400;
-      const a = ang(player, pointer.active ? pointer : { x: player.x + Math.cos(player.heading)*100, y: player.y + Math.sin(player.heading)*100 });
-      const spd = 8;
-      projectiles.push({
-        x: player.x + Math.cos(a)*player.r, y: player.y + Math.sin(a)*player.r,
-        vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
-        r: 5, life: 1500, damage: 8, color: '#ffcc00'
-      });
-      emitBurst(player.x + Math.cos(a)*player.r, player.y + Math.sin(a)*player.r, '#ffaa00', 5, 1.5);
-      shake(2, 60);
-      break;
+    case'projectile':{
+      abilityCooldown=400;const a2=ang(player,pointer.active?pointer:{x:player.x+Math.cos(player.heading)*100,y:player.y+Math.sin(player.heading)*100});
+      projectiles.push({x:player.x+Math.cos(a2)*player.r,y:player.y+Math.sin(a2)*player.r,vx:Math.cos(a2)*8,vy:Math.sin(a2)*8,r:5,life:1500,damage:8,color:'#ffcc00'});
+      emitBurst(player.x+Math.cos(a2)*player.r,player.y+Math.sin(a2)*player.r,'#ffaa00',5,1.5);shake(2,60);break;
     }
   }
 }
 
 // ── ORGANISM AI ──
-function updateOrganism(org, dt) {
-  const T = ORG_TYPES[org.type];
-  const d = dist(player, org);
-  const prey = isPrey(org);
-  const pred = isPredator(org);
-  const neutral = !prey && !pred;
-  const spd = T.speed * (org.stunTimer > 0 ? 0.2 : 1);
+function updateOrganism(org,dt){
+  const T=ORG_TYPES[org.type];const d=dst(player,org);const prey=isPrey(org);const pred=isPredator(org);
+  const spd=T.speed*(org.stunTimer>0?.2:1);
+  org.stateTimer-=dt;org.stunTimer=Math.max(0,org.stunTimer-dt);org.flashTimer=Math.max(0,org.flashTimer-dt);org.pulsePhase+=dt*.003;
+  if(Math.random()<.08)org.trail.push({x:org.x,y:org.y,life:400});
+  if(org.trail.length>12)org.trail.shift();
+  org.trail.forEach(t=>t.life-=dt);org.trail=org.trail.filter(t=>t.life>0);
+  let tx=org.x,ty=org.y;
 
-  org.stateTimer -= dt;
-  org.stunTimer = Math.max(0, org.stunTimer - dt);
-  org.flashTimer = Math.max(0, org.flashTimer - dt);
-  org.pulsePhase += dt * 0.003;
-
-  // Trail
-  if (Math.random() < 0.08) org.trail.push({ x: org.x, y: org.y, life: 400 });
-  if (org.trail.length > 12) org.trail.shift();
-  org.trail.forEach(t => t.life -= dt);
-  org.trail = org.trail.filter(t => t.life > 0);
-
-  let tx = org.x, ty = org.y;
-
-  switch (T.behavior) {
-    case 'drift': {
-      // Plankton: gentle drift, flee if player is predator to them
-      org.wanderAng += (Math.random()-0.5)*0.05*dt;
-      tx = org.x + Math.cos(org.wanderAng)*spd;
-      ty = org.y + Math.sin(org.wanderAng)*spd;
-      if (prey && d < 200) {
-        const fa = ang(player, org);
-        tx = org.x + Math.cos(fa)*spd*3;
-        ty = org.y + Math.sin(fa)*spd*3;
-      }
-      break;
+  switch(T.behavior){
+    case'drift':{
+      org.wanderAng+=(Math.random()-.5)*.05*dt;tx=org.x+Math.cos(org.wanderAng)*spd;ty=org.y+Math.sin(org.wanderAng)*spd;
+      if(prey&&d<200){const fa=ang(player,org);tx=org.x+Math.cos(fa)*spd*3;ty=org.y+Math.sin(fa)*spd*3;}break;
     }
-
-    case 'swarm': {
-      // Cells: flock together, flee from predators
-      let flockX = 0, flockY = 0, flockN = 0;
-      organisms.forEach(o => {
-        if (o !== org && o.type === 'cell' && dist(org, o) < 120) {
-          flockX += o.x; flockY += o.y; flockN++;
-        }
-      });
-      if (flockN > 0) {
-        flockX /= flockN; flockY /= flockN;
-        const fa = Math.atan2(flockY - org.y, flockX - org.x);
-        tx = org.x + Math.cos(fa)*spd*0.5;
-        ty = org.y + Math.sin(fa)*spd*0.5;
-      }
-      org.wanderAng += (Math.random()-0.5)*0.08*dt;
-      tx += Math.cos(org.wanderAng)*spd*0.5;
-      ty += Math.sin(org.wanderAng)*spd*0.5;
-      if (prey && d < 180) {
-        const fa = ang(player, org);
-        tx = org.x + Math.cos(fa)*spd*4;
-        ty = org.y + Math.sin(fa)*spd*4;
-      }
-      break;
+    case'swarm':{
+      let fx=0,fy=0,fn=0;organisms.forEach(o=>{if(o!==org&&o.type==='cell'&&dst(org,o)<120){fx+=o.x;fy+=o.y;fn++;}});
+      if(fn>0){fx/=fn;fy/=fn;const fa=Math.atan2(fy-org.y,fx-org.x);tx=org.x+Math.cos(fa)*spd*.5;ty=org.y+Math.sin(fa)*spd*.5;}
+      org.wanderAng+=(Math.random()-.5)*.08*dt;tx+=Math.cos(org.wanderAng)*spd*.5;ty+=Math.sin(org.wanderAng)*spd*.5;
+      if(prey&&d<180){const fa=ang(player,org);tx=org.x+Math.cos(fa)*spd*4;ty=org.y+Math.sin(fa)*spd*4;}break;
     }
-
-    case 'pulse': {
-      // Jelly: pulse movement, leaves toxic trail, flees from bigger
-      const pSpd = Math.sin(org.pulsePhase*2)*spd*2;
-      tx = org.x + Math.cos(org.heading)*pSpd;
-      ty = org.y + Math.sin(org.heading)*pSpd;
-      if (org.stateTimer <= 0) {
-        org.heading += (Math.random()-0.5)*1.5;
-        org.stateTimer = rand(1000,3000);
-      }
-      if (prey && d < 200) {
-        const fa = ang(player, org);
-        tx = org.x + Math.cos(fa)*spd*3;
-        ty = org.y + Math.sin(fa)*spd*3;
-      }
-      // If player is near and jelly is prey, poison cloud
-      if (prey && d < org.r*3 && Math.random() < 0.02) {
-        emitBurst(org.x, org.y, '#ff66cc', 4, 0.5);
-      }
-      break;
+    case'pulse':{
+      const pS=Math.sin(org.pulsePhase*2)*spd*2;tx=org.x+Math.cos(org.heading)*pS;ty=org.y+Math.sin(org.heading)*pS;
+      if(org.stateTimer<=0){org.heading+=(Math.random()-.5)*1.5;org.stateTimer=rnd(1000,3000);}
+      if(prey&&d<200){const fa=ang(player,org);tx=org.x+Math.cos(fa)*spd*3;ty=org.y+Math.sin(fa)*spd*3;}
+      if(prey&&d<org.r*3&&Math.random()<.02)emitBurst(org.x,org.y,'#ff66cc',4,.5);break;
     }
-
-    case 'chase': {
-      // Predator: hunts smaller organisms and player if player is smaller
-      if (pred) {
-        // Player is smaller — hunt player
-        const ha = ang(org, player);
-        const huntSpd = spd * (d < 150 ? 1.8 : 1.2);
-        tx = org.x + Math.cos(ha)*huntSpd;
-        ty = org.y + Math.sin(ha)*huntSpd;
-      } else if (prey) {
-        // Player is bigger — flee with zigzag
-        const fa = ang(player, org);
-        const zigzag = Math.sin(gameTime*0.006)*0.6;
-        tx = org.x + Math.cos(fa+zigzag)*spd*2.5;
-        ty = org.y + Math.sin(fa+zigzag)*spd*2.5;
-      } else {
-        // Similar size — cautious orbit
-        const oa = ang(org, player) + Math.PI/2;
-        tx = org.x + Math.cos(oa)*spd;
-        ty = org.y + Math.sin(oa)*spd;
-      }
-      // Also hunt smaller organisms
-      if (!pred && prey) break;
-      let closestPrey = null, cpd = 300;
-      organisms.forEach(o => {
-        if (o === org || o.type === org.type) return;
-        if (o.r < org.r * 0.7) {
-          const od = dist(org, o);
-          if (od < cpd) { cpd = od; closestPrey = o; }
-        }
-      });
-      if (closestPrey && !pred) {
-        const ha = ang(org, closestPrey);
-        tx = org.x + Math.cos(ha)*spd*1.5;
-        ty = org.y + Math.sin(ha)*spd*1.5;
-      }
-      break;
+    case'chase':{
+      if(pred){const ha=ang(org,player);const hs=spd*(d<150?1.8:1.2);tx=org.x+Math.cos(ha)*hs;ty=org.y+Math.sin(ha)*hs;}
+      else if(prey){const fa=ang(player,org);const zz=Math.sin(gameTime*.006)*.6;tx=org.x+Math.cos(fa+zz)*spd*2.5;ty=org.y+Math.sin(fa+zz)*spd*2.5;}
+      else{const oa=ang(org,player)+Math.PI/2;tx=org.x+Math.cos(oa)*spd;ty=org.y+Math.sin(oa)*spd;}
+      let cp=null,cpd=300;organisms.forEach(o=>{if(o===org||o.type===org.type)return;if(o.r<org.r*.7){const od=dst(org,o);if(od<cpd){cpd=od;cp=o;}}});
+      if(cp&&!pred){const ha=ang(org,cp);tx=org.x+Math.cos(ha)*spd*1.5;ty=org.y+Math.sin(ha)*spd*1.5;}break;
     }
-
-    case 'ambush': {
-      // Angler: sits still with lure, strikes when prey is close
-      if (org.ambushReady) {
-        // Sit and wait — animate lure
-        org.lureAng += dt * 0.003;
-        if ((prey || neutral) && d < 80) {
-          // Strike!
-          org.ambushReady = false;
-          org.stateTimer = 2000;
-          const ha = ang(org, player);
-          org.vx = Math.cos(ha) * 6;
-          org.vy = Math.sin(ha) * 6;
-          emitBurst(org.x, org.y, '#ff8800', 8, 3);
-        } else if (pred && d < 200) {
-          // Flee
-          const fa = ang(player, org);
-          tx = org.x + Math.cos(fa)*spd*3;
-          ty = org.y + Math.sin(fa)*spd*3;
-          org.ambushReady = false;
-          org.stateTimer = 3000;
-        }
-      } else {
-        // Recovering from strike
-        org.wanderAng += (Math.random()-0.5)*0.03*dt;
-        tx = org.x + Math.cos(org.wanderAng)*spd;
-        ty = org.y + Math.sin(org.wanderAng)*spd;
-        if (org.stateTimer <= 0) org.ambushReady = true;
-      }
-      break;
+    case'ambush':{
+      if(org.ambushReady){org.lureAng+=dt*.003;
+        if((prey||(!prey&&!pred))&&d<80){org.ambushReady=false;org.stateTimer=2000;const ha=ang(org,player);org.vx=Math.cos(ha)*6;org.vy=Math.sin(ha)*6;emitBurst(org.x,org.y,'#ff8800',8,3);}
+        else if(pred&&d<200){const fa=ang(player,org);tx=org.x+Math.cos(fa)*spd*3;ty=org.y+Math.sin(fa)*spd*3;org.ambushReady=false;org.stateTimer=3000;}
+      }else{org.wanderAng+=(Math.random()-.5)*.03*dt;tx=org.x+Math.cos(org.wanderAng)*spd;ty=org.y+Math.sin(org.wanderAng)*spd;if(org.stateTimer<=0)org.ambushReady=true;}break;
     }
-
-    case 'passive': {
-      // Whale: gentle, slow, ignores small things. Fights back if attacked.
-      org.wanderAng += (Math.random()-0.5)*0.01*dt;
-      tx = org.x + Math.cos(org.wanderAng)*spd;
-      ty = org.y + Math.sin(org.wanderAng)*spd;
-      // If hit (flashTimer), turn aggressive briefly
-      if (org.flashTimer > 0 && d < 300) {
-        const ha = ang(org, player);
-        tx = org.x + Math.cos(ha)*spd*3;
-        ty = org.y + Math.sin(ha)*spd*3;
-      }
-      break;
+    case'passive':{
+      org.wanderAng+=(Math.random()-.5)*.01*dt;tx=org.x+Math.cos(org.wanderAng)*spd;ty=org.y+Math.sin(org.wanderAng)*spd;
+      if(org.flashTimer>0&&d<300){const ha=ang(org,player);tx=org.x+Math.cos(ha)*spd*3;ty=org.y+Math.sin(ha)*spd*3;}break;
     }
-
-    case 'lure': {
-      // Siren: creates fake "food" particles to attract, then attacks
-      if (pred) {
-        // Player smaller — create lure and approach
-        if (d > 300) {
-          // Emit fake food particles toward player
-          if (Math.random() < 0.01) {
-            const mid = { x: lerp(org.x, player.x, 0.6), y: lerp(org.y, player.y, 0.6) };
-            particles.push({ x: mid.x+rand(-30,30), y: mid.y+rand(-30,30), vx: 0, vy: 0, r: 4, life: 2000, maxLife: 2000, color: '#88ff44', type: 'lure' });
-          }
-          const ha = ang(org, player);
-          tx = org.x + Math.cos(ha)*spd*0.5;
-          ty = org.y + Math.sin(ha)*spd*0.5;
-        } else {
-          // Close — attack
-          const ha = ang(org, player);
-          tx = org.x + Math.cos(ha)*spd*2;
-          ty = org.y + Math.sin(ha)*spd*2;
-        }
-      } else if (prey) {
-        // Flee
-        const fa = ang(player, org);
-        tx = org.x + Math.cos(fa)*spd*2;
-        ty = org.y + Math.sin(fa)*spd*2;
-      } else {
-        org.wanderAng += (Math.random()-0.5)*0.04*dt;
-        tx = org.x + Math.cos(org.wanderAng)*spd;
-        ty = org.y + Math.sin(org.wanderAng)*spd;
-      }
-      break;
+    case'lure':{
+      if(pred){if(d>300){if(Math.random()<.01){const mid={x:lerp(org.x,player.x,.6),y:lerp(org.y,player.y,.6)};particles.push({x:mid.x+rnd(-30,30),y:mid.y+rnd(-30,30),vx:0,vy:0,r:4,life:2000,maxLife:2000,color:'#88ff44',type:'lure'});}const ha=ang(org,player);tx=org.x+Math.cos(ha)*spd*.5;ty=org.y+Math.sin(ha)*spd*.5;}
+      else{const ha=ang(org,player);tx=org.x+Math.cos(ha)*spd*2;ty=org.y+Math.sin(ha)*spd*2;}}
+      else if(prey){const fa=ang(player,org);tx=org.x+Math.cos(fa)*spd*2;ty=org.y+Math.sin(fa)*spd*2;}
+      else{org.wanderAng+=(Math.random()-.5)*.04*dt;tx=org.x+Math.cos(org.wanderAng)*spd;ty=org.y+Math.sin(org.wanderAng)*spd;}break;
     }
-
-    case 'apex': {
-      // Apex: aggressive to all, charges with prediction
-      if (prey) {
-        // Flee desperately
-        const fa = ang(player, org);
-        tx = org.x + Math.cos(fa)*spd*3;
-        ty = org.y + Math.sin(fa)*spd*3;
-      } else if (pred) {
-        // Hunt with prediction
-        const predict = 30;
-        const px = player.x + player.vx * predict;
-        const py = player.y + player.vy * predict;
-        const ha = Math.atan2(py - org.y, px - org.x);
-        tx = org.x + Math.cos(ha)*spd*1.8;
-        ty = org.y + Math.sin(ha)*spd*1.8;
-        // Charge
-        if (d < 200 && org.stateTimer <= 0) {
-          org.vx = Math.cos(ha)*5;
-          org.vy = Math.sin(ha)*5;
-          org.stateTimer = 2000;
-          emitBurst(org.x, org.y, '#ff2200', 10, 3);
-          shake(3, 100);
-        }
-      } else {
-        // Neutral — orbit menacingly
-        const oa = ang(org, player) + Math.PI/3;
-        tx = org.x + Math.cos(oa)*spd;
-        ty = org.y + Math.sin(oa)*spd;
-      }
+    case'apex':{
+      if(prey){const fa=ang(player,org);tx=org.x+Math.cos(fa)*spd*3;ty=org.y+Math.sin(fa)*spd*3;}
+      else if(pred){const px=player.x+player.vx*30,py=player.y+player.vy*30;const ha=Math.atan2(py-org.y,px-org.x);tx=org.x+Math.cos(ha)*spd*1.8;ty=org.y+Math.sin(ha)*spd*1.8;
+        if(d<200&&org.stateTimer<=0){org.vx=Math.cos(ha)*5;org.vy=Math.sin(ha)*5;org.stateTimer=2000;emitBurst(org.x,org.y,'#ff2200',10,3);shake(3,100);}}
+      else{const oa=ang(org,player)+Math.PI/3;tx=org.x+Math.cos(oa)*spd;ty=org.y+Math.sin(oa)*spd;}break;
+    }
+    // ── MIRROR AI ──
+    case'mirror':{
+      if(behaviorMemory.length<10)break;
+      const sample=behaviorMemory[Math.floor(Math.random()*behaviorMemory.length)];
+      const chaos=Math.sin(gameTime*.002)*.8;
+      const mx=sample.vx*-1+Math.sin(gameTime*.003+org.x)*chaos;
+      const my=sample.vy*-1+Math.cos(gameTime*.003+org.y)*chaos;
+      tx=org.x+mx*2;ty=org.y+my*2;
+      if(Math.random()<.01){const ha=ang(org,player);org.vx+=Math.cos(ha)*4;org.vy+=Math.sin(ha)*4;}
       break;
     }
   }
 
-  // Apply movement
-  const mvx = (tx - org.x) * 0.04;
-  const mvy = (ty - org.y) * 0.04;
-  org.vx = org.vx * 0.92 + mvx;
-  org.vy = org.vy * 0.92 + mvy;
-  org.x += org.vx * (dt/16);
-  org.y += org.vy * (dt/16);
-  org.heading = Math.atan2(org.vy, org.vx);
+  const mvx=(tx-org.x)*.04,mvy=(ty-org.y)*.04;
+  org.vx=org.vx*.92+mvx;org.vy=org.vy*.92+mvy;
+  org.x+=org.vx*(dt/16);org.y+=org.vy*(dt/16);
+  org.heading=Math.atan2(org.vy,org.vx);
 
-  // Respawn if too far
-  if (dist(player, org) > 2500) {
-    const a = Math.random()*TAU, dd = rand(800, T.spawnDist);
-    org.x = player.x + Math.cos(a)*dd;
-    org.y = player.y + Math.sin(a)*dd;
-    org.hp = org.maxHp;
-    org.ambushReady = T.behavior === 'ambush';
-  }
+  if(dst(player,org)>2500){const a=Math.random()*TAU,dd=rnd(800,T.spawnDist);org.x=player.x+Math.cos(a)*dd;org.y=player.y+Math.sin(a)*dd;org.hp=org.maxHp;org.ambushReady=T.behavior==='ambush';}
 }
 
-// ── PLAYER PHYSICS ──
-function updatePlayer(dt) {
-  const stage = getStage();
+// ── PLAYER UPDATE ──
+function updatePlayer(dt){
+  const stage=getStage();
+  let dx=0,dy=0;
+  if(joystickActive){pointer.x=player.x+joystickX*100;pointer.y=player.y+joystickY*100;pointer.active=true;}
+  if(pointer.active){dx=pointer.x-player.x;dy=pointer.y-player.y;}
+  const dLen=Math.hypot(dx,dy);
+  if(dLen>.5)player.heading=Math.atan2(dy,dx);
 
-  // Input
-  let dx = 0, dy = 0;
-  if (pointer.active) {
-    dx = pointer.x - player.x;
-    dy = pointer.y - player.y;
-  }
-  if (keys['w'] || keys['ArrowUp'])    dy -= 100;
-  if (keys['s'] || keys['ArrowDown'])  dy += 100;
-  if (keys['a'] || keys['ArrowLeft'])  dx -= 100;
-  if (keys['d'] || keys['ArrowRight']) dx += 100;
+  if(pointer.clicked&&stage.ability)useAbility();
+  pointer.clicked=false;
 
-  const dLen = Math.hypot(dx, dy);
-  if (dLen > 1) player.heading = Math.atan2(dy, dx);
+  let speed=stage.speed*(1+player.mass*.0005);
+  if(player.dashing){speed*=2.5;player.dashTimer-=dt;if(player.dashTimer<=0)player.dashing=false;}
+  if(player.speedBoost>0){speed*=1.25;player.speedBoost=Math.max(0,player.speedBoost-dt);}
 
-  // Ability on click
-  if (pointer.clicked && stage.ability) {
-    useAbility();
-  }
-  pointer.clicked = false;
+  if(dLen>3){player.vx=lerp(player.vx,dx/dLen*speed,.12);player.vy=lerp(player.vy,dy/dLen*speed,.12);}
+  else{player.vx*=.92;player.vy*=.92;}
+  player.x+=player.vx*(dt/16);player.y+=player.vy*(dt/16);
 
-  // Speed
-  let speed = stage.speed * (1 + player.mass * 0.0005);
-  if (player.dashing) { speed *= 2.5; player.dashTimer -= dt; if (player.dashTimer <= 0) player.dashing = false; }
+  player.r=stage.baseR+player.mass*.02;
+  player.mass=Math.max(STAGES[player.stage].threshold*.8+5,player.mass-.002*dt*(1+player.mass*.0001));
+  player.tail.unshift({x:player.x,y:player.y});
+  const maxTail=Math.floor(20+player.mass*.08);
+  while(player.tail.length>maxTail)player.tail.pop();
+  player.blink=Math.max(0,player.blink-dt);
+  abilityCooldown=Math.max(0,abilityCooldown-dt);
+  if(player.flash.t>0)player.flash.t-=dt;
 
-  if (dLen > 3) {
-    player.vx = lerp(player.vx, dx/dLen*speed, 0.12);
-    player.vy = lerp(player.vy, dy/dLen*speed, 0.12);
-  } else {
-    player.vx *= 0.92;
-    player.vy *= 0.92;
-  }
-  player.x += player.vx * (dt/16);
-  player.y += player.vy * (dt/16);
-
-  // Size from mass
-  player.r = stage.baseR + player.mass * 0.02;
-
-  // Mass decay
-  player.mass = Math.max(STAGES[player.stage].threshold * 0.8 + 5, player.mass - 0.002 * dt * (1 + player.mass*0.0001));
-
-  // Tail
-  player.tail.unshift({ x: player.x, y: player.y });
-  const maxTail = Math.floor(20 + player.mass * 0.08);
-  while (player.tail.length > maxTail) player.tail.pop();
-
-  // Blink timer
-  player.blink = Math.max(0, player.blink - dt);
-
-  // Ability cooldown
-  abilityCooldown = Math.max(0, abilityCooldown - dt);
-
-  // Passive abilities
   // Jellyfish sting aura
-  if (stage.ability === 'sting') {
-    organisms.forEach(org => {
-      if (dist(player, org) < player.r * 3 && isPrey(org)) {
-        org.stunTimer = Math.max(org.stunTimer, 600);
-        if (Math.random() < 0.03) {
-          org.hp -= 1;
-          org.flashTimer = 150;
-          emitBurst(org.x, org.y, '#cc66ff', 3, 1);
-        }
-      }
-    });
-  }
+  if(stage.ability==='sting'){organisms.forEach(org=>{if(dst(player,org)<player.r*3&&isPrey(org)){org.stunTimer=Math.max(org.stunTimer,600);if(Math.random()<.03){org.hp--;org.flashTimer=150;emitBurst(org.x,org.y,'#cc66ff',3,1);}}});}
+  // Leviathan gravity
+  if(stage.ability==='gravity'){organisms.forEach(org=>{const d2=dst(player,org);if(d2<player.r*6&&isPrey(org)){const ps=.8*(1-d2/(player.r*6));const a2=ang(org,player);org.vx+=Math.cos(a2)*ps;org.vy+=Math.sin(a2)*ps;}});}
 
-  // Leviathan gravity pull
-  if (stage.ability === 'gravity') {
-    organisms.forEach(org => {
-      const d2 = dist(player, org);
-      if (d2 < player.r * 6 && isPrey(org)) {
-        const pullStr = 0.8 * (1 - d2 / (player.r*6));
-        const a = ang(org, player);
-        org.vx += Math.cos(a)*pullStr;
-        org.vy += Math.sin(a)*pullStr;
-      }
-    });
-  }
+  // Mirror memory record
+  behaviorMemory.push({vx:player.vx,vy:player.vy,heading:player.heading});
+  if(behaviorMemory.length>120)behaviorMemory.shift();
 }
 
-// ── COLLISION ──
-function handleCollisions(dt) {
-  for (let i = organisms.length - 1; i >= 0; i--) {
-    const org = organisms[i];
-    const d = dist(player, org);
-    const T = ORG_TYPES[org.type];
-
-    // Player eats organism
-    if (isPrey(org) && d < player.r) {
-      player.mass += T.mass;
-      player.totalConsumed++;
-      player.killCount++;
-      totalScore += Math.floor(T.mass * 10);
-      emitBurst(org.x, org.y, T.color, 12, 2);
-      emitFloatText(org.x, org.y - 15, `+${T.mass}`, T.color);
-      shake(1 + org.r*0.1, 80);
-
-      // Remove and replenish
-      organisms.splice(i, 1);
-      const count = organisms.filter(o => o.type === org.type).length;
-      if (count < T.maxCount) {
-        setTimeout(() => spawnOrganisms(org.type, 1), rand(2000, 5000));
-      }
-      checkEvolution();
-      continue;
+// ── COLLISIONS ──
+function handleCollisions(dt){
+  for(let i=organisms.length-1;i>=0;i--){
+    const org=organisms[i];const T=ORG_TYPES[org.type];const d=dst(player,org);
+    if(isPrey(org)&&d<player.r){
+      player.mass+=T.mass;player.totalConsumed++;totalScore+=Math.floor(T.mass*10);
+      emitBurst(org.x,org.y,T.color,12,2);emitFloatText(org.x,org.y-15,'+'+T.mass,T.color);
+      shake(1+org.r*.1,80);playSound('eatSnd');
+      organisms.splice(i,1);
+      const cnt=organisms.filter(o=>o.type===org.type).length;
+      if(cnt<T.maxCount)setTimeout(()=>spawnOrganisms(org.type,1),rnd(2000,5000));
+      checkEvolution();continue;
     }
-
-    // Organism damages player
-    if (isPredator(org) && d < org.r && player.blink <= 0) {
-      player.mass = Math.max(5, player.mass - T.mass * 0.15 * (dt/16));
-      player.blink = 300;
-      shake(3, 120);
-      emitBurst(player.x, player.y, '#ff0044', 6, 1.5);
-
-      // Check if player de-evolved
-      if (player.stage > 0 && player.mass < STAGES[player.stage].threshold * 0.6) {
-        player.stage = Math.max(0, player.stage - 1);
-        emitFloatText(player.x, player.y - 30, 'DE-EVOLVED!', '#ff4444');
-        shake(6, 300);
+    if(isPredator(org)&&d<org.r&&player.blink<=0){
+      player.mass=Math.max(5,player.mass-T.mass*.15*(dt/16));player.blink=300;
+      shake(3,120);emitBurst(player.x,player.y,'#ff0044',6,1.5);playSound('hurtSnd');
+      if(player.stage>0&&player.mass<STAGES[player.stage].threshold*.6){
+        player.stage=Math.max(0,player.stage-1);emitFloatText(player.x,player.y-30,'DE-EVOLVED!','#ff4444');shake(6,300);
       }
     }
-
-    // Kill organisms at 0 hp
-    if (org.hp <= 0) {
-      player.mass += T.mass * 0.5;
-      totalScore += Math.floor(T.mass * 5);
-      emitBurst(org.x, org.y, T.color, 15, 3);
-      emitFloatText(org.x, org.y - 15, `+${Math.floor(T.mass*0.5)}`, T.color);
-      organisms.splice(i, 1);
-      const count = organisms.filter(o => o.type === org.type).length;
-      if (count < T.maxCount) {
-        setTimeout(() => spawnOrganisms(org.type, 1), rand(3000, 8000));
-      }
+    if(org.hp<=0){
+      player.mass+=T.mass*.5;totalScore+=Math.floor(T.mass*5);
+      emitBurst(org.x,org.y,T.color,15,3);emitFloatText(org.x,org.y-15,'+'+Math.floor(T.mass*.5),T.color);
+      organisms.splice(i,1);
+      const cnt=organisms.filter(o=>o.type===org.type).length;
+      if(cnt<T.maxCount)setTimeout(()=>spawnOrganisms(org.type,1),rnd(3000,8000));
       checkEvolution();
     }
   }
-
   // Projectiles
-  for (let i = projectiles.length - 1; i >= 0; i--) {
-    const p = projectiles[i];
-    p.x += p.vx * (16/16); p.y += p.vy * (16/16);
-    p.life -= 16;
-    // Trail
-    particles.push({ x: p.x, y: p.y, vx: rand(-0.3,0.3), vy: rand(-0.3,0.3), r: rand(1,3), life: 200, maxLife: 200, color: p.color, type: 'circle' });
-
-    if (p.life <= 0) { projectiles.splice(i, 1); continue; }
-
-    for (let j = organisms.length - 1; j >= 0; j--) {
-      const org = organisms[j];
-      if (dist(p, org) < org.r + p.r) {
-        org.hp -= p.damage;
-        org.flashTimer = 200;
-        org.stunTimer = 400;
-        org.vx += p.vx * 0.5;
-        org.vy += p.vy * 0.5;
-        emitBurst(p.x, p.y, p.color, 8, 2);
-        projectiles.splice(i, 1);
-        break;
+  for(let i=projectiles.length-1;i>=0;i--){
+    const p=projectiles[i];p.x+=p.vx;p.y+=p.vy;p.life-=16;
+    particles.push({x:p.x,y:p.y,vx:rnd(-.3,.3),vy:rnd(-.3,.3),r:rnd(1,3),life:200,maxLife:200,color:p.color,type:'circle'});
+    if(p.life<=0){projectiles.splice(i,1);continue;}
+    for(let j=organisms.length-1;j>=0;j--){
+      if(dst(p,organisms[j])<organisms[j].r+p.r){
+        organisms[j].hp-=p.damage;organisms[j].flashTimer=200;organisms[j].stunTimer=400;
+        organisms[j].vx+=p.vx*.5;organisms[j].vy+=p.vy*.5;
+        emitBurst(p.x,p.y,p.color,8,2);projectiles.splice(i,1);break;
       }
     }
   }
+  // Inter-organism
+  for(let i=0;i<organisms.length;i++){const a=organisms[i];for(let j=i+1;j<organisms.length;j++){const b=organisms[j];if(dst(a,b)<a.r+b.r){if(a.r>b.r*1.3)b.hp-=2;else if(b.r>a.r*1.3)a.hp-=2;else{const pa=ang(b,a);a.vx+=Math.cos(pa)*.5;a.vy+=Math.sin(pa)*.5;b.vx-=Math.cos(pa)*.5;b.vy-=Math.sin(pa)*.5;}}}}
 
-  // Inter-organism interactions
-  for (let i = 0; i < organisms.length; i++) {
-    const a = organisms[i];
-    for (let j = i+1; j < organisms.length; j++) {
-      const b = organisms[j];
-      const d2 = dist(a, b);
-      if (d2 < a.r + b.r) {
-        // Bigger eats smaller
-        if (a.r > b.r * 1.3) {
-          b.hp -= 2;
-          b.flashTimer = 100;
-        } else if (b.r > a.r * 1.3) {
-          a.hp -= 2;
-          a.flashTimer = 100;
-        } else {
-          // Push apart
-          const pushA = ang(b, a);
-          const push = 0.5;
-          a.vx += Math.cos(pushA)*push;
-          a.vy += Math.sin(pushA)*push;
-          b.vx -= Math.cos(pushA)*push;
-          b.vy -= Math.sin(pushA)*push;
-        }
-      }
-    }
+  // ── Pill/Shield/Frenzy/Beacons ──
+  if(pill.active&&dst(player,pill)<player.r+pill.r){
+    player.flash={color:'#00aaff',t:500};frenzy=true;F_TIME=10000;pill.active=false;playSound('frenzySnd');
+    emitBurst(pill.x,pill.y,'#00aaff',18,3);shake(4,200);
+    for(let i=0;i<30;i++){const a=Math.random()*TAU,R=120+Math.random()*120;
+      organisms.push({type:'plankton',x:player.x+Math.cos(a)*R,y:player.y+Math.sin(a)*R,r:5,baseR:5,hp:1,maxHp:1,vx:0,vy:0,heading:a,state:'idle',stateTimer:0,stunTimer:0,wanderAng:a,pulsePhase:Math.random()*TAU,ambushReady:false,lureAng:0,trail:[],flashTimer:0,frenzyOrbit:true,orbitAng:a,orbitR:R,orbitSpeed:.004+Math.random()*.003});}
   }
+  if(frenzy){F_TIME-=dt;if(F_TIME<=0){frenzy=false;organisms.forEach(o=>delete o.frenzyOrbit);}}
+  organisms.forEach(o=>{if(o.frenzyOrbit){o.orbitAng+=o.orbitSpeed*dt;o.x=player.x+Math.cos(o.orbitAng)*o.orbitR;o.y=player.y+Math.sin(o.orbitAng)*o.orbitR;}});
+  if(!pill.active&&!frenzy){pill.cd+=dt;if(pill.cd>25000+Math.random()*10000){pill={x:player.x+rnd(-800,800),y:player.y+rnd(-800,800),r:10,active:true,cd:0};}}
+  if(shield.active&&dst(player,shield)<player.r+shield.r){
+    player.flash={color:'#ffd700',t:500};shieldActive=true;shieldTime=SHIELD_DURATION;shield.active=false;playSound('eatSnd');
+    emitBurst(shield.x,shield.y,'#ffd700',15,2);shake(3,150);
+  }
+  if(shieldActive){shieldTime-=dt;if(shieldTime<=0)shieldActive=false;}
+  if(!shield.active&&!shieldActive){shield.cd+=dt;if(shield.cd>30000+Math.random()*15000){shield={x:player.x+rnd(-800,800),y:player.y+rnd(-800,800),r:10,active:true,cd:0};}}
+  beacons.forEach((b,i)=>{if(dst(player,b)<player.r+b.r){beacons.length=0;radarActive=true;document.getElementById('radarWrap').style.display='block';emitBurst(b.x,b.y,'#fff',15,2);shake(3,100);}});
 }
 
-// ══════════════════════════════════════════════
+// ══════════════════════════════════════
 // DRAWING
-// ══════════════════════════════════════════════
+// ══════════════════════════════════════
 
-// Nebula background (cached)
-const nebC = document.createElement('canvas');
-nebC.width = nebC.height = 512;
-(function genNeb(){
-  const nc = nebC.getContext('2d');
-  nc.fillStyle='#020810'; nc.fillRect(0,0,512,512);
-  const blobs=[
-    {x:100,y:80,r:200,c:'rgba(0,80,120,0.07)'},
-    {x:400,y:120,r:180,c:'rgba(100,0,120,0.06)'},
-    {x:250,y:350,r:250,c:'rgba(0,60,100,0.08)'},
-    {x:50,y:420,r:160,c:'rgba(80,40,0,0.05)'},
-    {x:380,y:400,r:190,c:'rgba(0,100,80,0.05)'},
-  ];
-  for(const b of blobs){const g=nc.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);g.addColorStop(0,b.c);g.addColorStop(1,'transparent');nc.fillStyle=g;nc.fillRect(0,0,512,512);}
-  const id=nc.getImageData(0,0,512,512);for(let i=0;i<id.data.length;i+=4){const n=(Math.random()-.5)*6;id.data[i]+=n;id.data[i+1]+=n;id.data[i+2]+=n;}nc.putImageData(id,0,0);
-})();
+function onScreen(x,y,r2){return!(x+r2<player.x-W/(2*zoom)||x-r2>player.x+W/(2*zoom)||y+r2<player.y-H/(2*zoom)||y-r2>player.y+H/(2*zoom));}
 
-// Stars
-const STARS = [];
-for(let i=0;i<200;i++) STARS.push({x:rand(-4000,4000),y:rand(-4000,4000),s:rand(0.3,2),depth:rand(0.03,0.15),twinkle:rand(0.5,3),phase:rand(0,TAU),col:['#fff','#adf','#fda','#faf','#aff'][randI(0,5)]});
-
-function drawBackground(ts) {
-  // Nebula tiled
-  const tile = 1024;
-  const ox = (-player.x*0.02)%tile, oy = (-player.y*0.02)%tile;
-  ctx.globalAlpha = 0.6;
-  for(let nx=-1;nx<=Math.ceil(W/tile)+1;nx++)
-    for(let ny=-1;ny<=Math.ceil(H/tile)+1;ny++)
-      ctx.drawImage(nebC, ox+nx*tile, oy+ny*tile, tile, tile);
-  ctx.globalAlpha = 1;
-
-  // Stars
-  for(const s of STARS){
-    const sx=(s.x-player.x*s.depth)*zoom+offset.x+shakeX;
-    const sy=(s.y-player.y*s.depth)*zoom+offset.y+shakeY;
-    if(sx<-5||sx>W+5||sy<-5||sy>H+5) continue;
-    const tw=0.3+0.7*(0.5+0.5*Math.sin(ts*s.twinkle*0.001+s.phase));
-    ctx.globalAlpha=tw; ctx.fillStyle=s.col;
-    if(s.s>1.3){ctx.fillRect(sx-s.s*1.5,sy-0.4,s.s*3,0.8);ctx.fillRect(sx-0.4,sy-s.s*1.5,0.8,s.s*3);}
-    ctx.fillRect(sx,sy,s.s,s.s);
-  }
+function drawBackground(ts){
+  const tile=1024,ox=(-player.x*.02)%tile,oy=(-player.y*.02)%tile;
+  ctx.globalAlpha=.6;
+  for(let nx=-1;nx<=Math.ceil(W/tile)+1;nx++)for(let ny=-1;ny<=Math.ceil(H/tile)+1;ny++)ctx.drawImage(nebC2,ox+nx*tile,oy+ny*tile,tile,tile);
+  ctx.globalAlpha=1;
+  for(const s of STARS){const sx=(s.x-player.x*s.depth)*zoom+offset.x+shakeX,sy=(s.y-player.y*s.depth)*zoom+offset.y+shakeY;if(sx<-5||sx>W+5||sy<-5||sy>H+5)continue;const tw=.3+.7*(.5+.5*Math.sin(ts*s.tw*.001+s.ph));ctx.globalAlpha=tw;ctx.fillStyle=s.col;if(s.s>1.3){ctx.fillRect(sx-s.s*1.5,sy-.4,s.s*3,.8);ctx.fillRect(sx-.4,sy-s.s*1.5,.8,s.s*3);}ctx.fillRect(sx,sy,s.s,s.s);}
   ctx.globalAlpha=1;
 }
 
-function drawGrid() {
-  const step = 100;
-  ctx.lineWidth = 0.6;
-  for(let i=-10;i<=10;i++){
-    for(let j=-10;j<=10;j++){
-      const x=i*step, y=j*step;
-      const d2 = Math.hypot(x-player.x, y-player.y);
-      const fade = Math.max(0, 1 - d2/600);
-      if(fade<0.01) continue;
-      ctx.strokeStyle = `rgba(30,40,60,${0.25*fade+0.03})`;
-      ctx.beginPath(); ctx.rect(x,y,step,step); ctx.stroke();
-    }
-  }
+function drawGrid(){
+  const step=100;ctx.lineWidth=.6;
+  for(let i=-10;i<=10;i++)for(let j=-10;j<=10;j++){const x=i*step,y=j*step;if(!onScreen(x,y,step*1.5))continue;const d2=Math.hypot(x+step/2-player.x,y+step/2-player.y);const fade=Math.max(0,1-d2/600);ctx.strokeStyle=`rgba(30,40,60,${.25*fade+.03})`;ctx.beginPath();ctx.rect(x,y,step,step);ctx.stroke();}
 }
 
-// ── DRAW ORGANISM ──
-function drawOrganism(org, ts) {
-  const T = ORG_TYPES[org.type];
-  const screenX = org.x*zoom+offset.x+shakeX;
-  const screenY = org.y*zoom+offset.y+shakeY;
-  if(screenX<-100||screenX>W+100||screenY<-100||screenY>H+100) return;
+let dpo=0; // distance player-organism for draw
+function drawOrganism(org,ts){
+  const T=ORG_TYPES[org.type];
+  if(!onScreen(org.x,org.y,org.r*2))return;
 
-  const flash = org.flashTimer > 0;
-  const col = flash ? '#fff' : T.color;
-  const pulse = 1 + 0.06*Math.sin(org.pulsePhase);
-  const r = org.r * pulse;
+  // ═══ MIRROR SPECIAL RENDERING ═══
+  if(org.type==='mirror'){
+    ctx.globalCompositeOperation='lighter';ctx.shadowBlur=30;ctx.shadowColor='#00ffff';
+    for(let i=0;i<3;i++){ctx.globalAlpha=.1;ctx.beginPath();ctx.arc(org.x+Math.sin(ts*.01+i)*10,org.y+Math.cos(ts*.01+i)*10,org.r*(1.2+i*.3),0,TAU);ctx.fillStyle=`hsla(${180+i*60},100%,60%,0.2)`;ctx.fill();}
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#ffffff';ctx.globalAlpha=.8;ctx.beginPath();
+    for(let a=0;a<TAU;a+=.3){const rr=org.r+Math.sin(a*3+ts*.01)*4;const x=org.x+Math.cos(a)*rr,y=org.y+Math.sin(a)*rr;a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.closePath();ctx.fill();
+    // Mirror eye
+    const eang=ang(org,player);
+    ctx.fillStyle='#00ffff';ctx.globalAlpha=.9;
+    ctx.beginPath();ctx.arc(org.x+Math.cos(eang)*org.r*.4,org.y+Math.sin(eang)*org.r*.4,org.r*.2,0,TAU);ctx.fill();
+    ctx.fillStyle='#000';ctx.beginPath();ctx.arc(org.x+Math.cos(eang)*org.r*.5,org.y+Math.sin(eang)*org.r*.5,org.r*.1,0,TAU);ctx.fill();
+    // HP ring
+    if(org.hp<org.maxHp){const pct=org.hp/org.maxHp;ctx.strokeStyle=pct>.5?'#4f4':pct>.25?'#ff4':'#f44';ctx.lineWidth=2;ctx.beginPath();ctx.arc(org.x,org.y,org.r+4,-Math.PI/2,-Math.PI/2+pct*TAU);ctx.stroke();}
+    ctx.shadowBlur=0;ctx.globalAlpha=1;
+    // Prey/pred indicator
+    if(dpo<400){if(isPrey(org)){ctx.fillStyle='rgba(100,255,100,.5)';const iy=org.y-org.r-10;ctx.beginPath();ctx.moveTo(org.x-4,iy-6);ctx.lineTo(org.x+4,iy-6);ctx.lineTo(org.x,iy);ctx.fill();}else if(isPredator(org)){ctx.fillStyle='rgba(255,80,80,.5)';const iy=org.y-org.r-10;ctx.beginPath();ctx.moveTo(org.x-4,iy);ctx.lineTo(org.x+4,iy);ctx.lineTo(org.x,iy-6);ctx.fill();}}
+    return;
+  }
+
+  const flash=org.flashTimer>0;const col=flash?'#fff':T.color;
+  const pulse=1+.06*Math.sin(org.pulsePhase);const r2=org.r*pulse;
 
   // Trail
-  ctx.globalAlpha = 0.15;
-  org.trail.forEach(t => {
-    const a = t.life / 400;
-    ctx.fillStyle = T.glow;
-    ctx.globalAlpha = a * 0.15;
-    ctx.beginPath(); ctx.arc(t.x, t.y, org.r*0.4*a, 0, TAU); ctx.fill();
-  });
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha=.15;org.trail.forEach(t=>{ctx.fillStyle=T.glow;ctx.globalAlpha=(t.life/400)*.15;ctx.beginPath();ctx.arc(t.x,t.y,org.r*.4*(t.life/400),0,TAU);ctx.fill();});ctx.globalAlpha=1;
 
-  // Stun indicator
-  if(org.stunTimer > 0){
-    ctx.strokeStyle = 'rgba(255,255,0,0.3)';
-    ctx.lineWidth = 1;
-    for(let i=0;i<3;i++){
-      const sa = ts*0.01+i*TAU/3;
-      ctx.beginPath();ctx.arc(org.x,org.y,r*1.3,sa,sa+0.4);ctx.stroke();
-    }
-  }
+  // Stun
+  if(org.stunTimer>0){ctx.strokeStyle='rgba(255,255,0,.3)';ctx.lineWidth=1;for(let i=0;i<3;i++){const sa=ts*.01+i*TAU/3;ctx.beginPath();ctx.arc(org.x,org.y,r2*1.3,sa,sa+.4);ctx.stroke();}}
 
   // Body glow
-  ctx.shadowBlur = 15*zoom; ctx.shadowColor = T.glow;
-  ctx.fillStyle = col;
-  ctx.globalAlpha = 0.3;
-  ctx.beginPath(); ctx.arc(org.x, org.y, r*1.4, 0, TAU); ctx.fill();
-  ctx.globalAlpha = 0.8;
-  ctx.beginPath(); ctx.arc(org.x, org.y, r, 0, TAU); ctx.fill();
+  ctx.shadowBlur=15*zoom;ctx.shadowColor=T.glow;ctx.fillStyle=col;ctx.globalAlpha=.3;ctx.beginPath();ctx.arc(org.x,org.y,r2*1.4,0,TAU);ctx.fill();
+  ctx.globalAlpha=.8;ctx.beginPath();ctx.arc(org.x,org.y,r2,0,TAU);ctx.fill();
+  ctx.globalAlpha=.5;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(org.x,org.y,r2*.3,0,TAU);ctx.fill();
 
-  // Inner core
-  ctx.globalAlpha = 0.5;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(org.x, org.y, r*0.3, 0, TAU); ctx.fill();
+  // HP ring
+  if(org.hp<org.maxHp){const pct=org.hp/org.maxHp;ctx.strokeStyle=pct>.5?'#4f4':pct>.25?'#ff4':'#f44';ctx.lineWidth=2;ctx.beginPath();ctx.arc(org.x,org.y,r2+4,-Math.PI/2,-Math.PI/2+pct*TAU);ctx.stroke();}
 
-  // HP ring (if damaged)
-  if(org.hp < org.maxHp) {
-    const pct = org.hp / org.maxHp;
-    ctx.strokeStyle = pct > 0.5 ? '#4f4' : pct > 0.25 ? '#ff4' : '#f44';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(org.x, org.y, r+4, -Math.PI/2, -Math.PI/2 + pct*TAU); ctx.stroke();
-  }
+  // Eye
+  if(r2*zoom>5){const ex=org.x+Math.cos(org.heading)*r2*.45,ey=org.y+Math.sin(org.heading)*r2*.45;ctx.fillStyle='#fff';ctx.globalAlpha=.9;ctx.beginPath();ctx.arc(ex,ey,r2*.18,0,TAU);ctx.fill();ctx.fillStyle='#000';ctx.globalAlpha=1;ctx.beginPath();ctx.arc(ex+Math.cos(org.heading)*r2*.06,ey+Math.sin(org.heading)*r2*.06,r2*.09,0,TAU);ctx.fill();}
 
-  // Eye — facing direction
-  if(r*zoom > 5) {
-    const ex = org.x + Math.cos(org.heading)*r*0.45;
-    const ey = org.y + Math.sin(org.heading)*r*0.45;
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.9;
-    ctx.beginPath(); ctx.arc(ex, ey, r*0.18, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#000'; ctx.globalAlpha = 1;
-    const px = ex + Math.cos(org.heading)*r*0.06;
-    const py = ey + Math.sin(org.heading)*r*0.06;
-    ctx.beginPath(); ctx.arc(px, py, r*0.09, 0, TAU); ctx.fill();
-  }
+  // Type decorations
+  if(org.type==='jelly'&&r2*zoom>6){ctx.strokeStyle=T.color;ctx.lineWidth=1.5;ctx.globalAlpha=.4;for(let t=0;t<5;t++){const ta=org.heading+Math.PI+(t-2)*.3;ctx.beginPath();ctx.moveTo(org.x,org.y);const seg=r2*2;ctx.quadraticCurveTo(org.x+Math.cos(ta)*seg*.5+Math.sin(ts*.004+t)*5,org.y+Math.sin(ta)*seg*.5+Math.cos(ts*.004+t)*5,org.x+Math.cos(ta)*seg+Math.sin(ts*.003+t*2)*8,org.y+Math.sin(ta)*seg+Math.cos(ts*.003+t*2)*8);ctx.stroke();}}
+  if(org.type==='angler'&&org.ambushReady&&r2*zoom>6){const lx=org.x+Math.cos(org.heading)*r2*2+Math.sin(org.lureAng)*5,ly=org.y+Math.sin(org.heading)*r2*2+Math.cos(org.lureAng)*5;ctx.fillStyle='#88ff44';ctx.globalAlpha=.5+.5*Math.sin(ts*.008);ctx.shadowBlur=20*zoom;ctx.shadowColor='#88ff44';ctx.beginPath();ctx.arc(lx,ly,4,0,TAU);ctx.fill();ctx.strokeStyle='rgba(136,255,68,.3)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(org.x+Math.cos(org.heading)*r2,org.y+Math.sin(org.heading)*r2);ctx.lineTo(lx,ly);ctx.stroke();}
+  if(org.type==='apex'&&r2*zoom>8){ctx.fillStyle=T.color;ctx.globalAlpha=.6;for(let s=0;s<6;s++){const sa=(s/6)*TAU+ts*.002;ctx.beginPath();ctx.moveTo(org.x+Math.cos(sa-.15)*r2,org.y+Math.sin(sa-.15)*r2);ctx.lineTo(org.x+Math.cos(sa)*r2*1.5,org.y+Math.sin(sa)*r2*1.5);ctx.lineTo(org.x+Math.cos(sa+.15)*r2,org.y+Math.sin(sa+.15)*r2);ctx.fill();}}
+  if(org.type==='whale'&&r2*zoom>10){ctx.strokeStyle=T.glow;ctx.lineWidth=1;for(let w=0;w<2;w++){ctx.globalAlpha=.12;ctx.beginPath();ctx.arc(org.x,org.y,r2*(1.5+w*.4)+Math.sin(ts*.002+w)*3,0,TAU);ctx.stroke();}}
+  if(org.type==='siren'&&r2*zoom>6){ctx.strokeStyle=T.color;ctx.lineWidth=1;ctx.globalAlpha=.25;ctx.beginPath();for(let a=0;a<TAU*2;a+=.1){const sr=a/(TAU*2)*r2*1.5;const sx=org.x+Math.cos(a+ts*.003)*sr,sy=org.y+Math.sin(a+ts*.003)*sr;a===0?ctx.moveTo(sx,sy):ctx.lineTo(sx,sy);}ctx.stroke();}
 
-  // Type-specific decorations
-  if(org.type === 'jelly' && r*zoom > 6) {
-    // Tentacles
-    ctx.strokeStyle = T.color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.4;
-    for(let t=0;t<5;t++){
-      const ta = org.heading + Math.PI + (t-2)*0.3;
-      ctx.beginPath(); ctx.moveTo(org.x, org.y);
-      const seg = r*2;
-      const cx = org.x+Math.cos(ta)*seg*0.5+Math.sin(ts*0.004+t)*5;
-      const cy = org.y+Math.sin(ta)*seg*0.5+Math.cos(ts*0.004+t)*5;
-      const ex2 = org.x+Math.cos(ta)*seg+Math.sin(ts*0.003+t*2)*8;
-      const ey2 = org.y+Math.sin(ta)*seg+Math.cos(ts*0.003+t*2)*8;
-      ctx.quadraticCurveTo(cx,cy,ex2,ey2); ctx.stroke();
-    }
-  }
-
-  if(org.type === 'angler' && org.ambushReady && r*zoom > 6) {
-    // Lure light
-    const lx = org.x + Math.cos(org.heading)*r*2 + Math.sin(org.lureAng)*5;
-    const ly = org.y + Math.sin(org.heading)*r*2 + Math.cos(org.lureAng)*5;
-    ctx.fillStyle = '#88ff44'; ctx.globalAlpha = 0.5+0.5*Math.sin(ts*0.008);
-    ctx.shadowBlur = 20*zoom; ctx.shadowColor = '#88ff44';
-    ctx.beginPath(); ctx.arc(lx, ly, 4, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(136,255,68,0.3)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(org.x+Math.cos(org.heading)*r, org.y+Math.sin(org.heading)*r);
-    ctx.lineTo(lx, ly); ctx.stroke();
-  }
-
-  if(org.type === 'apex' && r*zoom > 8) {
-    // Crown spikes
-    ctx.fillStyle = T.color; ctx.globalAlpha = 0.6;
-    for(let s=0;s<6;s++){
-      const sa = (s/6)*TAU + ts*0.002;
-      const sx2 = org.x+Math.cos(sa)*r*1.5;
-      const sy2 = org.y+Math.sin(sa)*r*1.5;
-      ctx.beginPath();
-      ctx.moveTo(org.x+Math.cos(sa-0.15)*r, org.y+Math.sin(sa-0.15)*r);
-      ctx.lineTo(sx2, sy2);
-      ctx.lineTo(org.x+Math.cos(sa+0.15)*r, org.y+Math.sin(sa+0.15)*r);
-      ctx.fill();
-    }
-  }
-
-  if(org.type === 'whale' && r*zoom > 10) {
-    // Gentle ring waves
-    ctx.strokeStyle = T.glow; ctx.lineWidth = 1;
-    for(let w=0;w<2;w++){
-      const wr = r*(1.5+w*0.4) + Math.sin(ts*0.002+w)*3;
-      ctx.globalAlpha = 0.12;
-      ctx.beginPath(); ctx.arc(org.x, org.y, wr, 0, TAU); ctx.stroke();
-    }
-  }
-
-  if(org.type === 'siren' && r*zoom > 6) {
-    // Hypnotic spiral
-    ctx.strokeStyle = T.color; ctx.lineWidth = 1; ctx.globalAlpha = 0.25;
-    ctx.beginPath();
-    for(let a=0;a<TAU*2;a+=0.1){
-      const sr = (a/(TAU*2))*r*1.5;
-      const sx2 = org.x+Math.cos(a+ts*0.003)*sr;
-      const sy2 = org.y+Math.sin(a+ts*0.003)*sr;
-      a===0?ctx.moveTo(sx2,sy2):ctx.lineTo(sx2,sy2);
-    }
-    ctx.stroke();
-  }
-
-  // Prey/predator indicator arrow for player reference
-  if(d_player_org < 400 && r*zoom > 4) {
-    if(isPrey(org)) {
-      // Green down-triangle (can eat)
-      ctx.fillStyle = 'rgba(100,255,100,0.5)';
-      const iy = org.y - r - 10;
-      ctx.beginPath(); ctx.moveTo(org.x-4, iy-6); ctx.lineTo(org.x+4, iy-6); ctx.lineTo(org.x, iy); ctx.fill();
-    } else if(isPredator(org)) {
-      // Red up-triangle (danger)
-      ctx.fillStyle = 'rgba(255,80,80,0.5)';
-      const iy = org.y - r - 10;
-      ctx.beginPath(); ctx.moveTo(org.x-4, iy); ctx.lineTo(org.x+4, iy); ctx.lineTo(org.x, iy-6); ctx.fill();
-    }
-  }
-
-  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  // Prey/pred indicator
+  if(dpo<400&&r2*zoom>4){if(isPrey(org)){ctx.fillStyle='rgba(100,255,100,.5)';const iy=org.y-r2-10;ctx.beginPath();ctx.moveTo(org.x-4,iy-6);ctx.lineTo(org.x+4,iy-6);ctx.lineTo(org.x,iy);ctx.fill();}else if(isPredator(org)){ctx.fillStyle='rgba(255,80,80,.5)';const iy=org.y-r2-10;ctx.beginPath();ctx.moveTo(org.x-4,iy);ctx.lineTo(org.x+4,iy);ctx.lineTo(org.x,iy-6);ctx.fill();}}
+  ctx.shadowBlur=0;ctx.globalAlpha=1;
 }
-// We need d_player_org; we'll compute inline by wrapping drawOrganism
-let d_player_org = 0;
 
 // ── DRAW PLAYER ──
-function drawPlayer(ts) {
-  const stage = getStage();
-  const r = player.r;
-  const col = stage.color;
-  const n = player.tail.length;
+function drawPlayer(ts){
+  const stage=getStage(),r2=player.r,col=stage.color,n=player.tail.length;
 
-  // ── Tail ──
-  if(n > 3) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+  // Tail
+  if(n>3){
+    ctx.save();ctx.globalCompositeOperation='lighter';ctx.lineJoin='round';ctx.lineCap='round';
+    const skip=Math.max(1,Math.floor(n/50));
 
-    // Different tail shapes per stage
-    if(player.stage <= 1) {
-      // Simple flagellum tail
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.strokeStyle = stage.glow;
-      ctx.lineWidth = Math.max(1, r*0.3);
-      ctx.globalAlpha = 0.4;
-      ctx.beginPath();
-      ctx.moveTo(player.tail[0].x, player.tail[0].y);
-      const skip = Math.max(1, Math.floor(n/40));
-      for(let i=1;i<n;i+=skip) {
-        const t = i/n;
-        const wave = Math.sin(t*12 + ts*0.008)*r*0.3*(1-t);
-        const perpA = player.heading+Math.PI/2;
-        ctx.lineTo(player.tail[i].x+Math.cos(perpA)*wave, player.tail[i].y+Math.sin(perpA)*wave);
-      }
-      ctx.stroke();
-      // Thin inner line
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(0.5, r*0.1); ctx.globalAlpha = 0.3;
-      ctx.beginPath();
-      ctx.moveTo(player.tail[0].x, player.tail[0].y);
-      for(let i=1;i<n;i+=skip) ctx.lineTo(player.tail[i].x, player.tail[i].y);
-      ctx.stroke();
+    if(player.stage<=1){
+      // Flagellum
+      ctx.strokeStyle=stage.glow;ctx.lineWidth=Math.max(1,r2*.3);ctx.globalAlpha=.4;ctx.beginPath();ctx.moveTo(player.tail[0].x,player.tail[0].y);
+      for(let i=1;i<n;i+=skip){const t=i/n,wave=Math.sin(t*12+ts*.008)*r2*.3*(1-t),pA=player.heading+Math.PI/2;ctx.lineTo(player.tail[i].x+Math.cos(pA)*wave,player.tail[i].y+Math.sin(pA)*wave);}ctx.stroke();
+      ctx.strokeStyle='#fff';ctx.lineWidth=Math.max(.5,r2*.1);ctx.globalAlpha=.3;ctx.beginPath();ctx.moveTo(player.tail[0].x,player.tail[0].y);for(let i=1;i<n;i+=skip)ctx.lineTo(player.tail[i].x,player.tail[i].y);ctx.stroke();
+    }else if(player.stage===2){
+      // Jelly tentacles
+      for(let t=0;t<6;t++){ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.globalAlpha=.35;ctx.beginPath();const bA=player.heading+Math.PI+(t-2.5)*.25;let px=player.x,py=player.y;ctx.moveTo(px,py);
+      for(let seg=0;seg<8;seg++){const sT=seg/8,wave=Math.sin(sT*6+ts*.005+t)*r2*.4,pA=bA+Math.PI/2;px+=Math.cos(bA)*r2*.6;py+=Math.sin(bA)*r2*.6;ctx.quadraticCurveTo(px+Math.cos(pA)*wave,py+Math.sin(pA)*wave,px,py);}ctx.stroke();}
+    }else if(player.stage===3){
+      // Serpent thick body
+      ctx.strokeStyle=stage.accent;ctx.lineWidth=r2*.8;ctx.globalAlpha=.3;ctx.shadowBlur=10*zoom;ctx.shadowColor=stage.glow;ctx.beginPath();ctx.moveTo(player.tail[0].x,player.tail[0].y);
+      for(let i=1;i<n;i+=skip){const t=i/n,wave=Math.sin(t*8+ts*.005)*r2*.5*(1-t*.5),pA=player.heading+Math.PI/2;ctx.lineTo(player.tail[i].x+Math.cos(pA)*wave,player.tail[i].y+Math.sin(pA)*wave);}ctx.stroke();
+      ctx.strokeStyle=col;ctx.lineWidth=r2*.35;ctx.globalAlpha=.5;ctx.beginPath();ctx.moveTo(player.tail[0].x,player.tail[0].y);
+      for(let i=1;i<n;i+=skip){const t=i/n,wave=Math.sin(t*8+ts*.005)*r2*.3*(1-t*.5),pA=player.heading+Math.PI/2;ctx.lineTo(player.tail[i].x+Math.cos(pA)*wave,player.tail[i].y+Math.sin(pA)*wave);}ctx.stroke();ctx.shadowBlur=0;
+      for(let i=0;i<n;i+=Math.max(1,Math.floor(n/12))){const t=i/n,p=player.tail[i];ctx.fillStyle=col;ctx.globalAlpha=.2*(1-t);ctx.beginPath();ctx.arc(p.x,p.y,r2*(1-t)*.5,0,TAU);ctx.fill();}
+    }else{
+      // Leviathan/Wyrm luminous trail
+      ctx.strokeStyle=stage.glow;ctx.lineWidth=r2;ctx.globalAlpha=.12;ctx.shadowBlur=20*zoom;ctx.shadowColor=stage.glow;ctx.beginPath();ctx.moveTo(player.tail[0].x,player.tail[0].y);for(let i=1;i<n;i+=skip)ctx.lineTo(player.tail[i].x,player.tail[i].y);ctx.stroke();
+      ctx.strokeStyle=col;ctx.lineWidth=r2*.5;ctx.globalAlpha=.4;ctx.beginPath();ctx.moveTo(player.tail[0].x,player.tail[0].y);for(let i=1;i<n;i+=skip)ctx.lineTo(player.tail[i].x,player.tail[i].y);ctx.stroke();
+      ctx.strokeStyle='#fff';ctx.lineWidth=r2*.12;ctx.globalAlpha=.25;ctx.beginPath();ctx.moveTo(player.tail[0].x,player.tail[0].y);for(let i=1;i<n;i+=skip)ctx.lineTo(player.tail[i].x,player.tail[i].y);ctx.stroke();ctx.shadowBlur=0;
+      for(let i=0;i<n;i+=Math.max(1,Math.floor(n/20))){const t=i/n,p=player.tail[i];ctx.fillStyle=stage.accent;ctx.globalAlpha=.3*(1-t);ctx.beginPath();ctx.arc(p.x,p.y,r2*(1-t*.7)*.25,0,TAU);ctx.fill();}
     }
-
-    else if(player.stage === 2) {
-      // Jellyfish trailing tentacles
-      for(let t=0;t<6;t++){
-        ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.35;
-        ctx.beginPath();
-        const baseA = player.heading + Math.PI + (t-2.5)*0.25;
-        let px2 = player.x, py2 = player.y;
-        ctx.moveTo(px2, py2);
-        for(let seg=0;seg<8;seg++){
-          const segT = seg/8;
-          const wave = Math.sin(segT*6+ts*0.005+t)*r*0.4;
-          const perpA = baseA+Math.PI/2;
-          px2 += Math.cos(baseA)*r*0.6;
-          py2 += Math.sin(baseA)*r*0.6;
-          ctx.quadraticCurveTo(px2+Math.cos(perpA)*wave, py2+Math.sin(perpA)*wave, px2, py2);
-        }
-        ctx.stroke();
-      }
-    }
-
-    else if(player.stage === 3) {
-      // Serpent body — thick segmented
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      const skip2 = Math.max(1, Math.floor(n/50));
-      // Outer
-      ctx.strokeStyle = stage.accent; ctx.lineWidth = r*0.8; ctx.globalAlpha = 0.3;
-      ctx.shadowBlur = 10*zoom; ctx.shadowColor = stage.glow;
-      ctx.beginPath(); ctx.moveTo(player.tail[0].x, player.tail[0].y);
-      for(let i=1;i<n;i+=skip2){
-        const t2=i/n;
-        const wave=Math.sin(t2*8+ts*0.005)*r*0.5*(1-t2*0.5);
-        const perpA=player.heading+Math.PI/2;
-        ctx.lineTo(player.tail[i].x+Math.cos(perpA)*wave, player.tail[i].y+Math.sin(perpA)*wave);
-      }
-      ctx.stroke();
-      // Inner bright
-      ctx.strokeStyle = col; ctx.lineWidth = r*0.35; ctx.globalAlpha = 0.5;
-      ctx.beginPath(); ctx.moveTo(player.tail[0].x, player.tail[0].y);
-      for(let i=1;i<n;i+=skip2){
-        const t2=i/n;
-        const wave=Math.sin(t2*8+ts*0.005)*r*0.3*(1-t2*0.5);
-        const perpA=player.heading+Math.PI/2;
-        ctx.lineTo(player.tail[i].x+Math.cos(perpA)*wave, player.tail[i].y+Math.sin(perpA)*wave);
-      }
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      // Segments
-      for(let i=0;i<n;i+=Math.max(1,Math.floor(n/12))){
-        const t2 = i/n;
-        const p2 = player.tail[i];
-        ctx.fillStyle = col; ctx.globalAlpha = 0.2*(1-t2);
-        ctx.beginPath(); ctx.arc(p2.x, p2.y, r*(1-t2)*0.5, 0, TAU); ctx.fill();
-      }
-    }
-
-    else if(player.stage >= 4) {
-      // Leviathan/Wyrm: thick luminous trail with scales
-      const skip2 = Math.max(1, Math.floor(n/60));
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      // Glow trail
-      ctx.strokeStyle = stage.glow; ctx.lineWidth = r*1.0; ctx.globalAlpha = 0.12;
-      ctx.shadowBlur = 20*zoom; ctx.shadowColor = stage.glow;
-      ctx.beginPath(); ctx.moveTo(player.tail[0].x, player.tail[0].y);
-      for(let i=1;i<n;i+=skip2) ctx.lineTo(player.tail[i].x, player.tail[i].y);
-      ctx.stroke();
-      // Body
-      ctx.strokeStyle = col; ctx.lineWidth = r*0.5; ctx.globalAlpha = 0.4;
-      ctx.beginPath(); ctx.moveTo(player.tail[0].x, player.tail[0].y);
-      for(let i=1;i<n;i+=skip2) ctx.lineTo(player.tail[i].x, player.tail[i].y);
-      ctx.stroke();
-      // Core line
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = r*0.12; ctx.globalAlpha = 0.25;
-      ctx.beginPath(); ctx.moveTo(player.tail[0].x, player.tail[0].y);
-      for(let i=1;i<n;i+=skip2) ctx.lineTo(player.tail[i].x, player.tail[i].y);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      // Scale dots
-      for(let i=0;i<n;i+=Math.max(1,Math.floor(n/20))){
-        const t2=i/n, p2=player.tail[i];
-        ctx.fillStyle=stage.accent; ctx.globalAlpha=0.3*(1-t2);
-        const sr = r*(1-t2*0.7)*0.25;
-        ctx.beginPath(); ctx.arc(p2.x, p2.y, sr, 0, TAU); ctx.fill();
-      }
-    }
-
     ctx.restore();
   }
 
-  // ── Body ──
-  const breath = 1 + 0.04*Math.sin(ts*0.004);
+  // Body
+  const breath=1+.04*Math.sin(ts*.004);
+  ctx.globalCompositeOperation='lighter';ctx.shadowBlur=30*zoom;ctx.shadowColor=stage.glow;ctx.fillStyle=stage.glow;ctx.globalAlpha=.08;ctx.beginPath();ctx.arc(player.x,player.y,r2*2*breath,0,TAU);ctx.fill();
+  ctx.globalAlpha=.25;ctx.fillStyle=col;ctx.beginPath();ctx.arc(player.x,player.y,r2*1.3*breath,0,TAU);ctx.fill();
+  ctx.globalCompositeOperation='source-over';
 
-  // Outer aura
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.shadowBlur = 30*zoom; ctx.shadowColor = stage.glow;
-  ctx.fillStyle = stage.glow; ctx.globalAlpha = 0.08;
-  ctx.beginPath(); ctx.arc(player.x, player.y, r*2*breath, 0, TAU); ctx.fill();
+  const bVis=player.blink>0?(Math.sin(gameTime*.03)>0?.4:.9):.85;
+  ctx.globalAlpha=bVis;ctx.shadowBlur=15*zoom;ctx.shadowColor=col;ctx.fillStyle=col;ctx.beginPath();ctx.arc(player.x,player.y,r2*breath,0,TAU);ctx.fill();
 
-  // Main body
-  ctx.globalAlpha = 0.25;
-  ctx.fillStyle = col;
-  ctx.beginPath(); ctx.arc(player.x, player.y, r*1.3*breath, 0, TAU); ctx.fill();
-
-  ctx.globalCompositeOperation = 'source-over';
-
-  // Solid body
-  const blinkVis = player.blink > 0 ? (Math.sin(gameTime*0.03)>0 ? 0.4 : 0.9) : 0.85;
-  ctx.globalAlpha = blinkVis;
-  ctx.shadowBlur = 15*zoom; ctx.shadowColor = col;
-  ctx.fillStyle = col;
-  ctx.beginPath(); ctx.arc(player.x, player.y, r*breath, 0, TAU); ctx.fill();
-
-  // Stage-specific body details
-  if(player.stage === 0) {
-    // Simple dot
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.6;
-    ctx.beginPath(); ctx.arc(player.x, player.y, r*0.35, 0, TAU); ctx.fill();
-  }
-  else if(player.stage === 1) {
-    // Flagellate — nucleus + membrane
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(player.x, player.y, r*0.85, 0, TAU); ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.5;
-    ctx.beginPath(); ctx.arc(player.x, player.y, r*0.3, 0, TAU); ctx.fill();
-    // Flagellum from front
-    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5;
-    ctx.beginPath(); ctx.moveTo(player.x+Math.cos(player.heading)*r, player.y+Math.sin(player.heading)*r);
-    for(let s=0;s<6;s++){
-      const sd = r*(1+s*0.3);
-      const sw = Math.sin(s*2+ts*0.01)*r*0.2;
-      const perpA = player.heading+Math.PI/2;
-      ctx.lineTo(player.x+Math.cos(player.heading)*sd+Math.cos(perpA)*sw, player.y+Math.sin(player.heading)*sd+Math.sin(perpA)*sw);
-    }
-    ctx.stroke();
-  }
-  else if(player.stage === 2) {
-    // Jellyfish dome
-    ctx.fillStyle = col; ctx.globalAlpha = 0.15;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y-r*0.15, r*1.1, Math.PI, 0);
-    ctx.quadraticCurveTo(player.x+r*1.2, player.y+r*0.3, player.x, player.y+r*0.4);
-    ctx.quadraticCurveTo(player.x-r*1.2, player.y+r*0.3, player.x-r*1.1, player.y-r*0.15);
-    ctx.fill();
-    // Inner spots
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.3;
-    for(let i=0;i<4;i++){
-      const sa = (i/4)*TAU+ts*0.002;
-      ctx.beginPath(); ctx.arc(player.x+Math.cos(sa)*r*0.4, player.y+Math.sin(sa)*r*0.4, r*0.1, 0, TAU); ctx.fill();
-    }
-    // Sting aura
-    ctx.strokeStyle = stage.glow; ctx.lineWidth = 1; ctx.globalAlpha = 0.15+0.1*Math.sin(ts*0.005);
-    ctx.beginPath(); ctx.arc(player.x, player.y, r*3, 0, TAU); ctx.stroke();
-  }
-  else if(player.stage === 3) {
-    // Serpent head — scales, eye
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.4;
-    ctx.beginPath(); ctx.arc(player.x, player.y, r*0.35, 0, TAU); ctx.fill();
-    // Scale pattern
-    for(let i=0;i<6;i++){
-      const sa = (i/6)*TAU;
-      ctx.fillStyle = stage.accent; ctx.globalAlpha = 0.25;
-      ctx.beginPath(); ctx.arc(player.x+Math.cos(sa)*r*0.65, player.y+Math.sin(sa)*r*0.65, r*0.15, 0, TAU); ctx.fill();
-    }
-    // Fierce eye
-    const ex = player.x+Math.cos(player.heading)*r*0.4;
-    const ey = player.y+Math.sin(player.heading)*r*0.4;
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.9;
-    ctx.beginPath(); ctx.arc(ex, ey, r*0.2, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.arc(ex+Math.cos(player.heading)*r*0.06, ey+Math.sin(player.heading)*r*0.06, r*0.1, 0, TAU); ctx.fill();
-  }
-  else if(player.stage === 4) {
-    // Leviathan — armored plates + eyes
-    for(let i=0;i<8;i++){
-      const sa = (i/8)*TAU+ts*0.001;
-      const pr = r*0.9;
-      ctx.fillStyle = stage.accent; ctx.globalAlpha = 0.25;
-      ctx.beginPath();
-      ctx.moveTo(player.x+Math.cos(sa-0.2)*pr, player.y+Math.sin(sa-0.2)*pr);
-      ctx.lineTo(player.x+Math.cos(sa)*r*1.2, player.y+Math.sin(sa)*r*1.2);
-      ctx.lineTo(player.x+Math.cos(sa+0.2)*pr, player.y+Math.sin(sa+0.2)*pr);
-      ctx.fill();
-    }
-    // Two eyes
-    for(let side=-1;side<=1;side+=2){
-      const ea = player.heading+side*0.4;
-      const ex = player.x+Math.cos(ea)*r*0.5;
-      const ey = player.y+Math.sin(ea)*r*0.5;
-      ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.8;
-      ctx.beginPath(); ctx.arc(ex, ey, r*0.14, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#114'; ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.arc(ex+Math.cos(player.heading)*r*0.04, ey+Math.sin(player.heading)*r*0.04, r*0.07, 0, TAU); ctx.fill();
-    }
-    // Gravity field visual
-    ctx.strokeStyle = stage.glow; ctx.lineWidth = 0.8;
-    for(let ring=0;ring<3;ring++){
-      const rr = r*(2+ring*1.3)+Math.sin(ts*0.003+ring)*5;
-      ctx.globalAlpha = 0.06;
-      ctx.beginPath(); ctx.arc(player.x, player.y, rr, 0, TAU); ctx.stroke();
-    }
-  }
-  else if(player.stage === 5) {
-    // Cosmic Wyrm — crown, multiple eyes, energy arcs
-    // Crown
-    for(let i=0;i<8;i++){
-      const sa = (i/8)*TAU+ts*0.002;
-      const tipR = r*1.5+Math.sin(ts*0.004+i)*r*0.2;
-      ctx.fillStyle = stage.color; ctx.globalAlpha = 0.4;
-      ctx.beginPath();
-      ctx.moveTo(player.x+Math.cos(sa-0.12)*r, player.y+Math.sin(sa-0.12)*r);
-      ctx.lineTo(player.x+Math.cos(sa)*tipR, player.y+Math.sin(sa)*tipR);
-      ctx.lineTo(player.x+Math.cos(sa+0.12)*r, player.y+Math.sin(sa+0.12)*r);
-      ctx.fill();
-    }
-    // Energy arcs
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.globalAlpha = 0.2;
-    for(let arc=0;arc<3;arc++){
-      const aa = ts*0.005+arc*TAU/3;
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, r*1.8, aa, aa+0.6);
-      ctx.stroke();
-    }
-    // Three eyes
-    for(let side=-1;side<=1;side++){
-      const ea = player.heading+side*0.35;
-      const ed = side===0 ? r*0.5 : r*0.45;
-      const ex = player.x+Math.cos(ea)*ed;
-      const ey = player.y+Math.sin(ea)*ed;
-      const er = side===0 ? r*0.16 : r*0.12;
-      ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.9;
-      ctx.beginPath(); ctx.arc(ex, ey, er, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#ff4400'; ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.arc(ex+Math.cos(player.heading)*er*0.3, ey+Math.sin(player.heading)*er*0.3, er*0.5, 0, TAU); ctx.fill();
-    }
-    // Inner core glow
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.35;
-    ctx.shadowBlur = 12*zoom; ctx.shadowColor = '#ffcc00';
-    ctx.beginPath(); ctx.arc(player.x, player.y, r*0.3, 0, TAU); ctx.fill();
-  }
+  // Stage-specific details
+  if(player.stage===0){ctx.fillStyle='#fff';ctx.globalAlpha=.6;ctx.beginPath();ctx.arc(player.x,player.y,r2*.35,0,TAU);ctx.fill();}
+  else if(player.stage===1){ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(player.x,player.y,r2*.85,0,TAU);ctx.stroke();ctx.fillStyle='#fff';ctx.globalAlpha=.5;ctx.beginPath();ctx.arc(player.x,player.y,r2*.3,0,TAU);ctx.fill();
+    ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.globalAlpha=.5;ctx.beginPath();ctx.moveTo(player.x+Math.cos(player.heading)*r2,player.y+Math.sin(player.heading)*r2);for(let s=0;s<6;s++){const sd=r2*(1+s*.3),sw=Math.sin(s*2+ts*.01)*r2*.2,pA=player.heading+Math.PI/2;ctx.lineTo(player.x+Math.cos(player.heading)*sd+Math.cos(pA)*sw,player.y+Math.sin(player.heading)*sd+Math.sin(pA)*sw);}ctx.stroke();}
+  else if(player.stage===2){ctx.fillStyle='#fff';ctx.globalAlpha=.3;for(let i=0;i<4;i++){const sa=(i/4)*TAU+ts*.002;ctx.beginPath();ctx.arc(player.x+Math.cos(sa)*r2*.4,player.y+Math.sin(sa)*r2*.4,r2*.1,0,TAU);ctx.fill();}
+    ctx.strokeStyle=stage.glow;ctx.lineWidth=1;ctx.globalAlpha=.15+.1*Math.sin(ts*.005);ctx.beginPath();ctx.arc(player.x,player.y,r2*3,0,TAU);ctx.stroke();}
+  else if(player.stage===3){ctx.fillStyle='#fff';ctx.globalAlpha=.4;ctx.beginPath();ctx.arc(player.x,player.y,r2*.35,0,TAU);ctx.fill();for(let i=0;i<6;i++){const sa=(i/6)*TAU;ctx.fillStyle=stage.accent;ctx.globalAlpha=.25;ctx.beginPath();ctx.arc(player.x+Math.cos(sa)*r2*.65,player.y+Math.sin(sa)*r2*.65,r2*.15,0,TAU);ctx.fill();}
+    const ex=player.x+Math.cos(player.heading)*r2*.4,ey=player.y+Math.sin(player.heading)*r2*.4;ctx.fillStyle='#fff';ctx.globalAlpha=.9;ctx.beginPath();ctx.arc(ex,ey,r2*.2,0,TAU);ctx.fill();ctx.fillStyle='#000';ctx.beginPath();ctx.arc(ex+Math.cos(player.heading)*r2*.06,ey+Math.sin(player.heading)*r2*.06,r2*.1,0,TAU);ctx.fill();}
+  else if(player.stage===4){for(let i=0;i<8;i++){const sa=(i/8)*TAU+ts*.001;ctx.fillStyle=stage.accent;ctx.globalAlpha=.25;ctx.beginPath();ctx.moveTo(player.x+Math.cos(sa-.2)*r2*.9,player.y+Math.sin(sa-.2)*r2*.9);ctx.lineTo(player.x+Math.cos(sa)*r2*1.2,player.y+Math.sin(sa)*r2*1.2);ctx.lineTo(player.x+Math.cos(sa+.2)*r2*.9,player.y+Math.sin(sa+.2)*r2*.9);ctx.fill();}
+    for(let side=-1;side<=1;side+=2){const ea=player.heading+side*.4,ex=player.x+Math.cos(ea)*r2*.5,ey=player.y+Math.sin(ea)*r2*.5;ctx.fillStyle='#fff';ctx.globalAlpha=.8;ctx.beginPath();ctx.arc(ex,ey,r2*.14,0,TAU);ctx.fill();ctx.fillStyle='#114';ctx.globalAlpha=1;ctx.beginPath();ctx.arc(ex+Math.cos(player.heading)*r2*.04,ey+Math.sin(player.heading)*r2*.04,r2*.07,0,TAU);ctx.fill();}
+    ctx.strokeStyle=stage.glow;ctx.lineWidth=.8;for(let ring=0;ring<3;ring++){ctx.globalAlpha=.06;ctx.beginPath();ctx.arc(player.x,player.y,r2*(2+ring*1.3)+Math.sin(ts*.003+ring)*5,0,TAU);ctx.stroke();}}
+  else if(player.stage===5){for(let i=0;i<8;i++){const sa=(i/8)*TAU+ts*.002,tipR=r2*1.5+Math.sin(ts*.004+i)*r2*.2;ctx.fillStyle=col;ctx.globalAlpha=.4;ctx.beginPath();ctx.moveTo(player.x+Math.cos(sa-.12)*r2,player.y+Math.sin(sa-.12)*r2);ctx.lineTo(player.x+Math.cos(sa)*tipR,player.y+Math.sin(sa)*tipR);ctx.lineTo(player.x+Math.cos(sa+.12)*r2,player.y+Math.sin(sa+.12)*r2);ctx.fill();}
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.globalAlpha=.2;for(let arc=0;arc<3;arc++){const aa=ts*.005+arc*TAU/3;ctx.beginPath();ctx.arc(player.x,player.y,r2*1.8,aa,aa+.6);ctx.stroke();}
+    for(let side=-1;side<=1;side++){const ea=player.heading+side*.35,ed=side===0?r2*.5:r2*.45,ex=player.x+Math.cos(ea)*ed,ey=player.y+Math.sin(ea)*ed,er=side===0?r2*.16:r2*.12;ctx.fillStyle='#fff';ctx.globalAlpha=.9;ctx.beginPath();ctx.arc(ex,ey,er,0,TAU);ctx.fill();ctx.fillStyle='#ff4400';ctx.globalAlpha=1;ctx.beginPath();ctx.arc(ex+Math.cos(player.heading)*er*.3,ey+Math.sin(player.heading)*er*.3,er*.5,0,TAU);ctx.fill();}
+    ctx.fillStyle='#fff';ctx.globalAlpha=.35;ctx.shadowBlur=12*zoom;ctx.shadowColor='#ffcc00';ctx.beginPath();ctx.arc(player.x,player.y,r2*.3,0,TAU);ctx.fill();}
 
   // Dash afterimage
-  if(player.dashing) {
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = col; ctx.globalAlpha = 0.3;
-    ctx.beginPath(); ctx.arc(player.x-player.vx*3, player.y-player.vy*3, r*0.8, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(player.x-player.vx*6, player.y-player.vy*6, r*0.5, 0, TAU); ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
-  }
+  if(player.dashing){ctx.globalCompositeOperation='lighter';ctx.fillStyle=col;ctx.globalAlpha=.3;ctx.beginPath();ctx.arc(player.x-player.vx*3,player.y-player.vy*3,r2*.8,0,TAU);ctx.fill();ctx.beginPath();ctx.arc(player.x-player.vx*6,player.y-player.vy*6,r2*.5,0,TAU);ctx.fill();ctx.globalCompositeOperation='source-over';}
 
-  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  // Shield ring
+  if(shieldActive){const rem=shieldTime/SHIELD_DURATION;ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=`rgba(255,215,0,${.3*rem})`;ctx.lineWidth=2;ctx.shadowBlur=15*zoom;ctx.shadowColor='#ffd700';ctx.beginPath();ctx.arc(player.x,player.y,r2*1.4,0,TAU);ctx.stroke();
+    for(let i=0;i<24;i++){const t=i/24,a=ts*.005+t*TAU;ctx.fillStyle='#ffd700';ctx.globalAlpha=(.3+.3*Math.sin(t*8+ts*.01))*rem;ctx.beginPath();ctx.arc(player.x+Math.cos(a)*r2*1.4,player.y+Math.sin(a)*r2*1.4,r2*.06,0,TAU);ctx.fill();}ctx.restore();}
+
+  ctx.shadowBlur=0;ctx.globalAlpha=1;
+}
+
+// ── DRAW PICKUPS ──
+function drawPickups(ts){
+  if(pill.active){const pr=pill.r*(1+.2*Math.sin(ts*.005));ctx.shadowBlur=15*zoom;ctx.shadowColor='#00aaff';ctx.fillStyle='#00aaff';ctx.globalAlpha=.8;ctx.beginPath();ctx.arc(pill.x,pill.y,pr,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.globalAlpha=.5;ctx.beginPath();ctx.arc(pill.x,pill.y,pr*.35,0,TAU);ctx.fill();ctx.strokeStyle='rgba(0,170,255,.3)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(pill.x,pill.y,pr*1.8,0,TAU);ctx.stroke();ctx.shadowBlur=0;ctx.globalAlpha=1;}
+  if(shield.active){const sr=shield.r*(1+.15*Math.sin(ts*.006));ctx.shadowBlur=15*zoom;ctx.shadowColor='#ffd700';ctx.fillStyle='#ffd700';ctx.globalAlpha=.8;ctx.beginPath();ctx.arc(shield.x,shield.y,sr,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.globalAlpha=.5;ctx.beginPath();ctx.arc(shield.x,shield.y,sr*.35,0,TAU);ctx.fill();ctx.strokeStyle='rgba(255,215,0,.3)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(shield.x,shield.y,sr*1.8,0,TAU);ctx.stroke();ctx.shadowBlur=0;ctx.globalAlpha=1;}
+  beacons.forEach(b=>{if(!onScreen(b.x,b.y,b.r*2))return;ctx.shadowBlur=12*zoom;ctx.shadowColor='#fff';ctx.fillStyle='#fff';ctx.globalAlpha=.5+.2*Math.sin(ts*.004);ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,TAU);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(b.x,b.y,b.r*2,0,TAU);ctx.stroke();ctx.shadowBlur=0;ctx.globalAlpha=1;});
 }
 
 // ── VIGNETTE ──
-function drawVignette() {
-  ctx.setTransform(1,0,0,1,0,0);
-  const g = ctx.createRadialGradient(W/2,H/2,W*0.22,W/2,H/2,W*0.72);
-  g.addColorStop(0,'transparent'); g.addColorStop(1,'rgba(2,8,16,0.5)');
-  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+function drawVignette(){ctx.setTransform(1,0,0,1,0,0);const g=ctx.createRadialGradient(W/2,H/2,W*.22,W/2,H/2,W*.72);g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(2,8,16,.5)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}
+
+// ── RADAR ──
+const rctx=document.getElementById('radar').getContext('2d');
+function drawRadar(){
+  rctx.clearRect(0,0,76,76);rctx.fillStyle='rgba(0,0,0,.3)';rctx.fillRect(0,0,76,76);
+  const sw=gameTime*.002%TAU;rctx.strokeStyle='rgba(0,228,184,.35)';rctx.lineWidth=1;rctx.beginPath();rctx.moveTo(38,38);rctx.lineTo(38+Math.cos(sw)*36,38+Math.sin(sw)*36);rctx.stroke();
+  rctx.fillStyle=getStage().color;rctx.beginPath();rctx.arc(38,38,2.5,0,TAU);rctx.fill();
+  const range=Math.max(2000,Math.hypot(player.x,player.y)*1.1),sc=72/(range*2);
+  const dot=(x,y,sz,c)=>{const dx=(x-player.x)*sc+38,dy=(y-player.y)*sc+38;if(dx<2||dx>74||dy<2||dy>74)return;rctx.fillStyle=c;rctx.beginPath();rctx.arc(dx,dy,sz,0,TAU);rctx.fill();};
+  organisms.forEach(o=>{const T=ORG_TYPES[o.type];const sz=clamp(o.r*.06,.6,2.5);dot(o.x,o.y,sz,isPrey(o)?'#4f4':isPredator(o)?'#f44':T.color);});
+  if(pill.active)dot(pill.x,pill.y,2,'#00aaff');
+  if(shield.active)dot(shield.x,shield.y,2,'#ffd700');
+  beacons.forEach(b=>dot(b.x,b.y,1.5,'#fff'));
 }
 
 // ── MINIMAP ──
-const mmCtx = document.getElementById('minimapCanvas').getContext('2d');
-function drawMinimap() {
-  mmCtx.clearRect(0,0,90,90);
-  mmCtx.fillStyle = 'rgba(2,8,16,0.6)'; mmCtx.fillRect(0,0,90,90);
-  const range = 2000, scale = 86/(range*2);
-  const dot = (x,y,sz,col) => {
-    const dx = (x-player.x)*scale+45, dy = (y-player.y)*scale+45;
-    if(dx<2||dx>88||dy<2||dy>88) return;
-    mmCtx.fillStyle=col; mmCtx.beginPath(); mmCtx.arc(dx,dy,sz,0,TAU); mmCtx.fill();
-  };
-  organisms.forEach(org => {
-    const T = ORG_TYPES[org.type];
-    const sz = clamp(org.r*0.08, 0.8, 3);
-    dot(org.x, org.y, sz, isPrey(org)?'#4f4':isPredator(org)?'#f44':T.color);
-  });
-  // Player
-  mmCtx.fillStyle = getStage().color; mmCtx.beginPath(); mmCtx.arc(45,45,3,0,TAU); mmCtx.fill();
-  mmCtx.strokeStyle = 'rgba(255,255,255,0.2)'; mmCtx.lineWidth = 0.5;
-  mmCtx.beginPath(); mmCtx.arc(45,45,3,0,TAU); mmCtx.stroke();
+const mmCtx=document.getElementById('minimapCanvas').getContext('2d');
+function drawMinimap(){
+  mmCtx.clearRect(0,0,86,86);mmCtx.fillStyle='rgba(2,8,16,.5)';mmCtx.fillRect(0,0,86,86);
+  const range=2000,sc=82/(range*2);
+  const dot=(x,y,sz,c)=>{const dx=(x-player.x)*sc+43,dy=(y-player.y)*sc+43;if(dx<2||dx>84||dy<2||dy>84)return;mmCtx.fillStyle=c;mmCtx.beginPath();mmCtx.arc(dx,dy,sz,0,TAU);mmCtx.fill();};
+  organisms.forEach(o=>{const T=ORG_TYPES[o.type];const sz=clamp(o.r*.07,.7,2.5);dot(o.x,o.y,sz,o.type==='mirror'?'#0ff':isPrey(o)?'#4f4':isPredator(o)?'#f44':T.color);});
+  if(pill.active)dot(pill.x,pill.y,2,'#00aaff');if(shield.active)dot(shield.x,shield.y,2,'#ffd700');
+  mmCtx.fillStyle=getStage().color;mmCtx.beginPath();mmCtx.arc(43,43,3,0,TAU);mmCtx.fill();
 }
 
-// ── HUD UPDATE ──
-function updateHUD() {
-  const stage = getStage();
-  const next = STAGES[player.stage+1];
-  document.getElementById('stageName').textContent = stage.name;
-  document.getElementById('stageName').style.color = stage.color;
-  document.getElementById('stageName').style.textShadow = `0 0 12px ${stage.color}, 0 0 30px ${stage.glow}44`;
-  document.getElementById('massVal').textContent = Math.floor(player.mass);
-  document.getElementById('score').textContent = totalScore.toLocaleString();
-  document.getElementById('abilityInfo').textContent = stage.abilityText + (abilityCooldown > 0 ? ` (${(abilityCooldown/1000).toFixed(1)}s)` : '');
-
-  const bar = document.getElementById('evoBar');
-  if(next) {
-    const pct = clamp((player.mass - stage.threshold) / (next.threshold - stage.threshold) * 100, 0, 100);
-    bar.style.width = pct + '%';
-    bar.style.background = `linear-gradient(90deg, ${stage.color}, ${next.color})`;
-    document.getElementById('evoLabel').textContent = `Next: ${next.name} — ${next.threshold}`;
-  } else {
-    bar.style.width = '100%';
-    bar.style.background = stage.color;
-    document.getElementById('evoLabel').textContent = 'MAX EVOLUTION';
+// ── 3D HEAD ──
+function updateHead(){
+  const wrap=document.getElementById('dragonHead'),sz=TILE*SCALE*Math.min(1.5,.9+(player.r/22));
+  const sx=player.x*zoom+offset.x+shakeX,sy=player.y*zoom+offset.y+shakeY;
+  wrap.style.width=sz+'px';wrap.style.height=sz+'px';wrap.style.left=(sx-sz/2)+'px';wrap.style.top=(sy-sz/2)+'px';
+  const cvs=document.getElementById('headCanvas');cvs.style.width=sz+'px';cvs.style.height=sz+'px';
+  if(typeof window.renderHead==='function'){
+    const yT=(player.heading+Math.PI)/TAU;window.renderHead((yT%1)*TAU,(Math.min(1,Math.hypot(player.vx,player.vy)/3)*.5-.25)*Math.PI);
   }
 }
 
-// ══════════════════════════════════════════════
+// ── HUD ──
+function updateHUD(){
+  const stage=getStage(),next=STAGES[player.stage+1];
+  document.getElementById('stageName').textContent=stage.name;document.getElementById('stageName').style.color=stage.color;
+  document.getElementById('stageName').style.textShadow=`0 0 12px ${stage.color},0 0 30px ${stage.glow}44`;
+  document.getElementById('massVal').textContent=Math.floor(player.mass);
+  document.getElementById('scoreVal').textContent=totalScore.toLocaleString();
+  document.getElementById('abilityInfo').textContent=stage.abilityText+(abilityCooldown>0?` (${(abilityCooldown/1000).toFixed(1)}s)`:'');
+  const bar=document.getElementById('evoBar');
+  if(next){const pct=clamp((player.mass-stage.threshold)/(next.threshold-stage.threshold)*100,0,100);bar.style.width=pct+'%';bar.style.background=`linear-gradient(90deg,${stage.color},${next.color})`;document.getElementById('evoLabel').textContent=`Next: ${next.name} — ${next.threshold}`;}
+  else{bar.style.width='100%';bar.style.background=stage.color;document.getElementById('evoLabel').textContent='MAX EVOLUTION';}
+}
+
+// ══════════════════════════════
 // MAIN LOOP
-// ══════════════════════════════════════════════
-let lastTime = 0;
-function loop(ts) {
+// ══════════════════════════════
+let lastTime=0;
+function loop(ts){
   requestAnimationFrame(loop);
-  if(paused) { lastTime = ts; return; }
-  const dt = Math.min(ts - lastTime, 50) || 16;
-  lastTime = ts;
-  gameTime += dt;
+  if(paused){lastTime=ts;return;}
+  const dt=Math.min(ts-lastTime,50)||16;lastTime=ts;gameTime+=dt;
 
   // Shake
-  if(shakeDur > 0) {
-    shakeDur -= dt;
-    const t = clamp(shakeDur/300,0,1);
-    shakeX = (Math.random()-0.5)*shakeInt*t*2;
-    shakeY = (Math.random()-0.5)*shakeInt*t*2;
-  } else { shakeX=shakeY=0; shakeInt=0; }
+  if(shakeDur>0){shakeDur-=dt;const t=clamp(shakeDur/300,0,1);shakeX=(Math.random()-.5)*shakeInt*t*2;shakeY=(Math.random()-.5)*shakeInt*t*2;}else{shakeX=shakeY=0;shakeInt=0;}
 
-  // Update
   updatePlayer(dt);
-  organisms.forEach(org => updateOrganism(org, dt));
+  organisms.forEach(org=>updateOrganism(org,dt));
   handleCollisions(dt);
 
   // Camera
-  zoom = clamp(0.6, 0.4, Math.min(1.5, H/(player.r*5)));
-  zoom = lerp(zoom, clamp(H/(player.r*5), 0.4, 1.5), 0.05);
-  offset.x = W/2 - player.x*zoom;
-  offset.y = H/2 - player.y*zoom;
+  const targetZoom=clamp(sliderZoom*clamp(H/(player.r*5),.4,1.5),.3,2);
+  zoom=lerp(zoom,targetZoom,.05);
+  offset.x=W/2-player.x*zoom;offset.y=H/2-player.y*zoom;
 
   // Spawn maintenance
-  for(const [type, T] of Object.entries(ORG_TYPES)) {
-    const count = organisms.filter(o => o.type === type).length;
-    if(count < T.maxCount * 0.5) spawnOrganisms(type, 1);
+  for(const[type,T]of Object.entries(ORG_TYPES)){
+    if(type==='mirror')continue; // mirrors spawn via evolution only
+    const cnt=organisms.filter(o=>o.type===type).length;if(cnt<T.maxCount*.4)spawnOrganisms(type,1);
   }
 
   // ── DRAW ──
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.clearRect(0,0,W,H);
-
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);
   drawBackground(ts);
-
-  // World space
   ctx.setTransform(zoom,0,0,zoom,offset.x+shakeX,offset.y+shakeY);
   drawGrid();
 
-  // Particles (behind entities)
-  for(let i=particles.length-1;i>=0;i--){
-    const p=particles[i];
-    p.x+=p.vx; p.y+=p.vy; p.vx*=0.97; p.vy*=0.97; p.life-=dt;
-    if(p.life<=0){particles.splice(i,1);continue;}
-    const a=clamp(p.life/p.maxLife,0,1);
-    ctx.fillStyle=p.color; ctx.globalAlpha=a*0.7;
-    if(p.type==='lure'){
-      // Fake food shimmer
-      ctx.globalAlpha=a*0.5*(0.5+0.5*Math.sin(ts*0.01));
-      ctx.shadowBlur=8*zoom;ctx.shadowColor='#88ff44';
-    }
-    ctx.beginPath();ctx.arc(p.x,p.y,p.r*a,0,TAU);ctx.fill();
-    ctx.shadowBlur=0;
-  }
-  if(particles.length>400)particles.splice(400);
-  ctx.globalAlpha=1;
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=.97;p.vy*=.97;p.life-=dt;if(p.life<=0){particles.splice(i,1);continue;}const a=clamp(p.life/p.maxLife,0,1);ctx.fillStyle=p.color;ctx.globalAlpha=a*(p.type==='lure'?.5*(.5+.5*Math.sin(ts*.01)):.7);if(p.type==='lure'){ctx.shadowBlur=8*zoom;ctx.shadowColor='#88ff44';}ctx.beginPath();ctx.arc(p.x,p.y,p.r*a,0,TAU);ctx.fill();ctx.shadowBlur=0;}
+  if(particles.length>400)particles.splice(400);ctx.globalAlpha=1;
 
   // Organisms
-  organisms.forEach(org => { d_player_org = dist(player, org); drawOrganism(org, ts); });
+  organisms.forEach(org=>{dpo=dst(player,org);drawOrganism(org,ts);});
 
   // Projectiles
-  projectiles.forEach(p => {
-    ctx.fillStyle=p.color; ctx.globalAlpha=0.9;
-    ctx.shadowBlur=12*zoom; ctx.shadowColor=p.color;
-    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.fill();
-    ctx.fillStyle='#fff';ctx.globalAlpha=0.6;
-    ctx.beginPath();ctx.arc(p.x,p.y,p.r*0.4,0,TAU);ctx.fill();
-    ctx.shadowBlur=0;ctx.globalAlpha=1;
-  });
+  projectiles.forEach(p=>{ctx.fillStyle=p.color;ctx.globalAlpha=.9;ctx.shadowBlur=12*zoom;ctx.shadowColor=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.globalAlpha=.6;ctx.beginPath();ctx.arc(p.x,p.y,p.r*.4,0,TAU);ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;});
+
+  // Pickups
+  drawPickups(ts);
 
   // Player
   drawPlayer(ts);
 
   // Float texts
-  ctx.font = '700 14px Rajdhani';
-  ctx.textAlign = 'center';
-  for(let i=floatTexts.length-1;i>=0;i--){
-    const ft=floatTexts[i];
-    ft.y-=0.8*(dt/16); ft.life-=dt;
-    if(ft.life<=0){floatTexts.splice(i,1);continue;}
-    ctx.fillStyle=ft.color; ctx.globalAlpha=clamp(ft.life/ft.maxLife,0,1);
-    ctx.fillText(ft.text,ft.x,ft.y);
-  }
-  ctx.globalAlpha=1;
+  ctx.font='700 14px Rajdhani';ctx.textAlign='center';
+  for(let i=floatTexts.length-1;i>=0;i--){const ft=floatTexts[i];ft.y-=.8*(dt/16);ft.life-=dt;if(ft.life<=0){floatTexts.splice(i,1);continue;}ctx.fillStyle=ft.color;ctx.globalAlpha=clamp(ft.life/ft.maxLife,0,1);ctx.fillText(ft.text,ft.x,ft.y);}ctx.globalAlpha=1;
 
-  // Overlays
+  // Frenzy overlay
+  if(frenzy){ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=.06+.03*Math.sin(ts*.008);ctx.fillStyle='#ff39ff';ctx.fillRect(0,0,W,H);ctx.globalAlpha=1;}
+
   drawVignette();
-
-  // Frenzy tint etc could go here
-
-  // HUD + Minimap
   updateHUD();
+  if(radarActive)drawRadar();
   drawMinimap();
+  drawJoystick();
+  updateHead();
 }
 
 initGame();
