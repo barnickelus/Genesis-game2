@@ -80,7 +80,13 @@ const lp=(a,b,t)=>a+(b-a)*t,cl=(v,a,b)=>Math.max(a,Math.min(b,v));
 const onS=(x,y,r)=>!(x+r<P.x-W/(2*zm)||x-r>P.x+W/(2*zm)||y+r<P.y-H/(2*zm)||y-r>P.y+H/(2*zm));
 function calcR(mass,baseR){return baseR+Math.log2(Math.max(1,mass))*2.8;}
 function calcGain(bm,pm){return bm*(1/(1+pm*.003));}
-function calcDecay(m,dt){return(.0034+m*.00013)*dt;}
+function calcDecay(m,dt){
+  // Near-zero below 80, gentle 80-400, moderate 400-1500, steep 1500+
+  if(m<80) return .0005*dt;
+  if(m<400) return(.0008+(m-80)*.000006)*dt;
+  if(m<1500) return(.002+(m-400)*.00008)*dt;
+  return(.0108+(m-1500)*.0002)*dt;
+}
 
 const C={
   mote:{pri:'#60f0b0',dim:'#1c4838',gl:'rgba(96,240,176,',h:155},
@@ -118,6 +124,20 @@ const ORGS={
   behemoth:{col:C.apex,dim:C.apexD,minR:40,maxR:65,spd:1.2,hp:50,mass:140,beh:'apex',spW:1800,mx:2},
   echo:{col:C.mirr,dim:'#384848',minR:11,maxR:20,spd:1,hp:18,mass:65,beh:'mirror',spW:1100,mx:2}
 };
+
+// ═══ FOOD CHAIN ═══
+// Each type lists what it actively hunts (organism types)
+const PREY_OF={
+  hunter:['mote','polyp','bloom'],      // barracuda hunts small fish
+  lurker:['mote','polyp','tendril'],     // angler lures small things
+  phantom:['mote','polyp','tendril'],    // phantom hunts with deception
+  behemoth:['mote','polyp','tendril','hunter','lurker','phantom'], // apex eats most
+  levia:['bloom','mote'],                // whale filter-feeds tiny things
+  tendril:['mote','bloom'],              // jelly catches small drifters
+  echo:['mote','polyp']                  // mirror hunts small things
+};
+// Hunt range per type (how far they'll chase prey organisms)
+const ECO_HUNT_R = { hunter:180, lurker:100, phantom:150, behemoth:250, levia:120, tendril:80, echo:140 };
 
 let P,orgs,projs,parts,txts,dust;
 let paused=false,gt=0,score=0,shx=0,shy=0,shi=0,shd=0;
@@ -192,6 +212,47 @@ const stars=[];for(let i=0;i<140;i++)stars.push({x:rng(-4000,4000),y:rng(-4000,4
 function boids(o,dt){const T=ORGS[o.type];if(!T.school)return{fx:0,fy:0};const schR=T.schR||100;let sepX=0,sepY=0,sepN=0,aliX=0,aliY=0,aliN=0,cohX=0,cohY=0,cohN=0;for(const q of orgs){if(q===o||q.type!==o.type)continue;const dx=q.x-o.x,dy=q.y-o.y,dd=Math.hypot(dx,dy);if(dd>schR||dd<.1)continue;if(dd<schR*.35){const w=1-dd/(schR*.35);sepX-=(dx/dd)*w;sepY-=(dy/dd)*w;sepN++;}aliX+=Math.cos(q.hd);aliY+=Math.sin(q.hd);aliN++;cohX+=q.x;cohY+=q.y;cohN++;}let fx=0,fy=0;if(sepN>0){fx+=sepX/sepN*1.8;fy+=sepY/sepN*1.8;}if(aliN>0){fx+=(aliX/aliN-Math.cos(o.hd))*.6;fy+=(aliY/aliN-Math.sin(o.hd))*.6;}if(cohN>0){const cx2=cohX/cohN-o.x,cy2=cohY/cohN-o.y,cd=Math.hypot(cx2,cy2);if(cd>1){fx+=(cx2/cd)*.4;fy+=(cy2/cd)*.4;}}if(canEat(o)){const pd=d2(P,o),flR=100+P.r*2.5;if(pd<flR){o.scatterT=800;for(const q of orgs)if(q.type===o.type&&d2(o,q)<schR)q.scatterT=Math.max(q.scatterT,600);}}if(o.scatterT>0){fx*=.2;fy*=.2;const fa=a2(P,o),u=o.scatterT/800;fx+=Math.cos(fa)*3*u;fy+=Math.sin(fa)*3*u;}return{fx,fy};}
 function schoolPulse(o){let nearest=null,nd=Infinity;for(const q of orgs){if(q===o||q.type!==o.type)continue;const dd=d2(o,q);if(dd<nd){nd=dd;nearest=q;}}if(nearest&&nd<(ORGS[o.type].schR||100)){o.breathPh+=Math.sin(nearest.breathPh-o.breathPh)*.02;}}
 
+// ═══ ECOSYSTEM: find nearest huntable organism ═══
+function findOrgPrey(o){
+  const preyTypes=PREY_OF[o.type];if(!preyTypes)return null;
+  const huntR=ECO_HUNT_R[o.type]||120;
+  let best=null,bestD=huntR;
+  for(const q of orgs){
+    if(q===o||!preyTypes.includes(q.type))continue;
+    if(q.r>=o.r*.9)continue; // must be meaningfully smaller
+    const dd=d2(o,q);if(dd<bestD){bestD=dd;best=q;}
+  }
+  return best;
+}
+
+// ═══ ECOSYSTEM: organisms eat each other ═══
+function ecoCollide(){
+  for(let i=orgs.length-1;i>=0;i--){
+    const a=orgs[i];if(!a)continue;
+    const preyTypes=PREY_OF[a.type];if(!preyTypes)continue;
+    for(let j=orgs.length-1;j>=0;j--){
+      if(i===j||!orgs[j])continue;
+      const b=orgs[j];
+      if(!preyTypes.includes(b.type))continue;
+      if(b.r>=a.r*.8)continue; // must be smaller
+      const dd=d2(a,b);
+      if(dd<a.r+b.r*.3){
+        // a eats b
+        a.r=Math.min(a.r*1.02,ORGS[a.type].maxR*1.1); // predator grows slightly
+        burst(b.x,b.y,ORGS[b.type].col,5,1.2);
+        // Remove prey
+        orgs.splice(j,1);
+        if(j<i)i--;
+        // Respawn prey later
+        const bType=b.type;
+        const cnt=orgs.filter(q=>q.type===bType).length;
+        if(cnt<ORGS[bType].mx)setTimeout(()=>spawn(bType,1),rng(2000,5000));
+        break; // one kill per frame per predator
+      }
+    }
+  }
+}
+
 // ═══ AI ═══
 function aiOrg(o,dt){const T=ORGS[o.type],dist=d2(P,o),smaller=canEat(o),bigger=isPred(o),spd=T.spd*(o.stunT>0?.15:1);o.stT-=dt;o.stunT=Math.max(0,o.stunT-dt);o.flT=Math.max(0,o.flT-dt);o.ph+=dt*.003;o.finPh+=dt*.006;o.breathPh+=dt*.004;o.scatterT=Math.max(0,o.scatterT-dt);const targetEye=a2(o,P),eyeDiff=Math.atan2(Math.sin(targetEye-o.eyeAng),Math.cos(targetEye-o.eyeAng));o.eyeAng+=eyeDiff*Math.min(1,dt*.005);if(Math.random()<.04)o.trail.push({x:o.x,y:o.y,l:250});if(o.trail.length>6)o.trail.shift();o.trail.forEach(t=>t.l-=dt);o.trail=o.trail.filter(t=>t.l>0);if(T.school)schoolPulse(o);let tx=o.x,ty=o.y;const fleeR=smaller?100+P.r*2.5:0,huntR=bigger?180+o.r*3:0;
 switch(T.beh){
@@ -214,7 +275,38 @@ switch(T.beh){
   case'apex':{if(smaller&&dist<fleeR){const fa=a2(P,o);tx=o.x+Math.cos(fa)*spd*3;ty=o.y+Math.sin(fa)*spd*3;}else if(bigger&&dist<huntR){const px=P.x+P.vx*30,py=P.y+P.vy*30,ha=Math.atan2(py-o.y,px-o.x);tx=o.x+Math.cos(ha)*spd*1.6;ty=o.y+Math.sin(ha)*spd*1.6;if(dist<150&&o.stT<=0){o.vx=Math.cos(ha)*5;o.vy=Math.sin(ha)*5;o.stT=1800;burst(o.x,o.y,T.col,8,3);shk(3,80);}}else{const oa=a2(o,P)+PI/3;tx=o.x+Math.cos(oa)*spd;ty=o.y+Math.sin(oa)*spd;}break;}
   case'mirror':{if(smaller&&dist<fleeR){const fa=a2(P,o);tx=o.x+Math.cos(fa)*spd*2.5;ty=o.y+Math.sin(fa)*spd*2.5;}else if(behMem.length>=10){const s=behMem[Math.floor(Math.random()*behMem.length)];const ch=Math.sin(gt*.002)*.7;tx=o.x+s.vx*-1+Math.sin(gt*.003+o.x)*ch;ty=o.y+s.vy*-1+Math.cos(gt*.003+o.y)*ch;if(Math.random()<.012){const ha=a2(o,P);o.vx+=Math.cos(ha)*4;o.vy+=Math.sin(ha)*4;}}break;}
 }
-const flock=boids(o,dt);o.vx=o.vx*.9+((tx-o.x)*.04+flock.fx*.3);o.vy=o.vy*.9+((ty-o.y)*.04+flock.fy*.3);o.x+=o.vx*(dt/16);o.y+=o.vy*(dt/16);o.hd=Math.atan2(o.vy,o.vx);if(d2(P,o)>2200){const a=Math.random()*TAU,dd=rng(type==='bloom'?60:500,T.spW);o.x=P.x+Math.cos(a)*dd;o.y=P.y+Math.sin(a)*dd;o.hp=o.mhp;o.ambR=T.beh==='ambush';}}
+const flock=boids(o,dt);
+// ── Ecosystem hunting: seek prey organisms when player isn't priority ──
+const playerFar=dist>fleeR*1.5&&dist>huntR*1.2;
+if(playerFar&&PREY_OF[o.type]){
+  const orgPrey=findOrgPrey(o);
+  if(orgPrey){
+    const ha=a2(o,orgPrey),pd=d2(o,orgPrey);
+    const hs=spd*(pd<50?1.6:1);
+    tx=lp(tx,o.x+Math.cos(ha)*hs,.4);
+    ty=lp(ty,o.y+Math.sin(ha)*hs,.4);
+    const preyEye=a2(o,orgPrey);
+    const ped=Math.atan2(Math.sin(preyEye-o.eyeAng),Math.cos(preyEye-o.eyeAng));
+    o.eyeAng+=ped*Math.min(1,dt*.008);
+  }
+}
+// ── Ecosystem flee: small organisms run from org predators ──
+if(T.school||T.beh==='drift'||T.beh==='bloom'){
+  for(const pred of orgs){
+    if(pred===o)continue;
+    const predPreys=PREY_OF[pred.type];
+    if(!predPreys||!predPreys.includes(o.type))continue;
+    if(pred.r<o.r*.9)continue;
+    const pd=d2(o,pred);
+    const orgFleeR=60+pred.r*2;
+    if(pd<orgFleeR){
+      const fa=a2(pred,o),u=1-pd/orgFleeR;
+      tx+=Math.cos(fa)*spd*(1+u*2);ty+=Math.sin(fa)*spd*(1+u*2);
+      break; // flee from nearest predator only
+    }
+  }
+}
+o.vx=o.vx*.9+((tx-o.x)*.04+flock.fx*.3);o.vy=o.vy*.9+((ty-o.y)*.04+flock.fy*.3);o.x+=o.vx*(dt/16);o.y+=o.vy*(dt/16);o.hd=Math.atan2(o.vy,o.vx);if(d2(P,o)>2200){const a=Math.random()*TAU,dd=rng(type==='bloom'?60:500,T.spW);o.x=P.x+Math.cos(a)*dd;o.y=P.y+Math.sin(a)*dd;o.hp=o.mhp;o.ambR=T.beh==='ambush';}}
 
 // ═══ PLAYER ═══
 function updateP(dt){const s=stg();let dx=0,dy=0;if(jkAct){ptr.x=P.x+jkX*100;ptr.y=P.y+jkY*100;ptr.on=true;}if(ptr.on){dx=ptr.x-P.x;dy=ptr.y-P.y;}const dL=Math.hypot(dx,dy);if(dL>.5)P.hd=Math.atan2(dy,dx);if(ptr.tap&&s.ab&&s.cd>0)useAbil();ptr.tap=false;let spd=s.spd*(1+Math.log2(Math.max(1,P.mass))*.08);if(P.dash){spd*=2.5;P.dashT-=dt;if(P.dashT<=0)P.dash=false;}if(P.boost>0){spd*=1.2;P.boost=Math.max(0,P.boost-dt);}if(dL>2){P.vx=lp(P.vx,dx/dL*spd,.1);P.vy=lp(P.vy,dy/dL*spd,.1);}else{P.vx*=.9;P.vy*=.9;}P.x+=P.vx*(dt/16);P.y+=P.vy*(dt/16);P.r=calcR(P.mass,s.bR);const floor=STAGES[P.stg].thr*.85+3;P.mass=Math.max(floor,P.mass-calcDecay(P.mass,dt));P.tail.unshift({x:P.x,y:P.y});while(P.tail.length>Math.floor(16+Math.log2(Math.max(1,P.mass))*8))P.tail.pop();P.blink=Math.max(0,P.blink-dt);abil_cd=Math.max(0,abil_cd-dt);if(P.flash.t>0)P.flash.t-=dt;streakT=Math.max(0,streakT-dt);if(streakT<=0)streak=0;if(s.ab==='sting')orgs.forEach(o=>{if(d2(P,o)<P.r*3&&canEat(o)){o.stunT=Math.max(o.stunT,400);if(Math.random()<.02){o.hp--;o.flT=120;}}});if(s.ab==='gravity')orgs.forEach(o=>{const dd=d2(P,o);if(dd<P.r*6&&canEat(o)){const ps=.5*(1-dd/(P.r*6)),a=a2(o,P);o.vx+=Math.cos(a)*ps;o.vy+=Math.sin(a)*ps;}});behMem.push({vx:P.vx,vy:P.vy,hd:P.hd});if(behMem.length>120)behMem.shift();}
@@ -650,7 +742,87 @@ function drawP(ts){
 
 // ═══ BG / GRID / VIGNETTE / DUST / PICKUPS ═══
 function drawBg(ts){const tl=1024,ox=(-P.x*.02)%tl,oy=(-P.y*.02)%tl;cx.globalAlpha=.5;for(let nx=-1;nx<=Math.ceil(W/tl)+1;nx++)for(let ny=-1;ny<=Math.ceil(H/tl)+1;ny++)cx.drawImage(neb,ox+nx*tl,oy+ny*tl,tl,tl);cx.globalAlpha=1;for(const s of stars){const sx2=(s.x-P.x*s.dp)*zm+off.x+shx,sy2=(s.y-P.y*s.dp)*zm+off.y+shy;if(sx2<-3||sx2>W+3||sy2<-3||sy2>H+3)continue;const tw=.2+.8*(.5+.5*Math.sin(ts*s.tw*.001+s.ph));cx.globalAlpha=tw*.55;cx.fillStyle=s.c;if(s.s>1.1){cx.fillRect(sx2-s.s,sy2-.2,s.s*2,.4);cx.fillRect(sx2-.2,sy2-s.s,.4,s.s*2);}cx.fillRect(sx2,sy2,s.s*.7,s.s*.7);}cx.globalAlpha=1;}
-function drawGrid(){const step=100;cx.lineWidth=.4;for(let i=-8;i<=8;i++)for(let j=-8;j<=8;j++){const x=i*step,y=j*step;if(!onS(x,y,step*1.5))continue;const dd=Math.hypot(x+50-P.x,y+50-P.y);const f=Math.max(0,1-dd/500);cx.strokeStyle=`rgba(20,30,45,${.12*f+.01})`;cx.beginPath();cx.rect(x,y,step,step);cx.stroke();}}
+function drawGrid(){
+  // ── Organic seabed grid ──
+  // Major grid (200px) + minor grid (50px) with distance fade
+  const majStep=200,minStep=50;
+  // Minor grid (very faint, close range only)
+  cx.lineWidth=.25;
+  for(let i=-16;i<=16;i++)for(let j=-16;j<=16;j++){
+    const x=i*minStep,y=j*minStep;if(!onS(x,y,minStep))continue;
+    const dd=Math.hypot(x+minStep/2-P.x,y+minStep/2-P.y);
+    const f=Math.max(0,1-dd/350);if(f<.01)continue;
+    cx.strokeStyle=`rgba(18,28,40,${.06*f})`;cx.beginPath();cx.rect(x,y,minStep,minStep);cx.stroke();
+  }
+  // Major grid (more visible, extends further)
+  cx.lineWidth=.5;
+  for(let i=-8;i<=8;i++)for(let j=-8;j<=8;j++){
+    const x=i*majStep,y=j*majStep;if(!onS(x,y,majStep*1.5))continue;
+    const dd=Math.hypot(x+majStep/2-P.x,y+majStep/2-P.y);
+    const f=Math.max(0,1-dd/800);
+    cx.strokeStyle=`rgba(24,36,52,${.12*f+.015})`;cx.beginPath();cx.rect(x,y,majStep,majStep);cx.stroke();
+    // Coordinate label at intersections (very subtle)
+    if(f>.3&&zm>.6){cx.fillStyle=`rgba(30,45,65,${.08*f})`;cx.font='6px "Tenor Sans",serif';cx.textAlign='center';
+    cx.fillText(`${i},${j}`,x,y-2);}
+  }
+  // ── Seabed pebbles/texture (fixed positions via seed hash) ──
+  const pebStep=300;
+  cx.fillStyle='rgba(16,24,36,.12)';
+  for(let i=-5;i<=5;i++)for(let j=-5;j<=5;j++){
+    const bx=i*pebStep,by=j*pebStep;if(!onS(bx,by,pebStep))continue;
+    const dd=Math.hypot(bx-P.x,by-P.y);if(dd>900)continue;
+    const fade=Math.max(0,1-dd/900);
+    // Seed-based pseudo-random pebble positions within each cell
+    const seed=(i*7919+j*104729)&0xFFFF;
+    for(let p=0;p<6;p++){
+      const ps=(seed*31+p*997)&0xFFFF;
+      const px=bx+((ps%300)-150)*.95;
+      const py=by+(((ps>>4)%300)-150)*.95;
+      const pr=1.2+((ps>>8)%5)*.4;
+      cx.globalAlpha=fade*(.04+((ps>>12)%3)*.02);
+      cx.beginPath();cx.ellipse(px,py,pr,pr*.7,((ps>>6)%10)*.3,0,TAU);cx.fill();
+    }
+  }
+  cx.globalAlpha=1;
+  // ── Fixed landmark formations (coral/rock clusters at world positions) ──
+  const lmks=[
+    {x:0,y:0,s:8},{x:400,y:-300,s:6},{x:-500,y:200,s:7},{x:300,y:500,s:5},
+    {x:-400,y:-500,s:6},{x:700,y:100,s:5},{x:-200,y:600,s:7},{x:600,y:-600,s:6},
+    {x:-700,y:-200,s:5},{x:100,y:-700,s:6},{x:-600,y:400,s:5},{x:800,y:500,s:4},
+    {x:500,y:-800,s:5},{x:-800,y:-600,s:4},{x:-300,y:-900,s:5},{x:900,y:-300,s:4}
+  ];
+  for(const lm of lmks){
+    if(!onS(lm.x,lm.y,lm.s*6))continue;
+    const dd=Math.hypot(lm.x-P.x,lm.y-P.y);if(dd>700)continue;
+    const fade=Math.max(0,1-dd/700);
+    // Rock cluster: several overlapping ellipses
+    cx.fillStyle=`rgba(14,22,34,${.15*fade})`;
+    const rseed=(lm.x*31+lm.y*17)&0xFFFF;
+    for(let k=0;k<4;k++){
+      const ka=((rseed+k*311)%628)*.01;
+      const kd=lm.s*(1+((rseed>>k)%3)*.3);
+      const kr=lm.s*(.6+((rseed>>(k+4))%4)*.15);
+      cx.globalAlpha=fade*(.08+k*.02);
+      cx.beginPath();cx.ellipse(lm.x+Math.cos(ka)*kd*.5,lm.y+Math.sin(ka)*kd*.5,kr,kr*.65,ka,0,TAU);cx.fill();
+    }
+    // Tiny bright tip (bioluminescent coral tip)
+    cx.fillStyle=`rgba(60,140,120,${.06*fade})`;
+    cx.beginPath();cx.arc(lm.x,lm.y-lm.s*.8,lm.s*.25,0,TAU);cx.fill();
+  }
+  cx.globalAlpha=1;
+  // ── Distance rings from origin (compass reference) ──
+  cx.strokeStyle='rgba(20,35,50,.04)';cx.lineWidth=.5;
+  for(let ring=1;ring<=4;ring++){
+    const rr=ring*400;if(!onS(0,0,rr+50))continue;
+    cx.beginPath();cx.arc(0,0,rr,0,TAU);cx.stroke();
+  }
+  // Cardinal markers at origin
+  if(onS(0,0,20)){
+    cx.strokeStyle='rgba(40,70,90,.1)';cx.lineWidth=.6;
+    cx.beginPath();cx.moveTo(-12,0);cx.lineTo(12,0);cx.stroke();
+    cx.beginPath();cx.moveTo(0,-12);cx.lineTo(0,12);cx.stroke();
+  }
+}
 function drawVig(){cx.setTransform(1,0,0,1,0,0);const g=cx.createRadialGradient(W/2,H/2,W*.18,W/2,H/2,W*.65);g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(1,8,16,.55)');cx.fillStyle=g;cx.fillRect(0,0,W,H);}
 function drawDust(ts){while(dust.length<50)dust.push({x:P.x+rng(-W/zm,W/zm),y:P.y+rng(-H/zm,H/zm),s:rng(.2,.9),vx:rng(-.03,.03),vy:rng(-.03,.03),a:rng(.012,.045),ph:rng(0,TAU)});for(const d of dust){d.x+=d.vx;d.y+=d.vy;if(!onS(d.x,d.y,5)){d.x=P.x+rng(-W/zm,W/zm);d.y=P.y+rng(-H/zm,H/zm);}cx.fillStyle='rgba(160,200,240,'+d.a*(.5+.5*Math.sin(ts*.001+d.ph))+')';cx.beginPath();cx.arc(d.x,d.y,d.s,0,TAU);cx.fill();}}
 function drawPicks(ts){if(pill.on){bioGlow(pill.x,pill.y,pill.r*3.5,C.drifter.gl,.35);cx.shadowBlur=8*zm;cx.shadowColor=C.drifter.pri;cx.fillStyle=C.drifter.pri;cx.globalAlpha=.55;cx.beginPath();cx.arc(pill.x,pill.y,pill.r*(1+.12*Math.sin(ts*.005)),0,TAU);cx.fill();cx.fillStyle='rgba(255,255,255,.25)';cx.beginPath();cx.arc(pill.x,pill.y,pill.r*.28,0,TAU);cx.fill();cx.shadowBlur=0;cx.globalAlpha=1;}if(shld.on){bioGlow(shld.x,shld.y,shld.r*3.5,C.primo.gl,.35);cx.shadowBlur=8*zm;cx.shadowColor=C.primo.pri;cx.fillStyle=C.primo.pri;cx.globalAlpha=.55;cx.beginPath();cx.arc(shld.x,shld.y,shld.r*(1+.1*Math.sin(ts*.006)),0,TAU);cx.fill();cx.fillStyle='rgba(255,255,255,.25)';cx.beginPath();cx.arc(shld.x,shld.y,shld.r*.28,0,TAU);cx.fill();cx.shadowBlur=0;cx.globalAlpha=1;}beacons.forEach(b=>{if(!onS(b.x,b.y,b.r*2))return;cx.fillStyle='rgba(200,220,255,.3)';cx.globalAlpha=.35+.1*Math.sin(ts*.003);cx.beginPath();cx.arc(b.x,b.y,b.r,0,TAU);cx.fill();cx.globalAlpha=1;});}
@@ -671,7 +843,7 @@ function loop(ts){
   requestAnimationFrame(loop);if(paused){lt=ts;return;}
   const dt=Math.min(ts-lt,50)||16;lt=ts;gt+=dt;
   if(shd>0){shd-=dt;const t=cl(shd/300,0,1);shx=(Math.random()-.5)*shi*t*2;shy=(Math.random()-.5)*shi*t*2;}else{shx=shy=0;shi=0;}
-  updateP(dt);orgs.forEach(o=>aiOrg(o,dt));collide(dt);
+  updateP(dt);orgs.forEach(o=>aiOrg(o,dt));collide(dt);ecoCollide();
   const tz=cl(H/(P.r*5.5),.3,1.5);zm=lp(zm,tz,.04);off.x=W/2-P.x*zm;off.y=H/2-P.y*zm;
   for(const[type,T]of Object.entries(ORGS)){if(type==='echo')continue;const cnt=orgs.filter(o=>o.type===type).length;if(cnt<T.mx*.35)spawn(type,1);}
   cx.setTransform(1,0,0,1,0,0);cx.clearRect(0,0,W,H);drawBg(ts);
