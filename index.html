@@ -99,7 +99,10 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 
 <div id="mmap"><canvas id="mmC" width="80" height="80"></canvas></div>
 
-<!-- Audio is fully procedural (Web Audio API) — see audio.js below -->
+<!-- Background music: if a file named "background-music.mp3" sits next to this
+     HTML, it will be loaded and routed through the stage-aware filter. If the
+     file is missing, the procedural drone engine below provides an ambient bed. -->
+<audio id="bgm" src="background-music.mp3" loop preload="auto"></audio>
 
 <script>
 'use strict';
@@ -254,7 +257,13 @@ function stg() { return STAGES[P.stg]; }
 // INPUT
 // ═══════════════════════════════════════════
 let ptr = {x:0, y:0, on:false, tap:false};
-const tw = e => ({ x:(e.clientX - off.x)/zm, y:(e.clientY - off.y)/zm });
+const tw = e => {
+  // Guard against zm being 0 (shouldn't happen but defensive)
+  const z = zm || 1;
+  const x = (e.clientX - off.x) / z;
+  const y = (e.clientY - off.y) / z;
+  return { x: isFinite(x) ? x : P.x, y: isFinite(y) ? y : P.y };
+};
 
 G.addEventListener('pointerdown', e => {
   if (paused) return;
@@ -299,6 +308,7 @@ addEventListener('keydown', e => {
 
 let AC=null, A_master=null, A_bgmGain=null, A_bgmFilter=null, A_drones=[],
     A_threatGain=null, A_threatOsc=null, A_frenzyGain=null, A_frenzyTick=0,
+    A_mp3Gain=null, A_mp3Source=null, A_mp3Connected=false,
     audioReady=false;
 const A_ROOT = 55;  // A1
 const STAGE_HARMONICS = [
@@ -310,7 +320,9 @@ const STAGE_HARMONICS = [
   [0, 12, 7, 3, 10, 19],
 ];
 const STAGE_CUTOFF = [700, 1500, 3000, 6000, 11000, 18000];
-const STAGE_BGM_VOL = [.22, .25, .26, .28, .30, .32];
+// Drones now sit at *bed* volume — mp3 BGM (if present) carries the melody on top.
+// If no mp3 loads, drones are still audible enough to feel atmospheric.
+const STAGE_BGM_VOL = [.10, .12, .14, .16, .17, .19];
 
 function freq(semis) { return A_ROOT * Math.pow(2, semis / 12); }
 
@@ -321,12 +333,13 @@ function initAudio() {
     if (!Ctor) return;
     AC = new Ctor();
 
-    // Master chain: master gain → destination
+    // Master chain — overall volume reduced for subtler experience
     A_master = AC.createGain();
-    A_master.gain.value = muted ? 0 : .9;
+    A_master.gain.value = muted ? 0 : .55;     // was .9 — quieter overall
     A_master.connect(AC.destination);
 
-    // BGM bus: drones → bgmGain → bgmFilter → master
+    // BGM bus shared by drones + mp3 — both flow through this filter so stage
+    // changes ramp the spectrum on whichever source is playing.
     A_bgmFilter = AC.createBiquadFilter();
     A_bgmFilter.type = 'lowpass';
     A_bgmFilter.frequency.value = STAGE_CUTOFF[0];
@@ -337,7 +350,21 @@ function initAudio() {
     A_bgmGain.gain.value = STAGE_BGM_VOL[0];
     A_bgmGain.connect(A_bgmFilter);
 
-    // Threat layer — low menacing tone that swells when a predator is close
+    // Try to wire the <audio> element through the same filter graph
+    const mp3 = document.getElementById('bgm');
+    if (mp3) {
+      try {
+        A_mp3Gain = AC.createGain();
+        A_mp3Gain.gain.value = 0.45;  // mp3 sits below master, but louder than drone bed
+        A_mp3Source = AC.createMediaElementSource(mp3);
+        A_mp3Source.connect(A_mp3Gain).connect(A_bgmFilter);
+        A_mp3Connected = true;
+        mp3.volume = 1;  // delegate volume to graph
+        if (!muted) mp3.play().catch(() => { /* may need second gesture */ });
+      } catch(e) { /* if route fails, fall back to element-level playback */ }
+    }
+
+    // Threat layer — low menacing tone, swells when a real predator is near
     A_threatGain = AC.createGain(); A_threatGain.gain.value = 0;
     A_threatGain.connect(A_master);
     A_threatOsc = AC.createOscillator();
@@ -348,7 +375,6 @@ function initAudio() {
     A_threatOsc.connect(threatFilter).connect(A_threatGain);
     A_threatOsc.start();
 
-    // Frenzy layer — pulse train that kicks in during frenzy
     A_frenzyGain = AC.createGain(); A_frenzyGain.gain.value = 0;
     A_frenzyGain.connect(A_master);
 
@@ -465,18 +491,17 @@ function envOsc(type, freqArr, durs, vol, dest) {
 
 function sfxEat() {
   if (!audioReady || muted) return;
-  envOsc('sine', [220, 880], [.09], .18, A_master);
-  envOsc('triangle', [440, 1200], [.06], .08, A_master);
+  envOsc('sine', [220, 880], [.09], .08, A_master);    // was .18
+  envOsc('triangle', [440, 1200], [.06], .035, A_master); // was .08
 }
 function sfxPrecision() {
   if (!audioReady || muted) return;
   const now = AC.currentTime;
-  // Pentatonic triad chime: A5, C#6, E6
   [880, 1109, 1319].forEach((f, i) => {
     const o = AC.createOscillator(), g = AC.createGain();
     o.type = 'sine'; o.frequency.value = f;
     g.gain.setValueAtTime(0, now + i*.04);
-    g.gain.linearRampToValueAtTime(.16, now + i*.04 + .01);
+    g.gain.linearRampToValueAtTime(.07, now + i*.04 + .01);   // was .16
     g.gain.exponentialRampToValueAtTime(.0001, now + i*.04 + .35);
     o.connect(g).connect(A_master);
     o.start(now + i*.04); o.stop(now + i*.04 + .4);
@@ -485,32 +510,28 @@ function sfxPrecision() {
 function sfxHurt() {
   if (!audioReady || muted) return;
   const now = AC.currentTime;
-  // Noise burst
   const buf = AC.createBuffer(1, AC.sampleRate * .15, AC.sampleRate);
   const d = buf.getChannelData(0);
   for (let i=0; i<d.length; i++) d[i] = (Math.random()*2-1) * (1 - i/d.length);
   const src = AC.createBufferSource(); src.buffer = buf;
   const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 240; bp.Q.value = 1.5;
-  const g = AC.createGain(); g.gain.value = .22;
+  const g = AC.createGain(); g.gain.value = .10;       // was .22
   g.gain.exponentialRampToValueAtTime(.0001, now + .18);
   src.connect(bp).connect(g).connect(A_master);
   src.start(now);
-  // Sub sweep
-  envOsc('sawtooth', [220, 60], [.18], .14, A_master);
-  // Ducking on BGM
+  envOsc('sawtooth', [220, 60], [.18], .065, A_master); // was .14
   audioBend(-2, .3); audioFilterPulse(400, .35);
 }
 function sfxEvo() {
   if (!audioReady || muted) return;
   const now = AC.currentTime;
-  // Ascending pentatonic shimmer
   const notes = [220, 277, 330, 415, 494, 659, 880];
   notes.forEach((f, i) => {
     const o = AC.createOscillator(), g = AC.createGain();
     o.type = 'triangle'; o.frequency.value = f;
     const t = now + i*.07;
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(.13, t + .015);
+    g.gain.linearRampToValueAtTime(.06, t + .015);     // was .13
     g.gain.exponentialRampToValueAtTime(.0001, t + .8);
     o.connect(g).connect(A_master);
     o.start(t); o.stop(t + .85);
@@ -519,21 +540,19 @@ function sfxEvo() {
 }
 function sfxFrenzy() {
   if (!audioReady || muted) return;
-  envOsc('square', [110, 220, 440], [.05, .05], .12, A_master);
-  envOsc('sawtooth', [880, 220], [.18], .08, A_master);
+  envOsc('square', [110, 220, 440], [.05, .05], .055, A_master); // was .12
+  envOsc('sawtooth', [880, 220], [.18], .035, A_master);          // was .08
 }
 function sfxAnomalyGrab() {
   if (!audioReady || muted) return;
   const now = AC.currentTime;
-  // Deep boom
-  envOsc('sine', [60, 30], [.4], .28, A_master);
-  // Sparkle shimmer arpeggio (octave above precision)
+  envOsc('sine', [60, 30], [.4], .14, A_master);       // was .28
   [1760, 2217, 2637, 3520].forEach((f, i) => {
     const o = AC.createOscillator(), g = AC.createGain();
     o.type = 'sine'; o.frequency.value = f;
     const t = now + i*.045;
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(.07, t + .01);
+    g.gain.linearRampToValueAtTime(.035, t + .01);     // was .07
     g.gain.exponentialRampToValueAtTime(.0001, t + .5);
     o.connect(g).connect(A_master); o.start(t); o.stop(t + .55);
   });
@@ -541,18 +560,77 @@ function sfxAnomalyGrab() {
 }
 function sfxRadarPing() {
   if (!audioReady || muted) return;
-  envOsc('sine', [1800, 1800], [.08], .04, A_master);
+  envOsc('sine', [1800, 1800], [.08], .02, A_master);  // was .04
+}
+
+// ── EMERGENCE — the long deep drop that plays when the player materializes ──
+// Sub-bass swell into a low dropping tone, paired with a slow rising filter
+// shimmer. Designed to feel like a vast ancient something drawing breath.
+function sfxEmerge() {
+  if (!audioReady) return;  // play even if muted? no — respect mute
+  if (muted) return;
+  const now = AC.currentTime;
+
+  // 1. Sub-bass swell — 200Hz → 28Hz over 1.4s (the "drop")
+  const sub = AC.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(200, now);
+  sub.frequency.exponentialRampToValueAtTime(28, now + 1.4);
+  const subGain = AC.createGain();
+  subGain.gain.setValueAtTime(0, now);
+  subGain.gain.linearRampToValueAtTime(.32, now + .15);
+  subGain.gain.linearRampToValueAtTime(.22, now + 1.0);
+  subGain.gain.exponentialRampToValueAtTime(.0001, now + 2.4);
+  sub.connect(subGain).connect(A_master);
+  sub.start(now); sub.stop(now + 2.5);
+
+  // 2. Second sub harmonic, slightly detuned, octave above — adds weight
+  const sub2 = AC.createOscillator();
+  sub2.type = 'sine';
+  sub2.frequency.setValueAtTime(400, now);
+  sub2.frequency.exponentialRampToValueAtTime(56, now + 1.4);
+  sub2.detune.value = -8;
+  const sub2Gain = AC.createGain();
+  sub2Gain.gain.setValueAtTime(0, now);
+  sub2Gain.gain.linearRampToValueAtTime(.10, now + .25);
+  sub2Gain.gain.exponentialRampToValueAtTime(.0001, now + 2.0);
+  sub2.connect(sub2Gain).connect(A_master);
+  sub2.start(now); sub2.stop(now + 2.1);
+
+  // 3. Filtered noise sweep — the rush of materialization
+  const buf = AC.createBuffer(1, AC.sampleRate * 1.6, AC.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random()*2-1);
+  const noise = AC.createBufferSource(); noise.buffer = buf;
+  const noiseFilt = AC.createBiquadFilter();
+  noiseFilt.type = 'bandpass';
+  noiseFilt.frequency.setValueAtTime(3500, now);
+  noiseFilt.frequency.exponentialRampToValueAtTime(150, now + 1.2);
+  noiseFilt.Q.value = 3;
+  const noiseGain = AC.createGain();
+  noiseGain.gain.setValueAtTime(0, now);
+  noiseGain.gain.linearRampToValueAtTime(.06, now + .2);
+  noiseGain.gain.exponentialRampToValueAtTime(.0001, now + 1.5);
+  noise.connect(noiseFilt).connect(noiseGain).connect(A_master);
+  noise.start(now); noise.stop(now + 1.6);
+
+  // 4. Bend the entire BGM down a 4th and let it return — feels like reality flexes
+  audioBend(-5, 1.6);
 }
 
 function setMute(m) {
   muted = m;
   document.getElementById('muteB').textContent = muted ? 'Unmute' : 'Mute';
+  const mp3 = document.getElementById('bgm');
+  if (mp3) mp3.muted = muted;
   if (audioReady && A_master) {
     const now = AC.currentTime;
     A_master.gain.cancelScheduledValues(now);
-    A_master.gain.setTargetAtTime(muted ? 0 : .9, now, .1);
+    A_master.gain.setTargetAtTime(muted ? 0 : .55, now, .1);
     if (AC.state === 'suspended' && !muted) AC.resume().catch(()=>{});
   }
+  // If unmuting and mp3 is paused, try to resume it (requires recent user gesture)
+  if (!muted && mp3 && mp3.paused) mp3.play().catch(() => {});
 }
 
 document.getElementById('pBtn').onclick   = () => { paused=!paused; document.getElementById('pMenu').style.display=paused?'flex':'none'; };
@@ -599,18 +677,25 @@ function beginGame() {
   el.style.pointerEvents = 'none';
   setTimeout(() => { el.style.display='none'; }, 1400);
 
+  // Make sure audio is initialized and play the deep emergence drop
+  initAudio();
+  sfxEmerge();
+  // Ensure the bgm.mp3 (if present) starts playing alongside the drop
+  const mp3 = document.getElementById('bgm');
+  if (mp3 && !muted) mp3.play().catch(() => {});
+
   // Brief white flash on the screen as we emerge
   const fl = document.getElementById('flash');
   if (fl) { fl.style.transition='opacity 0s'; fl.style.background='#fff'; fl.style.opacity='.42';
     setTimeout(() => { fl.style.transition='opacity 1.2s'; fl.style.opacity='0'; }, 40); }
 
-  // Emergence burst — staggered shockwaves so it feels like genesis, not a click
+  // Emergence burst — staggered shockwaves so it feels like genesis, not a click.
+  // Shake reduced from 6/360 to 4/220 to keep player visually anchored.
   setTimeout(() => {
     burst(P.x, P.y, COL.mote.pri, 60, 4.5);
     burst(P.x, P.y, '#fff', 24, 2.6);
     ring(P.x, P.y, '#fff', 22, 24);
-    shk(6, 360);
-    // Outward shockwave that scatters the local ecosystem
+    shk(4, 220);
     for (const o of orgs) {
       const d = dst(P, o);
       if (d < 420) {
@@ -622,7 +707,6 @@ function beginGame() {
       }
     }
   }, 700);
-  // Secondary expanding ring 350ms later — that "trailer beat"
   setTimeout(() => { ring(P.x, P.y, COL.mote.pri, 70, 28); }, 1050);
   setTimeout(() => { ring(P.x, P.y, COL.mote.gl, 120, 32); }, 1400);
 }
@@ -643,7 +727,12 @@ function ring(x, y, c, rad, n=12) {
   }
 }
 function fTxt(x, y, t, c) { if (txts.length<30) txts.push({x,y,t,c,life:900,ml:900}); }
-function shk(i, d) { shi=Math.max(shi,i); shd=Math.max(shd,d); }
+function shk(i, d) {
+  // Hard-cap shake intensity at 5px so the player never appears to leap out of
+  // their own frame. Big events still feel impactful via flash/particles/audio.
+  shi = Math.max(shi, Math.min(i, 5));
+  shd = Math.max(shd, Math.min(d, 350));
+}
 
 // ═══════════════════════════════════════════
 // BOIDS / FLOCKING
@@ -931,9 +1020,20 @@ function updateP(dt) {
   let spd=s.spd*(1+Math.log2(Math.max(1,P.mass))*.08);
   if (P.dash) { spd*=2.5; P.dashT-=dt; if(P.dashT<=0)P.dash=false; }
   if (P.boost>0) { spd*=1.2; P.boost=Math.max(0,P.boost-dt); }
-  if (frenzy) spd *= 1.4;  // glass cannon: faster + relaxed eat threshold during 8s window
+  if (frenzy) spd *= 1.4;
   if (dL>2) { P.vx=lp(P.vx,dx/dL*spd,.1); P.vy=lp(P.vy,dy/dL*spd,.1); } else { P.vx*=.9; P.vy*=.9; }
+
+  // Hard velocity cap — prevents any combo of multipliers from launching the
+  // player so fast they outrun the camera lerp on a single frame.
+  const MAX_V = 24;
+  if (P.vx > MAX_V) P.vx = MAX_V; else if (P.vx < -MAX_V) P.vx = -MAX_V;
+  if (P.vy > MAX_V) P.vy = MAX_V; else if (P.vy < -MAX_V) P.vy = -MAX_V;
+
   P.x+=P.vx*(dt/16); P.y+=P.vy*(dt/16);
+
+  // NaN guard — if anything ever goes wrong with the math, recover gracefully.
+  if (!isFinite(P.x) || !isFinite(P.y)) { P.x = 0; P.y = 0; P.vx = 0; P.vy = 0; }
+
   P.r=calcR(P.mass, s.bR);
 
   const floor=STAGES[P.stg].thr*.85+3;
@@ -1806,6 +1906,32 @@ function drawPlayer(ts) {
   drawTail(ts);
   drawPlayerBody(ts);
   drawAntennae(ts);
+  drawPlayerAnchor(ts);
+}
+
+// ═══════════════════════════════════════════
+// PLAYER ANCHOR — a tiny always-visible pip at player center, plus an outer
+// position ring that briefly flares when the player is hard to see (e.g. when
+// surrounded by larger creatures or during heavy particle activity).
+// This guarantees the player is locatable in busy scenes.
+// ═══════════════════════════════════════════
+function drawPlayerAnchor(ts) {
+  const s = stg();
+  // 1. Always-on central pip — solid white, very small, very bright
+  cx.shadowBlur = 4 * zm;
+  cx.shadowColor = '#fff';
+  cx.fillStyle = '#fff';
+  cx.globalAlpha = .65 + .15 * Math.sin(ts * .006);
+  cx.beginPath(); cx.arc(P.x, P.y, 1.4, 0, TAU); cx.fill();
+
+  // 2. Stage-colored selection ring sits just outside the body — confirms
+  //    "this is you". Drawn at low alpha so it doesn't dominate.
+  cx.shadowBlur = 0;
+  cx.strokeStyle = s.c.pri;
+  cx.lineWidth = .5;
+  cx.globalAlpha = .22;
+  cx.beginPath(); cx.arc(P.x, P.y, P.r * 1.18, 0, TAU); cx.stroke();
+  cx.globalAlpha = 1;
 }
 
 // ═══════════════════════════════════════════
@@ -1900,18 +2026,19 @@ function drawRadarHalos(ts) {
     else if (o._pred)         col = '#FF4858';
     if (!col) continue;       // neutral targets get no halo
 
-    const alpha = (1 - hide) * .42;
+    const alpha = (1 - hide) * .28;     // was .42 — quieter so player stays focal
     const pulse = 1 + .045 * Math.sin(ts*.007 + (o.x+o.y)*.012);
 
     cx.globalAlpha = alpha;
     cx.strokeStyle = col;
-    cx.lineWidth = 1.1;
-    cx.shadowBlur = 7*zm; cx.shadowColor = col;
+    cx.lineWidth = .9;                   // was 1.1
+    cx.shadowBlur = 4*zm;                // was 7
+    cx.shadowColor = col;
     cx.beginPath(); cx.arc(o.x, o.y, o.r * 1.45 * pulse, 0, TAU); cx.stroke();
 
-    // Tiny tick marks at cardinals for stronger radar feel
-    cx.globalAlpha = alpha * .8;
-    cx.lineWidth = .8;
+    // Tick marks at cardinals
+    cx.globalAlpha = alpha * .65;         // was .8
+    cx.lineWidth = .6;
     cx.shadowBlur = 0;
     for (let i=0;i<4;i++){
       const a = i*PI/2 + ts*.0008 + (o.x*.001);
@@ -2200,10 +2327,28 @@ function drawMinimap() {
 // MAIN LOOP
 // ═══════════════════════════════════════════
 let lt=0;
+
+// Pause physics whenever the document is hidden (tab switch, app background, etc).
+// On return, reset `lt` so we don't process one massive catch-up frame that
+// could launch the player off-screen.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    // Don't toggle the explicit pause flag; we just stall lt so dt stays sane
+    lt = 0;
+  } else {
+    lt = performance.now();
+  }
+});
+addEventListener('blur', () => { lt = 0; });
+addEventListener('focus', () => { lt = performance.now(); });
+
 function loop(ts) {
   requestAnimationFrame(loop);
-  if (paused||introActive) { lt=ts; return; }
-  const dt=Math.min(ts-lt,50)||16; lt=ts; gt+=dt;
+  if (paused||introActive||document.hidden) { lt=ts; return; }
+  // dt clamp guards against tab-switch catch-up. 50ms is one slow frame at 20fps.
+  let dt = (lt > 0) ? Math.min(ts - lt, 50) : 16;
+  if (!isFinite(dt) || dt < 0) dt = 16;
+  lt = ts; gt += dt;
 
   // Screen shake decay
   if (shd>0) { shd-=dt; const t=cl(shd/300,0,1); shx=(Math.random()-.5)*shi*t*2; shy=(Math.random()-.5)*shi*t*2; }
