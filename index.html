@@ -1133,8 +1133,9 @@ function collide(dt) {
       if (angleKill) sfxPrecision(); else sfxEat();
       audioFilterPulse(STAGE_CUTOFF[P.stg]*1.6, .15);
 
-      // Frenzy chain pulse — stun and damage nearby creatures
+      // Frenzy chain pulse — stun and damage nearby creatures, extend frenzy duration
       if (frenzy) {
+        fTime = Math.min(12000, fTime + 200);  // each kill extends frenzy by 200ms
         ring(o.x, o.y, '#40c8f0', 60, 14);
         for (const n of gNear(o.x, o.y, 80)) {
           if (n === o || !orgs.includes(n)) continue;
@@ -1171,67 +1172,74 @@ function collide(dt) {
   }
 
   // ═══════════════════════════════════════════
-  // FRENZY — Skill-based mass acceleration window (8s)
-  // Activation: collect a pill spawned periodically in the world.
+  // FRENZY — A true feeding frenzy. Edible food in a wide radius gets pulled
+  // into orbit around the player, creating a visible swirling feast. The food
+  // gets eaten naturally when it touches you. The closer/longer they orbit,
+  // the more food converges. Skillful movement (staying still as food gathers,
+  // then sweeping through it) maximizes the feast.
+  //
   // During frenzy:
-  //   • Eat threshold relaxed (can eat up to 0.95× your size, not just 0.8×)
-  //   • Eat reach +30%
-  //   • Movement speed +40% (applied in updateP)
-  //   • Combo multiplier on mass gain (1.5× + 0.15× per current streak, max 3×)
-  //   • Each kill emits a chain-stun pulse (damages neighbors)
-  //   • BUT predators do 1.5× damage to you — glass cannon
-  // Orbs grant bonus mass AND extend frenzy by 350ms each — reward fast movement.
+  //   • Edible food (canEat smaller creatures) gets pulled into orbit (radius up to 320px)
+  //   • Pull strength increases as food gets closer — they spiral inward
+  //   • Eat reach +30%, eat threshold relaxed (up to 0.95× player size)
+  //   • Each kill extends frenzy by 200ms (rewards sustained feasting)
+  //   • Mass-gain multiplier scales with kill streak (1.5× → 3× cap)
+  //   • Movement +40% (already in updateP)
+  //   • Predators do 1.5× damage to you (glass cannon trade-off)
+  //
+  // Duration: 8 seconds base, extends with kills.
   // ═══════════════════════════════════════════
   if (pill.on&&dst(P,pill)<P.r+pill.r) {
-    // Bigger initial flash, shorter duration — reads as "AHA, gained!" instead
-    // of "what's happening to me?" Then the persistent body tint in drawPlayerBody
-    // takes over and clearly says "FRENZY is active".
     P.flash={c:'#40c8f0',t:280}; frenzy=true; fTime=8000; pill.on=false; sfxFrenzy();
     audioSetFrenzy(true); audioFilterPulse(STAGE_CUTOFF[P.stg]*1.8, .8);
     burst(pill.x,pill.y,'#40c8f0',24,3.5); ring(P.x,P.y,'#40c8f0',P.r*3.5,16); shk(2.5,160);
-    frenzyOrbs=[];
+    fTxt(P.x, P.y-40, 'FEEDING FRENZY', '#40c8f0');
 
-    // First-time tutorial — explain what just happened
+    // First-time tutorial
     if (!frenzyTutorialShown) {
       frenzyTutorialShown = true;
-      document.getElementById('evoT').textContent = 'FRENZY';
+      document.getElementById('evoT').textContent = 'FEEDING FRENZY';
       document.getElementById('evoT').style.color = '#40c8f0';
-      document.getElementById('evoS').textContent = 'Eat anything smaller. Chain kills for bonus mass. 8 seconds.';
+      document.getElementById('evoS').textContent = 'Food spirals toward you. Eat fast. Each kill extends the frenzy.';
       const ea = document.getElementById('evoAnn');
       ea.style.opacity = '1';
       setTimeout(() => { ea.style.opacity = '0'; }, 3200);
     }
-    // Fewer, juicier orbs — placed in a single ring at striking distance
-    for (let i=0;i<18;i++) {
-      const a = (i/18)*TAU + rng(-.1,.1);
-      const R = rng(130, 220);
-      frenzyOrbs.push({
-        ang:a, dist:R, angSpd:rng(.0018,.0035)*(Math.random()<.5?1:-1),
-        r:rng(4,6.5), mass:rng(6,12),
-        col:['#ff39ff','#40c8f0','#80e860','#ffee44'][rni(0,4)],
-        ph:rng(0,TAU)
-      });
-    }
-    fTxt(P.x, P.y-40, 'FRENZY', '#40c8f0');
   }
   if (frenzy) {
-    fTime-=dt;
-    if(fTime<=0){
-      frenzy=false; frenzyOrbs=[]; audioSetFrenzy(false);
+    fTime -= dt;
+    if (fTime <= 0) {
+      frenzy = false; audioSetFrenzy(false);
       fTxt(P.x, P.y-30, 'frenzy fades', 'rgba(64,200,240,.5)');
-    }
-    for (let i=frenzyOrbs.length-1; i>=0; i--) {
-      const orb=frenzyOrbs[i]; orb.ang+=orb.angSpd*dt;
-      // Orbs drift inward over time so they become collectable
-      orb.dist = Math.max(P.r+orb.r+3, orb.dist - .02*dt);
-      const ox=P.x+Math.cos(orb.ang)*orb.dist, oy=P.y+Math.sin(orb.ang)*orb.dist;
-      if (Math.hypot(ox-P.x,oy-P.y)<P.r+orb.r) {
-        P.mass+=orb.mass; score+=Math.floor(orb.mass*5);
-        burst(ox,oy,orb.col,8,2); ring(ox,oy,orb.col,16,8);
-        sfxEat();
-        fTime += 350;  // each orb extends frenzy
-        P.boost = Math.max(P.boost, 300);  // small speed kick on collection
-        frenzyOrbs.splice(i,1);
+      // Release any organisms still caught in the vortex
+      for (const o of orgs) o._vortex = 0;
+    } else {
+      // ── Apply vortex pull to edible food within range ──
+      // The food itself becomes the visual — they swirl into the player.
+      const VORTEX_RANGE = 320;
+      for (const o of gNear(P.x, P.y, VORTEX_RANGE)) {
+        if (!canEat(o)) continue;        // only pull what we can actually eat
+        const d = dst(P, o);
+        if (d < 3) continue;
+        if (d > VORTEX_RANGE) continue;
+
+        const t = 1 - d/VORTEX_RANGE;     // strength rises as food nears player
+        const a = ang(o, P);              // angle from food toward player
+        const radial = .25 + t * .85;     // radial pull (gets stronger inward)
+        const swirl  = .55 * t;           // tangential swirl creates orbit
+
+        o.vx += Math.cos(a) * radial;
+        o.vy += Math.sin(a) * radial;
+        o.vx += Math.cos(a + PI/2) * swirl;
+        o.vy += Math.sin(a + PI/2) * swirl;
+
+        // Velocity cap so they spiral inward smoothly, not slingshot
+        const v = Math.hypot(o.vx, o.vy);
+        const VMAX = 7;
+        if (v > VMAX) { o.vx = o.vx/v*VMAX; o.vy = o.vy/v*VMAX; }
+
+        // Tag for visual streak trail and accelerated decay
+        o._vortex = t;                    // 0..1 intensity for renderer
       }
     }
   }
@@ -1726,11 +1734,12 @@ function drawTail(ts) {
 // ═══════════════════════════════════════════
 function drawPlayerBody(ts) {
   const s=stg(), r=P.r;
-  // Blink no longer pulses to 0. Floor at .45 so the player remains visible
-  // during the damage invincibility window — was the root cause of the
-  // "sporadic invisibility" complaint. Pulse magnitude .25 instead of .4.
-  const blinkA = P.blink>0 ? (.6 + .25*Math.sin(gt*.04)) : 1;
-  const bv = blinkA;
+  // CRITICAL: Body alpha no longer dimmed by blink. The blink (damage flicker)
+  // is now shown as a bright WHITE OUTLINE pulse drawn AFTER the body — additive,
+  // never subtractive. Player remains 100% visible during damage windows.
+  // (Previous approach reduced bv to .35 minimum which combined with body alphas
+  // of ~.48 produced effectively-invisible alpha of .16 — the user's complaint.)
+  const bv = 1;  // body always full visibility
 
   // Ambient outer glow (drawn before body, no transform)
   bioGlow(P.x, P.y, r*3.8, s.c.gl, .48);
@@ -1739,12 +1748,10 @@ function drawPlayerBody(ts) {
   cx.translate(P.x, P.y);
   cx.rotate(P.hd);
 
-  // SOLID BASE DISC — fully obscures the tail root before colored body fills on top.
-  // This is the final guarantee against tail-body overlap artifacts.
-  cx.globalAlpha = bv * 0.78;
-  cx.fillStyle = '#020c14';
-  cx.beginPath(); cx.arc(0, 0, r * 1.04, 0, TAU); cx.fill();
-  cx.globalAlpha = 1;
+  // NOTE: No dark base disc here. The tail draws BEFORE this body, and uses
+  // source-over compositing without shadowBlur, so the body's fill naturally
+  // caps the tail root. The previous dark base disc was making the body appear
+  // black/invisible by sitting beneath the translucent stage colors.
 
   // ── STAGE 0: MOTE — single-celled organism ──
   if (P.stg===0) {
@@ -1903,21 +1910,29 @@ function drawPlayerBody(ts) {
 
   cx.restore();
 
-  // ── FRENZY persistent tint: makes it unmistakable that frenzy is active ──
-  // Drawn outside the body's rotation so the cyan overlay sits on top of the
-  // player's body color. Pulses faster as time runs out for urgency.
-  if (frenzy) {
-    const rem = fTime / 8000;
-    const urgency = 1 + (1 - rem) * 2;
-    const pulseA = .22 + .18 * Math.sin(ts * .009 * urgency);
-    cx.fillStyle = '#40c8f0';
-    cx.shadowBlur = 12 * zm;
-    cx.shadowColor = '#40c8f0';
-    cx.globalAlpha = pulseA;
-    cx.beginPath(); cx.arc(P.x, P.y, r * 1.08, 0, TAU); cx.fill();
-    cx.shadowBlur = 0;
-    cx.globalAlpha = 1;
+  // ── Damage indicator: bright WHITE outline pulse, never reduces visibility ──
+  // Triggered by P.blink > 0 (damage window). Pulses fast at full visibility
+  // so the player gets clear feedback they were hit, without disappearing.
+  if (P.blink > 0) {
+    const pulseRate = 1 - P.blink/250;
+    const a = .65 + .35*Math.sin(gt * .035);
+    cx.strokeStyle = '#ffffff';
+    cx.lineWidth = 1.8;
+    cx.shadowBlur = 14*zm;
+    cx.shadowColor = '#ff4858';
+    cx.globalAlpha = a * .85;
+    cx.beginPath(); cx.arc(P.x, P.y, r * 1.18, 0, TAU); cx.stroke();
+    // Red outer flicker — clearly conveys "damage taken"
+    cx.strokeStyle = '#ff4858';
+    cx.lineWidth = .9;
+    cx.globalAlpha = a * .6;
+    cx.beginPath(); cx.arc(P.x, P.y, r * 1.32, 0, TAU); cx.stroke();
+    cx.shadowBlur = 0; cx.globalAlpha = 1;
   }
+
+  // ── Frenzy is now communicated by the food swirling around the player and
+  //    the persistent cyan aura ring drawn in drawFrenzyOrbs. No body-tint
+  //    overlay needed — that previously confused the visual "invisibility" issue.
 
   // Shield ring
   if (shOn) {
@@ -1957,20 +1972,20 @@ function drawPlayer(ts) {
 // ═══════════════════════════════════════════
 function drawPlayerAnchor(ts) {
   const s = stg();
-  // 1. Always-on central pip — solid white, very small, very bright
-  cx.shadowBlur = 4 * zm;
+  // Bright central pip — scales with player radius so it's always proportional.
+  // Pulses gently. This is the guaranteed-visible center marker.
+  const pipR = Math.max(2, P.r * 0.18);
+  cx.shadowBlur = 8 * zm;
   cx.shadowColor = '#fff';
   cx.fillStyle = '#fff';
-  cx.globalAlpha = .65 + .15 * Math.sin(ts * .006);
-  cx.beginPath(); cx.arc(P.x, P.y, 1.4, 0, TAU); cx.fill();
+  cx.globalAlpha = .82 + .12 * Math.sin(ts * .006);
+  cx.beginPath(); cx.arc(P.x, P.y, pipR, 0, TAU); cx.fill();
 
-  // 2. Stage-colored selection ring sits just outside the body — confirms
-  //    "this is you". Drawn at low alpha so it doesn't dominate.
+  // Inner stage-colored micro-dot
   cx.shadowBlur = 0;
-  cx.strokeStyle = s.c.pri;
-  cx.lineWidth = .5;
-  cx.globalAlpha = .22;
-  cx.beginPath(); cx.arc(P.x, P.y, P.r * 1.18, 0, TAU); cx.stroke();
+  cx.fillStyle = s.c.pri;
+  cx.globalAlpha = 1;
+  cx.beginPath(); cx.arc(P.x, P.y, pipR * 0.45, 0, TAU); cx.fill();
   cx.globalAlpha = 1;
 }
 
@@ -2132,53 +2147,68 @@ function drawVulnArcs(ts) {
 // DRAW FRENZY ORBS
 // ═══════════════════════════════════════════
 function drawFrenzyOrbs(ts) {
-  if (!frenzy || !frenzyOrbs.length) return;
+  if (!frenzy) return;
 
-  // Aura ring around player showing frenzy active state
-  const auraR = P.r * 2.6 + 4*Math.sin(ts*.014);
+  // 1. Main frenzy aura — pulsing cyan ring around player. Clear, unmistakable.
+  const auraR = P.r * 2.6 + 4 * Math.sin(ts * .014);
   cx.strokeStyle = '#40c8f0';
-  cx.lineWidth = 1.4;
-  cx.shadowBlur = 14*zm; cx.shadowColor = '#40c8f0';
-  cx.globalAlpha = .35 + .25*Math.sin(ts*.012);
+  cx.lineWidth = 1.8;
+  cx.shadowBlur = 14 * zm;
+  cx.shadowColor = '#40c8f0';
+  cx.globalAlpha = .55 + .25 * Math.sin(ts * .012);
   cx.beginPath(); cx.arc(P.x, P.y, auraR, 0, TAU); cx.stroke();
-  cx.shadowBlur = 0; cx.globalAlpha = 1;
 
-  // Frenzy duration ring on player
+  // 2. Duration arc — visible time remaining as a sweep around the aura
   const dRem = fTime / 8000;
   cx.strokeStyle = '#fff';
-  cx.lineWidth = 2.4;
-  cx.globalAlpha = .42;
+  cx.lineWidth = 2.6;
+  cx.globalAlpha = .65;
+  cx.shadowBlur = 6 * zm;
+  cx.shadowColor = '#fff';
   cx.beginPath();
-  cx.arc(P.x, P.y, auraR + 4, -PI/2, -PI/2 + TAU*dRem);
+  cx.arc(P.x, P.y, auraR + 5, -PI/2, -PI/2 + TAU * Math.min(1, dRem));
   cx.stroke();
-  cx.globalAlpha = 1;
 
-  for (const orb of frenzyOrbs) {
-    const ox=P.x+Math.cos(orb.ang)*orb.dist, oy=P.y+Math.sin(orb.ang)*orb.dist;
-    if (!onScr(ox,oy,orb.r*4)) continue;
+  // 3. Outer vortex range ring — soft dashed indicator of pull radius
+  cx.shadowBlur = 0;
+  cx.strokeStyle = '#40c8f0';
+  cx.lineWidth = .7;
+  cx.globalAlpha = .14 + .06 * Math.sin(ts * .008);
+  cx.setLineDash([6, 10]);
+  cx.beginPath(); cx.arc(P.x, P.y, 320, 0, TAU); cx.stroke();
+  cx.setLineDash([]);
 
-    // Bright outer glow
-    bioGlow(ox, oy, orb.r*5, orb.col, .55);
-
-    // Trailing motion blur — short arc behind orb
-    cx.strokeStyle = orb.col;
-    cx.lineWidth = orb.r*.7;
+  // 4. Vortex streaks — draw motion trails on food caught in the pull. Each
+  //    streak points from the food back toward the player, alpha-weighted by
+  //    vortex intensity. This is the "swirling food" visual.
+  cx.shadowBlur = 0;
+  for (const o of orgs) {
+    if (!o._vortex || o._vortex <= 0) continue;
+    const t = o._vortex;
+    // Streak direction = food's actual velocity vector (which is now pointing
+    // mostly toward player due to vortex pull). Length scales with intensity.
+    const speed = Math.hypot(o.vx, o.vy);
+    if (speed < .3) continue;
+    const sl = Math.min(30, speed * 4 + t * 14);
+    const dx = (o.vx / speed) * sl;
+    const dy = (o.vy / speed) * sl;
+    cx.strokeStyle = '#40c8f0';
+    cx.lineWidth = 1.0 + t * 1.4;
     cx.lineCap = 'round';
-    cx.globalAlpha = .42;
-    cx.shadowBlur = 6*zm; cx.shadowColor = orb.col;
+    cx.globalAlpha = .25 + t * .55;
     cx.beginPath();
-    const trail = orb.angSpd*100;
-    cx.arc(P.x, P.y, orb.dist, orb.ang - trail, orb.ang);
+    cx.moveTo(o.x - dx, o.y - dy);
+    cx.lineTo(o.x, o.y);
     cx.stroke();
-
-    // Core
-    cx.shadowBlur=8*zm; cx.shadowColor=orb.col;
-    cx.fillStyle=orb.col; cx.globalAlpha=.85+.12*Math.sin(ts*.008+orb.ang);
-    cx.beginPath(); cx.arc(ox,oy,orb.r,0,TAU); cx.fill();
-    cx.fillStyle='rgba(255,255,255,.7)'; cx.globalAlpha=.65;
-    cx.beginPath(); cx.arc(ox,oy,orb.r*.35,0,TAU); cx.fill();
+    // Bright tip at the front
+    cx.fillStyle = '#ffffff';
+    cx.globalAlpha = .35 + t * .45;
+    cx.beginPath(); cx.arc(o.x, o.y, o.r * .35, 0, TAU); cx.fill();
+    // Decay the vortex flag over time so creatures look normal after frenzy ends
+    o._vortex *= .92;
   }
-  cx.shadowBlur=0; cx.globalAlpha=1;
+
+  cx.globalAlpha = 1;
 }
 
 // ═══════════════════════════════════════════
