@@ -35,11 +35,18 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 #danger{position:fixed;inset:0;z-index:8;pointer-events:none;opacity:0;transition:opacity .45s;background:radial-gradient(ellipse at center,transparent 35%,rgba(130,6,0,.22) 100%)}
 
 /* ── Intro ── */
-#intro{position:fixed;inset:0;z-index:50;background:#00050e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity 1.4s;pointer-events:none}
-#iTitle{font-family:'Cinzel',serif;font-size:clamp(20px,5vw,40px);letter-spacing:clamp(8px,2.5vw,20px);color:#fff;opacity:0;transition:opacity 1.8s;text-align:center}
+#intro{position:fixed;inset:0;z-index:50;background:#00050e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity 1.4s;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+#iTitle{font-family:'Cinzel',serif;font-size:clamp(20px,5vw,40px);letter-spacing:clamp(8px,2.5vw,20px);color:#fff;opacity:0;transition:opacity 1.8s;text-align:center;animation:titleBreathe 6s ease-in-out infinite 2s}
 #iSub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(11px,2vw,14px);letter-spacing:5px;color:rgba(255,255,255,.3);opacity:0;transition:opacity 1.8s .9s;text-align:center}
-#iHint{font-family:'Cormorant Garamond',serif;font-size:11px;letter-spacing:3px;color:rgba(255,255,255,.15);opacity:0;transition:opacity 1.8s 1.8s;text-align:center}
+#iHint{font-family:'Cormorant Garamond',serif;font-size:11px;letter-spacing:3px;color:rgba(255,255,255,.15);opacity:0;transition:opacity 1.8s 1.8s;text-align:center;animation:hintPulse 2.6s ease-in-out infinite 3.5s}
 #iLine{width:1px;height:0;background:rgba(255,255,255,.12);transition:height 1.8s .4s;position:absolute;top:50%;margin-top:-60px}
+#iSpark{position:absolute;top:50%;left:50%;width:2px;height:2px;border-radius:50%;background:#fff;transform:translate(-50%,-50%);opacity:0;box-shadow:0 0 18px 4px rgba(82,255,202,.55);animation:sparkPulse 3.4s ease-in-out infinite 2.4s}
+@keyframes titleBreathe{0%,100%{letter-spacing:clamp(8px,2.5vw,20px);text-shadow:0 0 24px rgba(255,255,255,.18)}50%{letter-spacing:clamp(9px,2.7vw,22px);text-shadow:0 0 40px rgba(255,255,255,.32)}}
+@keyframes hintPulse{0%,100%{opacity:.18;letter-spacing:3px}50%{opacity:.55;letter-spacing:4px}}
+@keyframes sparkPulse{0%,100%{opacity:0;transform:translate(-50%,-50%) scale(.4)}50%{opacity:.55;transform:translate(-50%,-50%) scale(1.4)}}
+
+/* canvas baseline */
+#g{touch-action:none;-webkit-tap-highlight-color:transparent;display:block}
 
 /* ── Pause ── */
 #pBtn{position:fixed;top:11px;right:16px;z-index:15;background:none;border:none;color:rgba(255,255,255,.15);font-size:15px;cursor:pointer;pointer-events:auto;font-family:serif}
@@ -76,9 +83,10 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 
 <div id="intro">
   <div id="iLine"></div>
+  <div id="iSpark"></div>
   <div id="iTitle">GENESIS EVOLUTION</div>
   <div id="iSub">in the beginning, there was signal</div>
-  <div id="iHint">touch or click to emerge</div>
+  <div id="iHint">touch to emerge</div>
 </div>
 
 <button id="pBtn">⏸</button>
@@ -258,6 +266,22 @@ G.addEventListener('pointerdown', e => {
 G.addEventListener('pointermove', e => { if (!ptr.on || paused) return; const w=tw(e); ptr.x=w.x; ptr.y=w.y; });
 G.addEventListener('pointerup', () => ptr.on=false);
 
+// ── CRITICAL: intro div sits above canvas at z-index 50, so pointerdown on the
+// canvas never fires while it's visible. Attach handlers directly to the intro,
+// plus a window-level fallback (covers any edge case on iOS / iframe).
+const introEl = document.getElementById('intro');
+const introTap = (e) => {
+  if (!introActive) return;
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  beginGame();
+};
+introEl.addEventListener('pointerdown', introTap, {passive:false});
+introEl.addEventListener('click', introTap);
+introEl.addEventListener('touchstart', introTap, {passive:false});
+addEventListener('keydown', e => {
+  if (introActive && (e.key===' '||e.key==='Enter'||e.code==='Space')) { e.preventDefault(); beginGame(); }
+});
+
 document.getElementById('pBtn').onclick   = () => { paused=!paused; document.getElementById('pMenu').style.display=paused?'flex':'none'; };
 document.getElementById('resumeB').onclick = () => { paused=false; document.getElementById('pMenu').style.display='none'; };
 document.getElementById('restartB').onclick= () => { paused=false; document.getElementById('pMenu').style.display='none'; init(); };
@@ -287,23 +311,35 @@ function beginGame() {
   introActive = false;
   const el = document.getElementById('intro');
   el.style.opacity = '0';
+  el.style.pointerEvents = 'none';
   setTimeout(() => { el.style.display='none'; }, 1400);
-  // Emergence burst
+
+  // Brief white flash on the screen as we emerge
+  const fl = document.getElementById('flash');
+  if (fl) { fl.style.transition='opacity 0s'; fl.style.background='#fff'; fl.style.opacity='.42';
+    setTimeout(() => { fl.style.transition='opacity 1.2s'; fl.style.opacity='0'; }, 40); }
+
+  // Emergence burst — staggered shockwaves so it feels like genesis, not a click
   setTimeout(() => {
-    burst(P.x, P.y, COL.mote.pri, 50, 4);
-    ring(P.x, P.y, '#fff', 25, 20);
-    shk(5, 300);
-    // Scatter nearby organisms
+    burst(P.x, P.y, COL.mote.pri, 60, 4.5);
+    burst(P.x, P.y, '#fff', 24, 2.6);
+    ring(P.x, P.y, '#fff', 22, 24);
+    shk(6, 360);
+    // Outward shockwave that scatters the local ecosystem
     for (const o of orgs) {
       const d = dst(P, o);
-      if (d < 350) {
+      if (d < 420) {
         const a = ang(P, o);
-        o.vx += Math.cos(a) * 8 * (1 - d/350);
-        o.vy += Math.sin(a) * 8 * (1 - d/350);
-        o.scatterT = 1200;
+        const force = (1 - d/420);
+        o.vx += Math.cos(a) * 9 * force;
+        o.vy += Math.sin(a) * 9 * force;
+        o.scatterT = 1400;
       }
     }
-  }, 800);
+  }, 700);
+  // Secondary expanding ring 350ms later — that "trailer beat"
+  setTimeout(() => { ring(P.x, P.y, COL.mote.pri, 70, 28); }, 1050);
+  setTimeout(() => { ring(P.x, P.y, COL.mote.gl, 120, 32); }, 1400);
 }
 
 // ═══════════════════════════════════════════
@@ -661,7 +697,7 @@ function ecoCollide() {
 // ═══════════════════════════════════════════
 function onScr(x, y, r) {
   const hw=W/(2*zm), hh=H/(2*zm);
-  return x+r>P.x-hw && x-r<P.x+hw && y+r>P.y-hh && y-r<P.y-hh;
+  return x+r>P.x-hw && x-r<P.x+hw && y+r>P.y-hh && y-r<P.y+hh;
 }
 
 function bioGlow(x, y, r, gl, a) {
