@@ -29,10 +29,11 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 #cdC{margin-top:2px;opacity:.38}
 
 /* ── Evolution announce ── */
-#evoAnn{position:fixed;inset:0;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .7s}
-#evoBox{text-align:center;padding:20px 40px;background:rgba(0,5,14,.55);border:1px solid rgba(255,255,255,.05);backdrop-filter:blur(4px)}
-#evoBox h1{font-family:'Cinzel',serif;font-size:clamp(22px,4vw,34px);letter-spacing:12px;margin-bottom:8px}
-#evoBox p{font-family:'Cormorant Garamond',serif;font-size:12px;letter-spacing:4px;color:rgba(255,255,255,.3);font-style:italic}
+#evoAnn{position:fixed;inset:0;z-index:20;pointer-events:none;display:flex;align-items:flex-start;justify-content:center;padding-top:max(70px,env(safe-area-inset-top,0px) + 60px);opacity:0;transition:opacity .7s}
+#evoBox{text-align:center;padding:14px 32px;background:rgba(0,5,14,.42);border:1px solid rgba(255,255,255,.06);border-radius:2px;box-shadow:0 4px 22px rgba(0,0,0,.4);transform:translateY(-6px);transition:transform .7s}
+#evoAnn[style*="opacity: 1"] #evoBox{transform:translateY(0)}
+#evoBox h1{font-family:'Cinzel',serif;font-size:clamp(18px,3.4vw,28px);letter-spacing:10px;margin-bottom:6px}
+#evoBox p{font-family:'Cormorant Garamond',serif;font-size:11px;letter-spacing:3px;color:rgba(255,255,255,.45);font-style:italic}
 
 /* ── Flash / vignette ── */
 #flash{position:fixed;inset:0;z-index:19;pointer-events:none;opacity:0;transition:opacity .25s}
@@ -1094,7 +1095,7 @@ function checkEvo() {
     fl.style.opacity='1'; setTimeout(()=>fl.style.opacity='0',500);
     document.getElementById('evoT').textContent=s.name; document.getElementById('evoT').style.color=s.c.pri;
     document.getElementById('evoS').textContent=s.desc;
-    const ea=document.getElementById('evoAnn'); ea.style.opacity='1'; setTimeout(()=>ea.style.opacity='0',3500);
+    const ea=document.getElementById('evoAnn'); ea.style.opacity='1'; setTimeout(()=>ea.style.opacity='0',2400);
     burst(P.x,P.y,s.c.pri,45,5); ring(P.x,P.y,'#fff',P.r*2,18); shk(8,400); sfxEvo();
     setStageAudio(P.stg);
     if(P.stg>=2) spawn('hunter',3);
@@ -1955,12 +1956,48 @@ function drawPlayerBody(ts) {
 }
 
 // ═══════════════════════════════════════════
-// DRAW PLAYER (correct order: tail → body → antennae)
+// DRAW PLAYER — Bulletproof wrapper. Defensively resets canvas state so no
+// previous draw can leak in (stale shadowBlur, leftover globalAlpha,
+// uncleared composite op, dangling save stack). Also validates P fields so
+// a NaN can't cause a silent off-screen draw.
+//
+// Render order: tail → body → antennae → anchor pip. The anchor is the
+// last-resort visible marker; even if every artistic layer somehow failed,
+// a bright white-and-stage-color dot is guaranteed at P.x, P.y.
 // ═══════════════════════════════════════════
 function drawPlayer(ts) {
-  drawTail(ts);
-  drawPlayerBody(ts);
-  drawAntennae(ts);
+  // 1. Validate state — recover from any NaN that could push the player into
+  //    coordinate space that doesn't render.
+  if (!isFinite(P.x) || !isFinite(P.y)) { P.x = 0; P.y = 0; P.vx = 0; P.vy = 0; }
+  if (!isFinite(P.r) || P.r < 1) P.r = 6;
+  if (!isFinite(P.hd)) P.hd = 0;
+  if (typeof P.stg !== 'number' || P.stg < 0 || P.stg >= STAGES.length) P.stg = 0;
+
+  // 2. Reset canvas state. We MUST do this here because any prior draw
+  //    (drawCreature, drawRadarHalos, particles, anomalies, projectiles)
+  //    might have left properties in a state that would suppress our draws.
+  cx.globalAlpha = 1;
+  cx.shadowBlur = 0;
+  cx.shadowColor = 'transparent';
+  cx.globalCompositeOperation = 'source-over';
+  cx.setLineDash([]);
+  cx.lineWidth = 1;
+  cx.lineCap = 'butt';
+  cx.lineJoin = 'miter';
+
+  // 3. Artistic layers — wrapped so a render error in one doesn't prevent the
+  //    others (and the safety anchor) from drawing.
+  try { drawTail(ts); } catch(e) {}
+  cx.globalAlpha = 1; cx.shadowBlur = 0; cx.globalCompositeOperation = 'source-over';
+
+  try { drawPlayerBody(ts); } catch(e) {}
+  cx.globalAlpha = 1; cx.shadowBlur = 0; cx.globalCompositeOperation = 'source-over';
+
+  try { drawAntennae(ts); } catch(e) {}
+  cx.globalAlpha = 1; cx.shadowBlur = 0; cx.globalCompositeOperation = 'source-over';
+
+  // 4. Guaranteed-visible safety pip — drawn LAST, always at full alpha. If
+  //    everything else somehow failed, the player would still be marked here.
   drawPlayerAnchor(ts);
 }
 
@@ -1971,22 +2008,37 @@ function drawPlayer(ts) {
 // This guarantees the player is locatable in busy scenes.
 // ═══════════════════════════════════════════
 function drawPlayerAnchor(ts) {
-  const s = stg();
-  // Bright central pip — scales with player radius so it's always proportional.
-  // Pulses gently. This is the guaranteed-visible center marker.
-  const pipR = Math.max(2, P.r * 0.18);
-  cx.shadowBlur = 8 * zm;
-  cx.shadowColor = '#fff';
-  cx.fillStyle = '#fff';
-  cx.globalAlpha = .82 + .12 * Math.sin(ts * .006);
-  cx.beginPath(); cx.arc(P.x, P.y, pipR, 0, TAU); cx.fill();
+  const s = STAGES[P.stg] || STAGES[0];
+  const r = Math.max(3, P.r);
 
-  // Inner stage-colored micro-dot
+  // Defensive state reset
+  cx.globalAlpha = 1;
+  cx.shadowBlur = 0;
+  cx.globalCompositeOperation = 'source-over';
+
+  // Layer 1: Soft stage-colored halo — anchors the player in busy scenes
+  cx.shadowBlur = 14 * zm;
+  cx.shadowColor = s.c.pri;
+  cx.fillStyle = s.c.pri;
+  cx.globalAlpha = .24;
+  cx.beginPath(); cx.arc(P.x, P.y, r * 0.55, 0, TAU); cx.fill();
+
+  // Layer 2: Bright white core — high alpha, scales with player size.
+  // This is the absolutely-guaranteed-visible marker.
+  cx.shadowBlur = 6 * zm;
+  cx.shadowColor = '#fff';
+  cx.fillStyle = '#ffffff';
+  cx.globalAlpha = .88 + .10 * Math.sin(ts * .006);
+  cx.beginPath(); cx.arc(P.x, P.y, Math.max(2, r * 0.20), 0, TAU); cx.fill();
+
+  // Layer 3: Stage-color inner dot — confirms identity
   cx.shadowBlur = 0;
   cx.fillStyle = s.c.pri;
   cx.globalAlpha = 1;
-  cx.beginPath(); cx.arc(P.x, P.y, pipR * 0.45, 0, TAU); cx.fill();
+  cx.beginPath(); cx.arc(P.x, P.y, Math.max(1, r * 0.10), 0, TAU); cx.fill();
+
   cx.globalAlpha = 1;
+  cx.shadowBlur = 0;
 }
 
 // ═══════════════════════════════════════════
