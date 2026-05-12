@@ -157,12 +157,12 @@ const COL = {
 };
 
 const STAGES = [
-  { name: 'MOTE',       thr: 0,    next: 120,  c: COL.mote,  spd: 2.8, bR: 6, desc: 'Consume the smaller.',    ab: null,       abT: '',         cd: 0    },
-  { name: 'DRIFTER',    thr: 120,  next: 400,  c: COL.drift, spd: 3.2, bR: 7, desc: 'Propulsion unlocked.',    ab: 'dash',     abT: '↑ Dash',    cd: 700  },
-  { name: 'MEDUSA',     thr: 400,  next: 1100, c: COL.medu,  spd: 2.4, bR: 8, desc: 'Sting aura radiates.',    ab: 'sting',    abT: 'Sting Aura',cd: 0    },
-  { name: 'NAGA',       thr: 1100, next: 2800, c: COL.naga,  spd: 3.4, bR: 7, desc: 'The lash awakens.',       ab: 'whip',     abT: '↑ Whip',    cd: 1000 },
-  { name: 'TITAN',      thr: 2800, next: 6000, c: COL.titan, spd: 2.2, bR: 9, desc: 'Gravity bends to will.',  ab: 'gravity',  abT: 'Gravity',   cd: 0    },
-  { name: 'PRIMORDIAL', thr: 6000, next: 1/0,  c: COL.primo, spd: 2.8, bR: 8, desc: 'The first and the last.', ab: 'bolt',     abT: '↑ Bolt',    cd: 400  },
+  { name: 'MOTE',       thr: 0,    next: 120,  c: COL.mote,  spd: 2.8, bR: 6, desc: 'Consume the smaller.',                ab: null,       abT: '',         cd: 0    },
+  { name: 'DRIFTER',    thr: 120,  next: 400,  c: COL.drift, spd: 3.2, bR: 7, desc: 'Propulsion stirs — the world declares itself.', ab: 'dash', abT: '↑ Dash',    cd: 700  },
+  { name: 'MEDUSA',     thr: 400,  next: 1100, c: COL.medu,  spd: 2.4, bR: 8, desc: 'Sting aura radiates. Soft seams glow.', ab: 'sting',  abT: 'Sting Aura',cd: 0    },
+  { name: 'NAGA',       thr: 1100, next: 2800, c: COL.naga,  spd: 3.4, bR: 7, desc: 'The lash awakens. Veils unravel.',     ab: 'whip',     abT: '↑ Whip',    cd: 1000 },
+  { name: 'TITAN',      thr: 2800, next: 6000, c: COL.titan, spd: 2.2, bR: 9, desc: 'Gravity bends to will.',               ab: 'gravity',  abT: 'Gravity',   cd: 0    },
+  { name: 'PRIMORDIAL', thr: 6000, next: 1/0,  c: COL.primo, spd: 2.8, bR: 8, desc: 'The first and the last.',              ab: 'bolt',     abT: '↑ Bolt',    cd: 400  },
 ];
 
 // ═══════════════════════════════════════════
@@ -282,13 +282,76 @@ addEventListener('keydown', e => {
   if (introActive && (e.key===' '||e.key==='Enter'||e.code==='Space')) { e.preventDefault(); beginGame(); }
 });
 
+// ═══════════════════════════════════════════
+// AUDIO — mute fix + stage-aware playback
+// ═══════════════════════════════════════════
+// Each stage has its own playback rate + lowpass cutoff. Earlier stages feel
+// muffled and slow (submerged, primitive); later stages open up bright and fast.
+const STAGE_AUDIO = [
+  { rate:0.86, cutoff:700   }, // mote — submerged hum
+  { rate:0.92, cutoff:1600  }, // drifter
+  { rate:1.00, cutoff:3200  }, // medusa
+  { rate:1.06, cutoff:6500  }, // naga
+  { rate:1.11, cutoff:11000 }, // titan
+  { rate:1.18, cutoff:18000 }, // primordial — fully open
+];
+let audioCtx=null, bgmFilter=null, bgmSrc=null, audioInited=false;
+
+function initAudio() {
+  if (audioInited) return;
+  const bgm = document.getElementById('bgm'); if (!bgm) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { audioInited = true; updateStageAudio(); return; } // fall back to rate-only
+    audioCtx = new AC();
+    bgmSrc = audioCtx.createMediaElementSource(bgm);
+    bgmFilter = audioCtx.createBiquadFilter();
+    bgmFilter.type = 'lowpass';
+    bgmFilter.frequency.value = STAGE_AUDIO[0].cutoff;
+    bgmFilter.Q.value = 0.7;
+    bgmSrc.connect(bgmFilter).connect(audioCtx.destination);
+    audioInited = true;
+    updateStageAudio();
+  } catch (e) { audioInited = true; updateStageAudio(); }
+}
+
+function updateStageAudio() {
+  const bgm = document.getElementById('bgm'); if (!bgm) return;
+  const cfg = STAGE_AUDIO[P.stg] || STAGE_AUDIO[STAGE_AUDIO.length-1];
+  bgm.playbackRate = cfg.rate;
+  if (bgmFilter && audioCtx) {
+    try {
+      const now = audioCtx.currentTime;
+      bgmFilter.frequency.cancelScheduledValues(now);
+      bgmFilter.frequency.setValueAtTime(bgmFilter.frequency.value, now);
+      bgmFilter.frequency.linearRampToValueAtTime(cfg.cutoff, now + 2.4);
+    } catch(e){}
+  }
+}
+
+function setMute(m) {
+  muted = m;
+  document.getElementById('muteB').textContent = muted ? 'Unmute' : 'Mute';
+  ['bgm','sfxEat','sfxHurt','sfxEvo'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.muted = muted;
+  });
+  const b = document.getElementById('bgm');
+  if (b && !muted && b.paused) b.play().catch(()=>{});
+  if (audioCtx && audioCtx.state === 'suspended' && !muted) audioCtx.resume().catch(()=>{});
+}
+
 document.getElementById('pBtn').onclick   = () => { paused=!paused; document.getElementById('pMenu').style.display=paused?'flex':'none'; };
 document.getElementById('resumeB').onclick = () => { paused=false; document.getElementById('pMenu').style.display='none'; };
-document.getElementById('restartB').onclick= () => { paused=false; document.getElementById('pMenu').style.display='none'; init(); };
-document.getElementById('muteB').onclick   = () => { muted=!muted; document.getElementById('muteB').textContent=muted?'Unmute':'Mute'; };
+document.getElementById('restartB').onclick= () => { paused=false; document.getElementById('pMenu').style.display='none'; init(); updateStageAudio(); };
+document.getElementById('muteB').onclick   = () => setMute(!muted);
 
 function snd(id) { const s=document.getElementById(id); if(s&&!muted){s.currentTime=0;s.play().catch(()=>{});} }
-['touchstart','pointerdown'].forEach(ev => addEventListener(ev, ()=>{ const b=document.getElementById('bgm'); if(b&&b.paused&&!muted)b.play().catch(()=>{}); }, {once:true}));
+// First user gesture: start bgm AND init Web Audio graph (must be in user-gesture handler)
+['touchstart','pointerdown'].forEach(ev => addEventListener(ev, ()=>{
+  initAudio();
+  const b=document.getElementById('bgm'); if(b&&b.paused&&!muted) b.play().catch(()=>{});
+}, {once:true}));
 
 // ═══════════════════════════════════════════
 // INTRO SEQUENCE
@@ -365,6 +428,92 @@ function shk(i, d) { shi=Math.max(shi,i); shd=Math.max(shd,d); }
 // ═══════════════════════════════════════════
 function canEat(o) { return o.r < P.r * .8; }
 function isPred(o) { return o.r > P.r * 1.2; }
+
+// ═══════════════════════════════════════════
+// SENSE / RADAR SYSTEM
+// Unlocks at stage 1 (Drifter). Range and precision scale with evolution.
+// Level 1: short range, basic prey/predator coloring
+// Level 2: longer range, vulnerable-angle hints on marginal prey
+// Level 3+: pierces same-color camouflage clusters
+// Level 4+: predator trajectories
+// Level 5:  effectively omniscient
+// ═══════════════════════════════════════════
+const SENSE_RANGE = [0, 200, 320, 440, 580, 800];
+
+// Color families — used for camouflage masking. Smaller creatures of the same
+// family as a larger creature can cluster near it; their radar signature dims.
+const COLOR_FAMILY = {
+  bloom:'green', mote:'green',
+  polyp:'yellow', lurker:'yellow',
+  tendril:'pink', phantom:'pink',
+  hunter:'red', behemoth:'red',
+  levia:'blue',
+  echo:'white',
+};
+
+// Vulnerable angle per creature type (relative to the prey's heading).
+// 0 = head-on, PI = directly behind, PI/2 = right flank, -PI/2 = left flank.
+// `w` is the arc width (radians). w >= TAU means no preferred angle.
+const VULN = {
+  bloom:    { ang:0,    w:TAU  }, // omni-edible
+  mote:     { ang:0,    w:TAU  },
+  polyp:    { ang:0,    w:TAU  },
+  tendril:  { ang:PI/2, w:1.4  }, // flanks (bell mouth faces forward)
+  hunter:   { ang:PI,   w:1.6  }, // tail strike
+  lurker:   { ang:0,    w:1.1  }, // frontal — the lure dangles forward, exposed
+  phantom:  { ang:PI,   w:1.4  }, // behind the veil
+  echo:     { ang:PI,   w:0.9  }, // narrow rear seam
+  levia:    { ang:PI,   w:1.2  }, // tail flukes
+  behemoth: { ang:PI,   w:0.7  }, // tiny apex weakspot
+};
+
+function canEatAngle(o) {
+  // Marginal-size kill: only succeeds when player approaches from the prey's
+  // vulnerable side. Requires sense level ≥ 1 (visible cue) but works without it.
+  if (o.r < P.r * .8) return false;        // standard kill range handles this
+  if (o.r >= P.r * 1.08) return false;     // too large entirely
+  const v = VULN[o.type];
+  if (!v || v.w >= TAU - 0.01) return false;
+  const a = ang(o, P);                     // direction from prey to player
+  const target = o.hd + v.ang;
+  const df = Math.abs(Math.atan2(Math.sin(a - target), Math.cos(a - target)));
+  return df < v.w / 2;
+}
+
+function senseRange() { return SENSE_RANGE[P.stg] || 0; }
+function senseLevel() { return P.stg; }
+
+function updateSense() {
+  const range = senseRange(), lvl = senseLevel();
+  for (const o of orgs) {
+    o._maskAnchor = null;
+    if (range === 0) { o._inRange=false; o._edib=0; o._pred=0; o._maskHide=0; continue; }
+    const d = dst(P, o);
+    o._inRange = d < range;
+    if (!o._inRange) { o._edib=0; o._pred=0; o._maskHide=0; continue; }
+    o._edib = canEat(o) ? 1 : (canEatAngle(o) ? 0.5 : 0);
+    o._pred = isPred(o) ? 1 : 0;
+
+    // Camouflage check — same color family, larger anchor nearby
+    const fam = COLOR_FAMILY[o.type];
+    o._maskHide = 0;
+    if (fam && o.r < 22) {
+      let best=null, bestD=110;
+      for (const m of gNear(o.x, o.y, 110)) {
+        if (m===o || m.r < o.r*1.5) continue;
+        if (COLOR_FAMILY[m.type] !== fam) continue;
+        const md = dst(o, m);
+        if (md < bestD) { best=m; bestD=md; }
+      }
+      if (best) {
+        o._maskAnchor = best;
+        // Higher sense level pierces the mask. Lower stages see it dimmed.
+        const fade = 1 - bestD/110;
+        o._maskHide = lvl >= 3 ? 0 : fade * 0.78;
+      }
+    }
+  }
+}
 
 function boids(o) {
   const T = ORGS[o.type]; if (!T.school) return {fx:0,fy:0};
@@ -518,6 +667,21 @@ function aiOrg(o, dt) {
   const fl=boids(o);
   o.vx=o.vx*.9+((tx-o.x)*.04+fl.fx*.3);
   o.vy=o.vy*.9+((ty-o.y)*.04+fl.fy*.3);
+
+  // ── Camouflage seek: when player is sensed, drift toward same-color larger anchor ──
+  if (o._maskAnchor) {
+    const pD = dst(P, o);
+    if (pD < 320) {
+      const ma = ang(o, o._maskAnchor);
+      const md = dst(o, o._maskAnchor);
+      const ideal = o._maskAnchor.r + o.r + 8;
+      const offset = md - ideal;
+      const pull = .055 * (1 - cl(pD/320, 0, 1));
+      o.vx += Math.cos(ma) * pull * Math.sign(offset||1);
+      o.vy += Math.sin(ma) * pull * Math.sign(offset||1);
+    }
+  }
+
   o.x+=o.vx*(dt/16); o.y+=o.vy*(dt/16);
   o.hd=Math.atan2(o.vy,o.vx);
   if (dst(P,o)>2200) { const a=Math.random()*TAU,dd=rng(500,T.spW); o.x=P.x+Math.cos(a)*dd; o.y=P.y+Math.sin(a)*dd; o.hp=o.mhp; o.ambR=T.beh==='ambush'; }
@@ -603,6 +767,7 @@ function checkEvo() {
     document.getElementById('evoS').textContent=s.desc;
     const ea=document.getElementById('evoAnn'); ea.style.opacity='1'; setTimeout(()=>ea.style.opacity='0',3500);
     burst(P.x,P.y,s.c.pri,45,5); ring(P.x,P.y,'#fff',P.r*2,18); shk(8,400); snd('sfxEvo');
+    updateStageAudio();
     if(P.stg>=2) spawn('hunter',3);
     if(P.stg>=3){spawn('phantom',2);if(Math.random()<.5)spawn('echo',1);}
     if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);}
@@ -618,12 +783,16 @@ function collide(dt) {
   for (let i=nearP.length-1; i>=0; i--) {
     const o=nearP[i]; if(!orgs.includes(o))continue;
     const d=dst(P,o);
-    if (canEat(o)&&d<P.r) {
-      const T=ORGS[o.type], gain=calcGain(T.mass,P.mass);
+    if ((canEat(o) || canEatAngle(o))&&d<P.r*1.05) {
+      const T=ORGS[o.type], angleKill = !canEat(o);
+      let gain=calcGain(T.mass,P.mass);
+      if (angleKill) gain *= 1.6;  // skillful precision strike — bigger reward
       P.mass+=gain; score+=Math.floor(gain*8); streak++; streakT=2500;
-      burst(o.x,o.y,T.col,8,1.8); fTxt(o.x,o.y-10,'+'+Math.floor(gain),T.col);
-      if (streak>2) fTxt(o.x,o.y-24,streak+'×','rgba(255,255,255,.4)');
-      shk(.6+o.r*.06,50); snd('sfxEat');
+      burst(o.x,o.y,T.col,angleKill?14:8,angleKill?2.6:1.8);
+      if (angleKill) { ring(o.x,o.y,'#ffd860',o.r*1.4,14); fTxt(o.x,o.y-24,'PRECISION','#ffd860'); }
+      fTxt(o.x,o.y-10,'+'+Math.floor(gain),T.col);
+      if (streak>2) fTxt(o.x,o.y-(angleKill?38:24),streak+'×','rgba(255,255,255,.4)');
+      shk(.6+o.r*.06+(angleKill?1.5:0),50+(angleKill?80:0)); snd('sfxEat');
       const idx=orgs.indexOf(o); if(idx>=0)orgs.splice(idx,1);
       const cnt=orgs.filter(q=>q.type===o.type).length;
       if (cnt<ORGS[o.type].mx) setTimeout(()=>spawn(o.type,1),rng(1500,4000));
@@ -632,7 +801,7 @@ function collide(dt) {
     if (isPred(o)&&d<o.r&&P.blink<=0&&!shOn) {
       P.mass=Math.max(5,P.mass-ORGS[o.type].mass*.08*(dt/16)); P.blink=250;
       shk(2.5,80); burst(P.x,P.y,'#ff2244',4,1.2); snd('sfxHurt');
-      if (P.stg>0&&P.mass<STAGES[P.stg].thr*.55) { P.stg=Math.max(0,P.stg-1); fTxt(P.x,P.y-28,'DE-EVOLVED','#ff4444'); shk(6,300); }
+      if (P.stg>0&&P.mass<STAGES[P.stg].thr*.55) { P.stg=Math.max(0,P.stg-1); fTxt(P.x,P.y-28,'DE-EVOLVED','#ff4444'); shk(6,300); updateStageAudio(); }
     }
     if (o.hp<=0) {
       const T=ORGS[o.type], gain=calcGain(T.mass*.4,P.mass);
@@ -1266,13 +1435,165 @@ function drawPlayerBody(ts) {
 }
 
 // ═══════════════════════════════════════════
-// DRAW PLAYER (correct order: tail → body)
+// DRAW PLAYER (correct order: tail → body → antennae)
 // ═══════════════════════════════════════════
 function drawPlayer(ts) {
-  // 1. Tail first (body will draw over its root)
   drawTail(ts);
-  // 2. Body on top — this is what caps the tail-junction cleanly
   drawPlayerBody(ts);
+  drawAntennae(ts);
+}
+
+// ═══════════════════════════════════════════
+// ANTENNAE — Sensory organs that appear with the radar trait.
+// Stage 1+ get a small forked antenna pair that lengthens with evolution.
+// Tip color matches stage; sways subtly.
+// ═══════════════════════════════════════════
+function drawAntennae(ts) {
+  if (P.stg < 1) return;
+  const s=stg(), r=P.r;
+  const len = r * (.55 + (P.stg-1) * .22);
+  const spread = .42;
+  const sway = Math.sin(ts*.005)*.07;
+
+  cx.save();
+  cx.translate(P.x, P.y);
+  cx.rotate(P.hd);
+
+  for (const sgn of [-1, 1]) {
+    const baseX = r * .55, baseY = sgn * r * .18;
+    const tipX  = baseX + len * .9;
+    const tipY  = baseY + sgn * (r*.5 + len*spread) + sway*sgn*r*.3;
+    const ctrlX = baseX + len * .45;
+    const ctrlY = baseY + sgn * r * .55;
+
+    // Antenna line — translucent stage color
+    cx.strokeStyle = s.c.pri;
+    cx.lineWidth = .55;
+    cx.lineCap = 'round';
+    cx.shadowBlur = 4*zm; cx.shadowColor = s.c.pri;
+    cx.globalAlpha = .58;
+    cx.beginPath();
+    cx.moveTo(baseX, baseY);
+    cx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
+    cx.stroke();
+
+    // Tip bulb — pulses on radar sweep
+    const sweepPh = ((ts * .0006) % 1);
+    const tipPulse = .7 + .8 * Math.exp(-Math.pow((sweepPh - .25)*4, 2));
+    cx.fillStyle = s.c.pri;
+    cx.globalAlpha = .85 * tipPulse;
+    cx.beginPath(); cx.arc(tipX, tipY, .9 + .35*tipPulse, 0, TAU); cx.fill();
+  }
+  cx.restore();
+  cx.globalAlpha = 1; cx.shadowBlur = 0;
+}
+
+// ═══════════════════════════════════════════
+// RADAR — slow expanding pulse from player, scaled to sense range.
+// Plus a faint static ring marking the radar's outer limit.
+// ═══════════════════════════════════════════
+function drawRadarPulse(ts) {
+  const range = senseRange();
+  if (range === 0) return;
+  const s = stg();
+  cx.save();
+
+  // Expanding pulse — sweeps outward and fades
+  const pulse = (ts * .00035) % 1;
+  cx.strokeStyle = s.c.pri;
+  cx.lineWidth = 1.2;
+  cx.globalAlpha = .12 * (1 - pulse);
+  cx.beginPath(); cx.arc(P.x, P.y, range * pulse, 0, TAU); cx.stroke();
+
+  // Static outer ring at full range
+  cx.globalAlpha = .055 + .025*Math.sin(ts*.003);
+  cx.setLineDash([3, 9]);
+  cx.beginPath(); cx.arc(P.x, P.y, range, 0, TAU); cx.stroke();
+  cx.setLineDash([]);
+
+  cx.restore();
+  cx.globalAlpha = 1;
+}
+
+// ═══════════════════════════════════════════
+// RADAR HALOS — color-code creatures by edibility / threat.
+// Green: edible standard. Yellow: angle-killable (precision target).
+// Red: predator (will hurt you). Neutral: ignored entirely.
+// Camouflaged creatures show dimmer halos until sense level pierces the veil.
+// ═══════════════════════════════════════════
+function drawRadarHalos(ts) {
+  if (P.stg < 1) return;
+  cx.save();
+  for (const o of orgs) {
+    if (!o._inRange) continue;
+    const hide = o._maskHide || 0;
+    if (hide >= .98) continue;
+
+    let col=null;
+    if (o._edib === 1)        col = '#52FFCA';
+    else if (o._edib === 0.5) col = '#FFD860';
+    else if (o._pred)         col = '#FF4858';
+    if (!col) continue;       // neutral targets get no halo
+
+    const alpha = (1 - hide) * .42;
+    const pulse = 1 + .045 * Math.sin(ts*.007 + (o.x+o.y)*.012);
+
+    cx.globalAlpha = alpha;
+    cx.strokeStyle = col;
+    cx.lineWidth = 1.1;
+    cx.shadowBlur = 7*zm; cx.shadowColor = col;
+    cx.beginPath(); cx.arc(o.x, o.y, o.r * 1.45 * pulse, 0, TAU); cx.stroke();
+
+    // Tiny tick marks at cardinals for stronger radar feel
+    cx.globalAlpha = alpha * .8;
+    cx.lineWidth = .8;
+    cx.shadowBlur = 0;
+    for (let i=0;i<4;i++){
+      const a = i*PI/2 + ts*.0008 + (o.x*.001);
+      const ix = o.x + Math.cos(a) * o.r * 1.55 * pulse;
+      const iy = o.y + Math.sin(a) * o.r * 1.55 * pulse;
+      const ox = o.x + Math.cos(a) * o.r * 1.75 * pulse;
+      const oy = o.y + Math.sin(a) * o.r * 1.75 * pulse;
+      cx.beginPath(); cx.moveTo(ix,iy); cx.lineTo(ox,oy); cx.stroke();
+    }
+  }
+  cx.restore();
+  cx.globalAlpha = 1; cx.shadowBlur = 0;
+}
+
+// ═══════════════════════════════════════════
+// VULNERABILITY ARC — shows where on a marginal prey to strike.
+// Only renders for in-range marginal kills; requires sense level ≥ 2.
+// ═══════════════════════════════════════════
+function drawVulnArcs(ts) {
+  if (P.stg < 2) return;
+  cx.save();
+  for (const o of orgs) {
+    if (!o._inRange || o._edib !== 0.5) continue;
+    if ((o._maskHide||0) >= .7) continue;
+    const v = VULN[o.type];
+    if (!v || v.w >= TAU - .01) continue;
+    if (dst(P, o) > o.r * 7) continue;
+
+    const a = o.hd + v.ang;
+    cx.strokeStyle = '#FFD860';
+    cx.lineWidth = 2.2;
+    cx.shadowBlur = 8*zm; cx.shadowColor = '#FFD860';
+    cx.globalAlpha = .45 + .3 * Math.sin(ts*.011);
+    cx.beginPath(); cx.arc(o.x, o.y, o.r * 1.35, a - v.w/2, a + v.w/2);
+    cx.stroke();
+
+    // Strike-direction tick pointing inward
+    cx.lineWidth = 1.1;
+    cx.globalAlpha = .55 + .25 * Math.sin(ts*.011);
+    const tx1 = o.x + Math.cos(a) * o.r * 1.55;
+    const ty1 = o.y + Math.sin(a) * o.r * 1.55;
+    const tx2 = o.x + Math.cos(a) * o.r * 1.15;
+    const ty2 = o.y + Math.sin(a) * o.r * 1.15;
+    cx.beginPath(); cx.moveTo(tx1,ty1); cx.lineTo(tx2,ty2); cx.stroke();
+  }
+  cx.restore();
+  cx.globalAlpha = 1; cx.shadowBlur = 0;
 }
 
 // ═══════════════════════════════════════════
@@ -1366,11 +1687,28 @@ const mmCtx=document.getElementById('mmC').getContext('2d');
 function drawMinimap() {
   mmCtx.clearRect(0,0,80,80); mmCtx.fillStyle='rgba(0,5,14,.35)'; mmCtx.fillRect(0,0,80,80);
   const sc=76/3200;
+
+  // Radar range ring on minimap (matches world-space sense range)
+  const range = senseRange();
+  if (range > 0) {
+    mmCtx.strokeStyle=stg().c.pri; mmCtx.lineWidth=.5; mmCtx.globalAlpha=.25;
+    mmCtx.beginPath(); mmCtx.arc(40,40, range*sc, 0, TAU); mmCtx.stroke();
+    mmCtx.globalAlpha=1;
+  }
+
   for (const o of orgs) {
     const T=ORGS[o.type], dx=(o.x-P.x)*sc+40, dy=(o.y-P.y)*sc+40;
     if (dx<1||dx>79||dy<1||dy>79) continue;
-    mmCtx.fillStyle=canEat(o)?'#5a5':isPred(o)?'#a44':T.col;
+    let col;
+    if (canEat(o)) col = '#52ffca';
+    else if (canEatAngle(o)) col = '#ffd860';
+    else if (isPred(o)) col = '#ff4858';
+    else col = T.col;
+    // Dim if masked (sense level < 3)
+    if (o._maskHide && P.stg < 3) mmCtx.globalAlpha = 1 - o._maskHide*.7;
+    mmCtx.fillStyle = col;
     mmCtx.beginPath(); mmCtx.arc(dx,dy,cl(o.r*.05,.35,1.5),0,TAU); mmCtx.fill();
+    mmCtx.globalAlpha = 1;
   }
   mmCtx.fillStyle=stg().c.pri; mmCtx.beginPath(); mmCtx.arc(40,40,2,0,TAU); mmCtx.fill();
 }
@@ -1391,6 +1729,7 @@ function loop(ts) {
   // Update
   rebuildGrid();
   updateP(dt);
+  updateSense();              // annotate radar/mask flags on creatures (read by AI + draw)
   for (const o of orgs) aiOrg(o,dt);
   collide(dt);
   ecoCollide();
@@ -1437,7 +1776,13 @@ function loop(ts) {
 
   drawPickups(ts);
   drawFrenzyOrbs(ts);
-  drawPlayer(ts);  // tail then body — clean junction
+
+  // Radar overlay — draw before player so player sits on top of indicators
+  drawRadarPulse(ts);
+  drawRadarHalos(ts);
+  drawVulnArcs(ts);
+
+  drawPlayer(ts);  // tail then body then antennae — clean junction
 
   // Float texts
   cx.textAlign='center'; cx.font='500 11px "Cormorant Garamond",serif';
