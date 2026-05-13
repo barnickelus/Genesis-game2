@@ -164,11 +164,11 @@ const COL = {
 
 const STAGES = [
   { name: 'MOTE',       thr: 0,    next: 120,  c: COL.mote,  spd: 2.8, bR: 6, desc: 'Consume the smaller.',                ab: null,       abT: '',         cd: 0    },
-  { name: 'DRIFTER',    thr: 120,  next: 400,  c: COL.drift, spd: 3.2, bR: 7, desc: 'Propulsion stirs — the world declares itself.', ab: 'dash', abT: '↑ Dash',    cd: 700  },
-  { name: 'MEDUSA',     thr: 400,  next: 1100, c: COL.medu,  spd: 2.4, bR: 8, desc: 'Sting aura radiates. Soft seams glow.', ab: 'sting',  abT: 'Sting Aura',cd: 0    },
-  { name: 'NAGA',       thr: 1100, next: 2800, c: COL.naga,  spd: 3.4, bR: 7, desc: 'The lash awakens. Veils unravel.',     ab: 'whip',     abT: '↑ Whip',    cd: 1000 },
-  { name: 'TITAN',      thr: 2800, next: 6000, c: COL.titan, spd: 2.2, bR: 9, desc: 'Gravity bends to will.',               ab: 'gravity',  abT: 'Gravity',   cd: 0    },
-  { name: 'PRIMORDIAL', thr: 6000, next: 1/0,  c: COL.primo, spd: 2.8, bR: 8, desc: 'The first and the last.',              ab: 'bolt',     abT: '↑ Bolt',    cd: 400  },
+  { name: 'DRIFTER',    thr: 120,  next: 380,  c: COL.drift, spd: 3.2, bR: 7, desc: 'Propulsion stirs — the world declares itself.', ab: 'dash', abT: '↑ Dash',    cd: 700  },
+  { name: 'MEDUSA',     thr: 380,  next: 850,  c: COL.medu,  spd: 2.6, bR: 8, desc: 'Sting aura radiates. Soft seams glow.', ab: 'sting',  abT: 'Sting Aura',cd: 0    },
+  { name: 'NAGA',       thr: 850,  next: 2200, c: COL.naga,  spd: 3.4, bR: 7, desc: 'The lash awakens. Veils unravel.',     ab: 'whip',     abT: '↑ Whip',    cd: 1000 },
+  { name: 'TITAN',      thr: 2200, next: 5000, c: COL.titan, spd: 2.3, bR: 9, desc: 'Gravity bends to will.',               ab: 'gravity',  abT: 'Gravity',   cd: 0    },
+  { name: 'PRIMORDIAL', thr: 5000, next: 1/0,  c: COL.primo, spd: 2.8, bR: 8, desc: 'The first and the last.',              ab: 'bolt',     abT: '↑ Bolt',    cd: 400  },
 ];
 
 // ═══════════════════════════════════════════
@@ -1054,8 +1054,27 @@ function updateP(dt) {
 
   // Passive abilities
   if (s.ab==='sting') {
-    for (const o of gNear(P.x,P.y,P.r*3)) {
-      if (o.r<P.r*.8 && dst(P,o)<P.r*3) { o.stunT=Math.max(o.stunT,400); if(Math.random()<.02){o.hp--;o.flT=120;} }
+    // Sting aura kills small prey passively as they brush against you.
+    // This is the key Medusa survival/feeding mechanic to break the difficulty wall.
+    // Range scaled with mass so larger Medusas reap larger sting zones.
+    const range = P.r * 3.4;
+    for (const o of gNear(P.x, P.y, range)) {
+      const d = dst(P, o);
+      if (d >= range) continue;
+      if (o.r >= P.r * 0.95) continue;     // only affects smaller creatures
+      // Closer = stronger sting. Smaller = more vulnerable.
+      const intensity = 1 - d/range;
+      o.stunT = Math.max(o.stunT, 500);
+      if (Math.random() < 0.08 * intensity) {
+        o.hp -= 0.5 + intensity * 0.6;
+        o.flT = 140;
+      }
+      // Tiny visual pull — sting drags prey gently toward you
+      if (d > 4) {
+        const pa = ang(o, P);
+        o.vx += Math.cos(pa) * 0.04 * intensity;
+        o.vy += Math.sin(pa) * 0.04 * intensity;
+      }
     }
   }
   if (s.ab==='gravity') {
@@ -1263,11 +1282,11 @@ function collide(dt) {
 }
 
 const ANOM_HOSTS = {
-  hunter:   { mass: 28, col: '#ff5878' },
-  lurker:   { mass: 38, col: '#ffaa40' },
-  phantom:  { mass: 34, col: '#e060ff' },
-  levia:    { mass: 52, col: '#60c8ff' },
-  behemoth: { mass: 78, col: '#ff3030' },
+  hunter:   { mass: 28, col: '#ff5878', gl: 'rgba(255,88,120,' },
+  lurker:   { mass: 38, col: '#ffaa40', gl: 'rgba(255,170,64,' },
+  phantom:  { mass: 34, col: '#e060ff', gl: 'rgba(224,96,255,' },
+  levia:    { mass: 52, col: '#60c8ff', gl: 'rgba(96,200,255,' },
+  behemoth: { mass: 78, col: '#ff3030', gl: 'rgba(255,48,48,' },
 };
 
 function spawnAnomaly() {
@@ -1282,7 +1301,7 @@ function spawnAnomaly() {
     orbR: host.r + 30 + rng(0,12),
     orbSpd: rng(.0008, .0016) * (Math.random()<.5 ? 1 : -1),
     x: host.x, y: host.y,
-    r: 7, mass: cfg.mass, col: cfg.col,
+    r: 7, mass: cfg.mass, col: cfg.col, gl: cfg.gl,
     life: rng(18000, 26000),
     ph: rng(0, TAU),
     freeT: 0,
@@ -1292,10 +1311,15 @@ function spawnAnomaly() {
 
 function updateAnomalies(dt) {
   anomCd -= dt;
-  // Spawn cadence scales with stage — more anomalies as you grow into needing them
-  const wantedCount = P.stg < 2 ? 1 : P.stg < 4 ? 2 : 3;
+  // Spawn cadence scales with stage. Medusa (stg=2) gets a generous 3 anomalies
+  // to ease the difficulty wall the user identified at ~500 mass. After Naga
+  // settles at 2-3 since you have abilities to compensate.
+  const wantedCount = P.stg < 2 ? 1 : (P.stg === 2 ? 3 : P.stg < 5 ? 2 : 3);
+  // Faster cadence at Medusa specifically
+  const cdMin = P.stg === 2 ? 6000 : 9000;
+  const cdRand = P.stg === 2 ? 5000 : 7000;
   if (anomCd <= 0 && anoms.length < wantedCount) {
-    if (spawnAnomaly()) anomCd = 9000 + rng(0, 7000);
+    if (spawnAnomaly()) anomCd = cdMin + rng(0, cdRand);
     else anomCd = 2500;
   }
 
@@ -1366,10 +1390,20 @@ function onScr(x, y, r) {
 
 function bioGlow(x, y, r, gl, a) {
   if (!onScr(x,y,r*1.5)) return;
-  cx.globalAlpha=a;
-  const g=cx.createRadialGradient(x,y,0,x,y,r);
-  g.addColorStop(0, gl+'.1)'); g.addColorStop(.55, gl+'.03)'); g.addColorStop(1, gl+'0)');
-  cx.fillStyle=g; cx.beginPath(); cx.arc(x,y,r,0,TAU); cx.fill(); cx.globalAlpha=1;
+  // Defensive: gl must be an rgba prefix like 'rgba(82,255,202,' to which we
+  // append '.1)' etc. If it's a hex color, addColorStop would throw and abort
+  // the entire frame's render pipeline. Validate and short-circuit safely.
+  if (typeof gl !== 'string' || gl.indexOf('rgba(') !== 0 || gl.charAt(gl.length-1) !== ',') return;
+  try {
+    cx.globalAlpha = a;
+    const g = cx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0,   gl + '.1)');
+    g.addColorStop(.55, gl + '.03)');
+    g.addColorStop(1,   gl + '0)');
+    cx.fillStyle = g;
+    cx.beginPath(); cx.arc(x, y, r, 0, TAU); cx.fill();
+  } catch(e) { /* fail silent — never let a glow abort the frame */ }
+  cx.globalAlpha = 1;
 }
 
 // ═══════════════════════════════════════════
@@ -1956,14 +1990,94 @@ function drawPlayerBody(ts) {
 }
 
 // ═══════════════════════════════════════════
-// DRAW PLAYER — Bulletproof wrapper. Defensively resets canvas state so no
-// previous draw can leak in (stale shadowBlur, leftover globalAlpha,
-// uncleared composite op, dangling save stack). Also validates P fields so
-// a NaN can't cause a silent off-screen draw.
-//
-// Render order: tail → body → antennae → anchor pip. The anchor is the
-// last-resort visible marker; even if every artistic layer somehow failed,
-// a bright white-and-stage-color dot is guaranteed at P.x, P.y.
+// DRAW PLAYER — SCREEN SPACE FAILSAFE
+// ═══════════════════════════════════════════
+// Pure screen-space draw at canvas center. Operates after all other drawing,
+// including overlays. Renders a stylized but recognizable player silhouette
+// scaled to current player radius. This is the guarantee that the player is
+// visible no matter what happens elsewhere in the pipeline.
+function drawPlayerScreenSpace(ts) {
+  const s = STAGES[P.stg] || STAGES[0];
+  const cx2 = W / 2 + shx;
+  const cy2 = H / 2 + shy;
+  const r = Math.max(4, P.r * zm);
+
+  // Reset state defensively
+  cx.globalAlpha = 1;
+  cx.shadowBlur = 0;
+  cx.globalCompositeOperation = 'source-over';
+  cx.setLineDash([]);
+
+  // Outer glow halo — stage colored
+  cx.shadowBlur = r * 1.2;
+  cx.shadowColor = s.c.pri;
+  cx.fillStyle = s.c.pri;
+  cx.globalAlpha = 0.20;
+  cx.beginPath(); cx.arc(cx2, cy2, r * 1.5, 0, TAU); cx.fill();
+
+  // Body fill — solid stage color
+  cx.shadowBlur = r * 0.6;
+  cx.shadowColor = s.c.pri;
+  cx.fillStyle = s.c.pri;
+  cx.globalAlpha = 0.78;
+  cx.beginPath(); cx.arc(cx2, cy2, r, 0, TAU); cx.fill();
+
+  // White highlight (gives 3D feel)
+  cx.shadowBlur = 0;
+  cx.fillStyle = '#ffffff';
+  cx.globalAlpha = 0.32;
+  cx.beginPath(); cx.arc(cx2 - r*0.3, cy2 - r*0.3, r * 0.45, 0, TAU); cx.fill();
+
+  // Bright white center pip — unmistakable anchor
+  cx.fillStyle = '#ffffff';
+  cx.globalAlpha = 0.95;
+  cx.beginPath(); cx.arc(cx2, cy2, Math.max(2, r * 0.18), 0, TAU); cx.fill();
+
+  // Stage-color inner dot (identity)
+  cx.fillStyle = s.c.pri;
+  cx.globalAlpha = 1;
+  cx.beginPath(); cx.arc(cx2, cy2, Math.max(1, r * 0.09), 0, TAU); cx.fill();
+
+  // Damage feedback ring — bright red pulse around player when hurt
+  if (P.blink > 0) {
+    const a = 0.55 + 0.4 * Math.sin(gt * 0.04);
+    cx.strokeStyle = '#ff4858';
+    cx.lineWidth = 2.4;
+    cx.shadowBlur = r * 0.8;
+    cx.shadowColor = '#ff4858';
+    cx.globalAlpha = a;
+    cx.beginPath(); cx.arc(cx2, cy2, r * 1.25, 0, TAU); cx.stroke();
+  }
+
+  // Frenzy ring — cyan around player when feeding frenzy is active
+  if (frenzy) {
+    cx.strokeStyle = '#40c8f0';
+    cx.lineWidth = 2.0;
+    cx.shadowBlur = r * 0.7;
+    cx.shadowColor = '#40c8f0';
+    cx.globalAlpha = 0.55 + 0.25 * Math.sin(ts * 0.012);
+    cx.beginPath(); cx.arc(cx2, cy2, r * 1.55, 0, TAU); cx.stroke();
+  }
+
+  // Shield ring
+  if (shOn) {
+    cx.strokeStyle = '#e8c040';
+    cx.lineWidth = 1.4;
+    cx.shadowBlur = r * 0.4;
+    cx.shadowColor = '#e8c040';
+    cx.globalAlpha = 0.6;
+    cx.beginPath(); cx.arc(cx2, cy2, r * 1.7, 0, TAU); cx.stroke();
+  }
+
+  cx.shadowBlur = 0;
+  cx.globalAlpha = 1;
+}
+
+
+// ═══════════════════════════════════════════
+// DRAW PLAYER — World-space draw (artistic, with tail and full stage detail).
+// This is the primary, beautiful render. The screen-space failsafe above
+// guarantees visibility even if this somehow fails.
 // ═══════════════════════════════════════════
 function drawPlayer(ts) {
   // 1. Validate state — recover from any NaN that could push the player into
@@ -1974,7 +2088,6 @@ function drawPlayer(ts) {
   if (typeof P.stg !== 'number' || P.stg < 0 || P.stg >= STAGES.length) P.stg = 0;
 
   // 2. Reset canvas state. We MUST do this here because any prior draw
-  //    (drawCreature, drawRadarHalos, particles, anomalies, projectiles)
   //    might have left properties in a state that would suppress our draws.
   cx.globalAlpha = 1;
   cx.shadowBlur = 0;
@@ -2164,6 +2277,54 @@ function drawRadarHalos(ts) {
 // VULNERABILITY ARC — shows where on a marginal prey to strike.
 // Only renders for in-range marginal kills; requires sense level ≥ 2.
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// STING AURA — Medusa's passive kill-zone visualization.
+// Shows the radius within which small prey are stunned and damaged. Pulsing
+// translucent purple-pink ring with subtle inner gradient.
+// ═══════════════════════════════════════════
+function drawStingAura(ts) {
+  const s = STAGES[P.stg];
+  if (!s || s.ab !== 'sting') return;
+  const range = P.r * 3.4;
+
+  // Soft inner gradient
+  const grd = cx.createRadialGradient(P.x, P.y, P.r, P.x, P.y, range);
+  grd.addColorStop(0, 'rgba(200,127,255,0)');
+  grd.addColorStop(0.6, 'rgba(200,127,255,0.04)');
+  grd.addColorStop(1, 'rgba(200,127,255,0.10)');
+  cx.fillStyle = grd;
+  cx.globalAlpha = 0.6 + 0.15 * Math.sin(ts * 0.004);
+  cx.beginPath(); cx.arc(P.x, P.y, range, 0, TAU); cx.fill();
+
+  // Outer dashed ring — pulsing, makes the zone visible without crowding
+  cx.strokeStyle = '#C87FFF';
+  cx.lineWidth = 0.8;
+  cx.setLineDash([4, 7]);
+  cx.shadowBlur = 6 * zm;
+  cx.shadowColor = '#C87FFF';
+  cx.globalAlpha = 0.32 + 0.12 * Math.sin(ts * 0.006);
+  cx.beginPath(); cx.arc(P.x, P.y, range, 0, TAU); cx.stroke();
+  cx.setLineDash([]);
+
+  // Animated tendrils — short radial flickers that suggest stinging filaments
+  const tCount = 12;
+  cx.strokeStyle = '#C87FFF';
+  cx.lineWidth = 0.5;
+  cx.shadowBlur = 0;
+  for (let i = 0; i < tCount; i++) {
+    const a = (i / tCount) * TAU + ts * 0.0008;
+    const flick = 0.7 + 0.3 * Math.sin(ts * 0.008 + i * 0.7);
+    cx.globalAlpha = 0.18 * flick;
+    const r1 = P.r * 1.1;
+    const r2 = range * 0.92 * flick;
+    cx.beginPath();
+    cx.moveTo(P.x + Math.cos(a) * r1, P.y + Math.sin(a) * r1);
+    cx.lineTo(P.x + Math.cos(a) * r2, P.y + Math.sin(a) * r2);
+    cx.stroke();
+  }
+  cx.globalAlpha = 1; cx.shadowBlur = 0;
+}
+
 function drawVulnArcs(ts) {
   if (P.stg < 2) return;
   cx.save();
@@ -2352,7 +2513,7 @@ function drawAnomalies(ts) {
     }
 
     // Outer halo
-    bioGlow(a.x, a.y, r*4, a.col, .42);
+    bioGlow(a.x, a.y, r*4, a.gl, .42);
 
     // Core diamond — rotates slowly
     cx.save();
@@ -2569,27 +2730,34 @@ function loop(ts) {
   }
   cx.globalAlpha=1;
 
-  // Organisms
-  for (const o of orgs) drawCreature(o, ts);
+  // Organisms — defensive wrap so a single creature's render error can't blackout the frame
+  try { for (const o of orgs) drawCreature(o, ts); }
+  catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.globalCompositeOperation='source-over'; }
+  cx.globalAlpha=1; cx.shadowBlur=0;
 
   // Projectiles
-  for (const p of projs) {
-    cx.fillStyle=p.c; cx.globalAlpha=.72; cx.shadowBlur=5*zm; cx.shadowColor=p.c;
-    cx.beginPath(); cx.arc(p.x,p.y,p.r,0,TAU); cx.fill();
-    cx.fillStyle='rgba(255,255,255,.32)'; cx.beginPath(); cx.arc(p.x,p.y,p.r*.3,0,TAU); cx.fill();
-    cx.shadowBlur=0; cx.globalAlpha=1;
-  }
+  try {
+    for (const p of projs) {
+      cx.fillStyle=p.c; cx.globalAlpha=.72; cx.shadowBlur=5*zm; cx.shadowColor=p.c;
+      cx.beginPath(); cx.arc(p.x,p.y,p.r,0,TAU); cx.fill();
+      cx.fillStyle='rgba(255,255,255,.32)'; cx.beginPath(); cx.arc(p.x,p.y,p.r*.3,0,TAU); cx.fill();
+      cx.shadowBlur=0; cx.globalAlpha=1;
+    }
+  } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
 
-  drawPickups(ts);
-  drawAnomalies(ts);          // High-value pods orbiting predators
-  drawFrenzyOrbs(ts);
+  // Each of these wrapped individually — a failure in one cannot prevent later draws
+  // (especially the player) from rendering. This is the structural fix for the
+  // "player goes dark near anomalies" class of bug, where one draw's exception
+  // was aborting the whole frame's pipeline.
+  try { drawPickups(ts); }     catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+  try { drawAnomalies(ts); }   catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
+  try { drawFrenzyOrbs(ts); }  catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
+  try { drawRadarPulse(ts); }  catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
+  try { drawRadarHalos(ts); }  catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+  try { drawVulnArcs(ts); }    catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+  try { drawStingAura(ts); }   catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
 
-  // Radar overlay — draw before player so player sits on top of indicators
-  drawRadarPulse(ts);
-  drawRadarHalos(ts);
-  drawVulnArcs(ts);
-
-  drawPlayer(ts);  // tail then body then antennae — clean junction
+  try { drawPlayer(ts); }      catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
 
   // Float texts
   cx.textAlign='center'; cx.font='500 11px "Cormorant Garamond",serif';
@@ -2600,6 +2768,17 @@ function loop(ts) {
     cx.fillText(f.t,f.x,f.y);
   }
   cx.globalAlpha=1;
+
+  // ═══════════════════════════════════════════
+  // PLAYER OVERLAY — SCREEN SPACE GUARANTEE
+  // Drawn in pure screen-space AFTER all world content, including text and
+  // the frenzy tint. This is the definitive anti-invisibility layer. Even if
+  // every other layer somehow fails, this single function guarantees the
+  // player is always visible at screen center.
+  // ═══════════════════════════════════════════
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+  drawPlayerScreenSpace(ts);
+  cx.setTransform(zm, 0, 0, zm, off.x+shx, off.y+shy);
 
   // Frenzy screen tint
   if (frenzy) {
