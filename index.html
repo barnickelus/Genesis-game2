@@ -55,6 +55,18 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 
 /* ── Pause ── */
 #pBtn{position:fixed;top:11px;right:16px;z-index:15;background:none;border:none;color:rgba(255,255,255,.15);font-size:15px;cursor:pointer;pointer-events:auto;font-family:serif}
+
+/* Cheat button — adds +100 mass on tap. Bottom right, subtle but discoverable. */
+#cheatBtn{position:fixed;bottom:14px;right:14px;z-index:15;
+  font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;
+  padding:9px 14px;background:rgba(8,16,28,.55);
+  border:1px solid rgba(255,255,255,.10);border-radius:2px;
+  color:rgba(255,215,0,.55);text-shadow:0 0 6px rgba(255,215,0,.35);
+  cursor:pointer;pointer-events:auto;
+  transition:transform .08s,background .12s,color .12s;
+  -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+#cheatBtn:active{transform:scale(.93);background:rgba(255,215,0,.18);color:#FFD700}
+#cheatBtn:hover{color:rgba(255,215,0,.9);background:rgba(8,16,28,.75)}
 #pMenu{position:fixed;inset:0;z-index:30;background:rgba(0,5,14,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:11px;backdrop-filter:blur(18px)}
 #pMenu h2{font-family:'Cinzel',serif;font-size:18px;letter-spacing:10px;color:rgba(255,255,255,.35);margin-bottom:14px}
 #pMenu button{width:138px;padding:10px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:14px;color:rgba(255,255,255,.38);background:transparent;border:1px solid rgba(255,255,255,.07);cursor:pointer;letter-spacing:2px;transition:all .3s}
@@ -67,25 +79,26 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 /* Always-visible panel above minimap. Shows radar status, range, and live target
  * counts (edible / precision / threat). Becomes prominent once unlocked at DRIFTER,
  * fully featured at MEDUSA. Hidden entirely at MOTE (no radar yet). */
-#radarHud{position:fixed;bottom:104px;left:14px;z-index:10;pointer-events:none;
-  font-family:'Cinzel',serif;width:96px;padding:7px 9px 8px;
-  background:rgba(8,16,28,.55);border:1px solid rgba(255,255,255,.06);
-  border-left:2px solid #14D0FF;box-shadow:0 0 14px rgba(20,208,255,.08);
+#radarHud{position:fixed;bottom:108px;left:14px;z-index:10;pointer-events:none;
+  font-family:'Cinzel',serif;width:138px;padding:10px 13px 11px;
+  background:rgba(8,16,28,.62);border:1px solid rgba(255,255,255,.08);
+  border-left:3px solid #14D0FF;box-shadow:0 0 18px rgba(20,208,255,.12);
+  border-radius:2px;
   opacity:0;transform:translateX(-8px);transition:opacity .55s,transform .55s}
 #radarHud.on{opacity:1;transform:translateX(0)}
-#radarHeader{font-size:9px;letter-spacing:3px;color:#14D0FF;text-shadow:0 0 8px #14D0FF;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
-#radarHeader::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:#14D0FF;box-shadow:0 0 6px #14D0FF;margin-right:4px;animation:radarBlip 2s ease-in-out infinite}
-#radarLvl{font-size:8px;letter-spacing:1px;color:rgba(20,208,255,.65)}
-#radarRange{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:10px;letter-spacing:1px;color:rgba(255,255,255,.4);margin-bottom:5px}
-.rTgt{display:flex;justify-content:space-between;align-items:center;font-size:9px;letter-spacing:1px;padding:1px 0;font-family:'Cormorant Garamond',serif}
-.rTgt b{font-weight:400;font-size:11px;font-family:'Cinzel',serif}
+#radarHeader{font-size:12px;letter-spacing:4px;color:#14D0FF;text-shadow:0 0 10px #14D0FF;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center}
+#radarHeader::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#14D0FF;box-shadow:0 0 8px #14D0FF;margin-right:6px;animation:radarBlip 2s ease-in-out infinite}
+#radarLvl{font-size:10px;letter-spacing:1.5px;color:rgba(20,208,255,.75)}
+#radarRange{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:12px;letter-spacing:1px;color:rgba(255,255,255,.5);margin-bottom:7px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.06)}
+.rTgt{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:1.5px;padding:2px 0;font-family:'Cormorant Garamond',serif}
+.rTgt b{font-weight:400;font-size:14px;font-family:'Cinzel',serif;min-width:18px;text-align:right}
 .rTgt.edible{color:#52FFCA}
 .rTgt.precise{color:#FFD860}
 .rTgt.threat{color:#FF4858}
-.rDot{width:5px;height:5px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle}
-.rTgt.edible .rDot{background:#52FFCA;box-shadow:0 0 5px #52FFCA}
-.rTgt.precise .rDot{background:#FFD860;box-shadow:0 0 5px #FFD860}
-.rTgt.threat .rDot{background:#FF4858;box-shadow:0 0 5px #FF4858}
+.rDot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:7px;vertical-align:middle}
+.rTgt.edible .rDot{background:#52FFCA;box-shadow:0 0 7px #52FFCA}
+.rTgt.precise .rDot{background:#FFD860;box-shadow:0 0 7px #FFD860}
+.rTgt.threat .rDot{background:#FF4858;box-shadow:0 0 7px #FF4858}
 @keyframes radarBlip{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:1;transform:scale(1.5)}}
 #mmC{display:block}
 </style>
@@ -121,6 +134,7 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 </div>
 
 <button id="pBtn">⏸</button>
+<button id="cheatBtn" title="+100 mass (dev)">+100</button>
 <div id="pMenu">
   <h2>PAUSED</h2>
   <button id="resumeB">Resume</button>
@@ -410,10 +424,10 @@ function initAudio() {
     A_threatGain = AC.createGain(); A_threatGain.gain.value = 0;
     A_threatGain.connect(A_master);
     A_threatOsc = AC.createOscillator();
-    A_threatOsc.type = 'sawtooth';
-    A_threatOsc.frequency.value = 38;
+    A_threatOsc.type = 'sine';                    // was sawtooth — gentler harmonic content
+    A_threatOsc.frequency.value = 32;             // was 38 — pushed lower so it's felt more than heard
     const threatFilter = AC.createBiquadFilter();
-    threatFilter.type = 'lowpass'; threatFilter.frequency.value = 180; threatFilter.Q.value = 4;
+    threatFilter.type = 'lowpass'; threatFilter.frequency.value = 110; threatFilter.Q.value = 2.5;   // tighter, less "static"
     A_threatOsc.connect(threatFilter).connect(A_threatGain);
     A_threatOsc.start();
 
@@ -501,10 +515,11 @@ function audioFilterPulse(targetHz, dur=.5) {
 
 function audioSetThreat(level) {
   if (!audioReady) return;
-  // level: 0..1 — how close a real predator is
-  const now = AC.currentTime, target = level * .18;
+  // level: 0..1 — how close a real predator is. Quieter than before so it
+  // reads as a subtle ominous bass rather than radio static.
+  const now = AC.currentTime, target = level * .10;   // was .18 → ~45% quieter
   A_threatGain.gain.cancelScheduledValues(now);
-  A_threatGain.gain.setTargetAtTime(target, now, .4);
+  A_threatGain.gain.setTargetAtTime(target, now, .5);
 }
 
 function audioSetFrenzy(on) {
@@ -679,6 +694,18 @@ document.getElementById('pBtn').onclick   = () => { paused=!paused; document.get
 document.getElementById('resumeB').onclick = () => { paused=false; document.getElementById('pMenu').style.display='none'; };
 document.getElementById('restartB').onclick= () => { paused=false; document.getElementById('pMenu').style.display='none'; init(); if(audioReady) setStageAudio(0); };
 document.getElementById('muteB').onclick   = () => setMute(!muted);
+
+// Dev cheat — repeatable +100 mass to skip ahead and test later stages
+document.getElementById('cheatBtn').onclick = () => {
+  if (paused || introActive) return;
+  P.mass += 100;
+  score += 50;
+  burst(P.x, P.y, '#FFD700', 12, 2.2);
+  ring(P.x, P.y, '#FFD700', P.r * 2.2, 14);
+  fTxt(P.x, P.y - 28, '+100', '#FFD700');
+  sfxEat();
+  checkEvo();
+};
 
 // Compatibility shim — older code paths may still call snd('id'); route to procedural
 function snd(id) {
@@ -1053,22 +1080,19 @@ function aiOrg(o, dt) {
 // PLAYER UPDATE
 // ═══════════════════════════════════════════
 function calcR(mass, bR)   { return bR + Math.log2(Math.max(1,mass)) * 2.8; }
-// Mass gain — diminishing returns curve, but less punishing at mid-game.
-// Was: bm * (1 / (1 + pm * 0.003)) — at pm=560 gave only 0.37× multiplier (a hard wall).
-// Now: bm * (1 / (1 + pm * 0.0018)) — at pm=560 gives 0.50× multiplier; at pm=2000 still gives 0.22×.
-// Mid-game (Medusa→Naga) feels twice as productive without trivializing late-game.
-function calcGain(bm, pm)  { return bm * (1 / (1 + pm * .0018)); }
+function calcGain(bm, pm)  { return bm * (1 / (1 + pm * .0014)); }
 function calcDecay(m, dt) {
-  // Decay smoothed out — no more cliff at mass=400. Total decay/sec at key marks:
-  //   m=100:  0.0005/ms → 0.5/sec    (no change, intentionally low)
-  //   m=400:  0.0011/ms → 1.1/sec    (was 1.7/sec — 35% softer)
-  //   m=560:  0.0017/ms → 1.7/sec    (was 2.0/sec — eases the wall)
-  //   m=850:  0.0024/ms → 2.4/sec    (slight relief)
-  //   m=2000: 0.0096/ms → 9.6/sec    (similar to before)
+  // Decay smoothed across all stages. Total decay/sec at key marks:
+  //   m=100:  0.0005/ms → 0.5/sec    (Mote — minimal)
+  //   m=400:  0.0011/ms → 1.1/sec    (Drifter top)
+  //   m=560:  0.0014/ms → 1.4/sec    (Medusa)
+  //   m=850:  0.0019/ms → 1.9/sec    (Naga floor — was 2.4)
+  //   m=1500: 0.0040/ms → 4.0/sec    (Naga top — was 5.1)
+  //   m=2500: 0.0080/ms → 8.0/sec    (Titan)
   if (m<80)   return .0005 * dt;
   if (m<400)  return (.0008 + (m-80) * .0000038) * dt;
-  if (m<1500) return (.0011 + (m-400) * .00005)  * dt;
-  return (.0066 + (m-1500) * .00018) * dt;
+  if (m<1500) return (.0011 + (m-400) * .000027) * dt;   // half the prior coefficient
+  return (.0040 + (m-1500) * .00015) * dt;
 }
 
 function updateP(dt) {
@@ -1097,7 +1121,7 @@ function updateP(dt) {
 
   P.r=calcR(P.mass, s.bR);
 
-  const floor=STAGES[P.stg].thr*.85+3;
+  const floor=STAGES[P.stg].thr*.78+3;
   P.mass=Math.max(floor, P.mass-calcDecay(P.mass,dt));
   P.tail.unshift({x:P.x, y:P.y});
   while (P.tail.length > Math.floor(16+Math.log2(Math.max(1,P.mass))*8)) P.tail.pop();
@@ -1352,11 +1376,11 @@ function collide(dt) {
 }
 
 const ANOM_HOSTS = {
-  hunter:   { mass: 28, col: '#ff5878', gl: 'rgba(255,88,120,' },
-  lurker:   { mass: 38, col: '#ffaa40', gl: 'rgba(255,170,64,' },
-  phantom:  { mass: 34, col: '#e060ff', gl: 'rgba(224,96,255,' },
-  levia:    { mass: 52, col: '#60c8ff', gl: 'rgba(96,200,255,' },
-  behemoth: { mass: 78, col: '#ff3030', gl: 'rgba(255,48,48,' },
+  hunter:   { mass: 42,  col: '#ff5878', gl: 'rgba(255,88,120,' },   // was 28
+  lurker:   { mass: 58,  col: '#ffaa40', gl: 'rgba(255,170,64,' },   // was 38
+  phantom:  { mass: 54,  col: '#e060ff', gl: 'rgba(224,96,255,' },   // was 34
+  levia:    { mass: 85,  col: '#60c8ff', gl: 'rgba(96,200,255,' },   // was 52
+  behemoth: { mass: 130, col: '#ff3030', gl: 'rgba(255,48,48,' },    // was 78
 };
 
 function spawnAnomaly() {
@@ -2666,7 +2690,7 @@ function updateHUD() {
     cdCtx.beginPath(); cdCtx.arc(13,13,9,-PI/2,-PI/2+pct2*TAU); cdCtx.stroke();
   }
   // Danger
-  const hpPct=(P.mass-STAGES[P.stg].thr*.85)/Math.max(1,STAGES[P.stg].thr*.15);
+  const hpPct=(P.mass-STAGES[P.stg].thr*.78)/Math.max(1,STAGES[P.stg].thr*.22);
   document.getElementById('danger').style.opacity=hpPct<.3?String((.3-hpPct)/.3*.5):'0';
 
   // Frenzy HUD readout — persistent meter that shows remaining time
@@ -2794,8 +2818,16 @@ function loop(ts) {
   collide(dt);
   ecoCollide();
 
-  // Camera
-  const tz=cl(H/(P.r*5.5),.28,1.5); zm=lp(zm,tz,.04);
+  // Camera — zoom adapts to actual screen size so phones and tablets show
+  // comparable amounts of world. The zoom cap scales DOWN on small screens
+  // so iPhones don't over-zoom at small player sizes; the previous fixed 1.5
+  // cap looked correct on iPad but ~25% too zoomed on iPhone.
+  const minDim = Math.min(W, H);
+  const screenFactor = cl(minDim / 800, .55, 1.15);  // 0.55 on phones, ~1.0 on tablets, capped
+  const zMin = .28 * screenFactor;
+  const zMax = 1.6  * screenFactor;
+  const tz = cl((minDim / (P.r * 6.2)) * screenFactor, zMin, zMax);
+  zm = lp(zm, tz, .04);
   off.x=W/2-P.x*zm; off.y=H/2-P.y*zm;
 
   // Ecosystem maintenance
