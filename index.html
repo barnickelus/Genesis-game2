@@ -62,6 +62,31 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 
 /* ── Minimap ── */
 #mmap{position:fixed;bottom:14px;left:14px;z-index:10;border:1px solid rgba(255,255,255,.04);background:rgba(0,0,0,.18)}
+
+/* ── RADAR HUD ── */
+/* Always-visible panel above minimap. Shows radar status, range, and live target
+ * counts (edible / precision / threat). Becomes prominent once unlocked at DRIFTER,
+ * fully featured at MEDUSA. Hidden entirely at MOTE (no radar yet). */
+#radarHud{position:fixed;bottom:104px;left:14px;z-index:10;pointer-events:none;
+  font-family:'Cinzel',serif;width:96px;padding:7px 9px 8px;
+  background:rgba(8,16,28,.55);border:1px solid rgba(255,255,255,.06);
+  border-left:2px solid #14D0FF;box-shadow:0 0 14px rgba(20,208,255,.08);
+  opacity:0;transform:translateX(-8px);transition:opacity .55s,transform .55s}
+#radarHud.on{opacity:1;transform:translateX(0)}
+#radarHeader{font-size:9px;letter-spacing:3px;color:#14D0FF;text-shadow:0 0 8px #14D0FF;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
+#radarHeader::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:#14D0FF;box-shadow:0 0 6px #14D0FF;margin-right:4px;animation:radarBlip 2s ease-in-out infinite}
+#radarLvl{font-size:8px;letter-spacing:1px;color:rgba(20,208,255,.65)}
+#radarRange{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:10px;letter-spacing:1px;color:rgba(255,255,255,.4);margin-bottom:5px}
+.rTgt{display:flex;justify-content:space-between;align-items:center;font-size:9px;letter-spacing:1px;padding:1px 0;font-family:'Cormorant Garamond',serif}
+.rTgt b{font-weight:400;font-size:11px;font-family:'Cinzel',serif}
+.rTgt.edible{color:#52FFCA}
+.rTgt.precise{color:#FFD860}
+.rTgt.threat{color:#FF4858}
+.rDot{width:5px;height:5px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle}
+.rTgt.edible .rDot{background:#52FFCA;box-shadow:0 0 5px #52FFCA}
+.rTgt.precise .rDot{background:#FFD860;box-shadow:0 0 5px #FFD860}
+.rTgt.threat .rDot{background:#FF4858;box-shadow:0 0 5px #FF4858}
+@keyframes radarBlip{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:1;transform:scale(1.5)}}
 #mmC{display:block}
 </style>
 </head>
@@ -104,6 +129,15 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 </div>
 
 <div id="mmap"><canvas id="mmC" width="80" height="80"></canvas></div>
+
+<!-- Radar HUD — unlocks at DRIFTER, becomes informative at MEDUSA -->
+<div id="radarHud">
+  <div id="radarHeader"><span>RADAR</span><span id="radarLvl">L1</span></div>
+  <div id="radarRange">— range —</div>
+  <div class="rTgt edible"><span><span class="rDot"></span>FOOD</span><b id="rEdib">0</b></div>
+  <div class="rTgt precise"><span><span class="rDot"></span>STRIKE</span><b id="rPrec">0</b></div>
+  <div class="rTgt threat"><span><span class="rDot"></span>THREAT</span><b id="rThr">0</b></div>
+</div>
 
 <!-- Background music: if a file named "background-music.mp3" sits next to this
      HTML, it will be loaded and routed through the stage-aware filter. If the
@@ -212,6 +246,7 @@ let shOn, shTime;
 let pill, shld, beacons;
 let anoms, anomCd;
 let frenzyTutorialShown = false;  // persists across restarts intentionally
+let radarTutorialShown = false;
 let behMem;
 let introActive = true;
 
@@ -744,7 +779,16 @@ function shk(i, d) {
 // ═══════════════════════════════════════════
 // BOIDS / FLOCKING
 // ═══════════════════════════════════════════
-function canEat(o) { return o.r < P.r * .8; }
+// Eat threshold widens with evolution. Earlier stages must hunt clearly-smaller
+// prey; later stages can swallow opponents nearer their own size. This adds
+// gameplay-relevant identity to each stage's feeding strategy:
+//   MOTE/DRIFTER: 0.80× — must find food clearly smaller
+//   MEDUSA:       0.85× — sting + slightly wider mouth lets you eat tendrils/small hunters
+//   NAGA:         0.85× — same threshold, lash extends effective reach
+//   TITAN:        0.88× — gravity pulls prey in
+//   PRIMORDIAL:   0.90× — apex predator
+const EAT_RATIO = [0.80, 0.80, 0.85, 0.85, 0.88, 0.90];
+function canEat(o) { return o.r < P.r * (EAT_RATIO[P.stg] || 0.80); }
 function isPred(o) { return o.r > P.r * 1.2; }
 
 // ═══════════════════════════════════════════
@@ -1009,12 +1053,22 @@ function aiOrg(o, dt) {
 // PLAYER UPDATE
 // ═══════════════════════════════════════════
 function calcR(mass, bR)   { return bR + Math.log2(Math.max(1,mass)) * 2.8; }
-function calcGain(bm, pm)  { return bm * (1 / (1 + pm * .003)); }
+// Mass gain — diminishing returns curve, but less punishing at mid-game.
+// Was: bm * (1 / (1 + pm * 0.003)) — at pm=560 gave only 0.37× multiplier (a hard wall).
+// Now: bm * (1 / (1 + pm * 0.0018)) — at pm=560 gives 0.50× multiplier; at pm=2000 still gives 0.22×.
+// Mid-game (Medusa→Naga) feels twice as productive without trivializing late-game.
+function calcGain(bm, pm)  { return bm * (1 / (1 + pm * .0018)); }
 function calcDecay(m, dt) {
+  // Decay smoothed out — no more cliff at mass=400. Total decay/sec at key marks:
+  //   m=100:  0.0005/ms → 0.5/sec    (no change, intentionally low)
+  //   m=400:  0.0011/ms → 1.1/sec    (was 1.7/sec — 35% softer)
+  //   m=560:  0.0017/ms → 1.7/sec    (was 2.0/sec — eases the wall)
+  //   m=850:  0.0024/ms → 2.4/sec    (slight relief)
+  //   m=2000: 0.0096/ms → 9.6/sec    (similar to before)
   if (m<80)   return .0005 * dt;
-  if (m<400)  return (.0008 + (m-80) * .000006) * dt;
-  if (m<1500) return (.002  + (m-400) * .00008)  * dt;
-  return (.0108 + (m-1500) * .0002) * dt;
+  if (m<400)  return (.0008 + (m-80) * .0000038) * dt;
+  if (m<1500) return (.0011 + (m-400) * .00005)  * dt;
+  return (.0066 + (m-1500) * .00018) * dt;
 }
 
 function updateP(dt) {
@@ -1121,6 +1175,22 @@ function checkEvo() {
     if(P.stg>=3){spawn('phantom',2);if(Math.random()<.5)spawn('echo',1);}
     if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);}
     if(P.stg>=5) spawn('behemoth',2);
+
+    // ── Radar unlocks at Drifter (stg=1). Show a second tutorial panel 2.6s
+    //    after the stage announcement fades, explaining what just appeared. ──
+    if (P.stg === 1 && !radarTutorialShown) {
+      radarTutorialShown = true;
+      setTimeout(() => {
+        const eT = document.getElementById('evoT');
+        const eS = document.getElementById('evoS');
+        const eAnn = document.getElementById('evoAnn');
+        eT.textContent = 'RADAR ONLINE';
+        eT.style.color = '#14D0FF';
+        eS.textContent = 'Antennae sense prey, predators, and precision strikes.';
+        eAnn.style.opacity = '1';
+        setTimeout(() => { eAnn.style.opacity = '0'; }, 3200);
+      }, 2700);
+    }
   }
 }
 
@@ -2244,33 +2314,42 @@ function drawRadarHalos(ts) {
     if (o._edib === 1)        col = '#52FFCA';
     else if (o._edib === 0.5) col = '#FFD860';
     else if (o._pred)         col = '#FF4858';
-    if (!col) continue;       // neutral targets get no halo
+    if (!col) continue;
 
-    const alpha = (1 - hide) * .28;     // was .42 — quieter so player stays focal
-    const pulse = 1 + .045 * Math.sin(ts*.007 + (o.x+o.y)*.012);
+    const alpha = (1 - hide) * .55;
+    const pulse = 1 + .07 * Math.sin(ts*.008 + (o.x+o.y)*.012);
 
+    // Main ring — animated dashes give it a real radar/scanner feel
     cx.globalAlpha = alpha;
     cx.strokeStyle = col;
-    cx.lineWidth = .9;                   // was 1.1
-    cx.shadowBlur = 4*zm;                // was 7
+    cx.lineWidth = 1.3;
+    cx.shadowBlur = 7*zm;
     cx.shadowColor = col;
+    cx.setLineDash([6, 4]);
+    cx.lineDashOffset = -(ts * .03);
     cx.beginPath(); cx.arc(o.x, o.y, o.r * 1.45 * pulse, 0, TAU); cx.stroke();
+    cx.setLineDash([]);
 
-    // Tick marks at cardinals
-    cx.globalAlpha = alpha * .65;         // was .8
-    cx.lineWidth = .6;
-    cx.shadowBlur = 0;
-    for (let i=0;i<4;i++){
-      const a = i*PI/2 + ts*.0008 + (o.x*.001);
-      const ix = o.x + Math.cos(a) * o.r * 1.55 * pulse;
-      const iy = o.y + Math.sin(a) * o.r * 1.55 * pulse;
-      const ox = o.x + Math.cos(a) * o.r * 1.75 * pulse;
-      const oy = o.y + Math.sin(a) * o.r * 1.75 * pulse;
-      cx.beginPath(); cx.moveTo(ix,iy); cx.lineTo(ox,oy); cx.stroke();
+    // Bracket corners — 4 short marks at NE/NW/SE/SW like a targeting reticle.
+    // These read as "the radar has locked this target" even at small sizes.
+    cx.globalAlpha = alpha * .9;
+    cx.lineWidth = 1.4;
+    cx.shadowBlur = 4*zm;
+    const bR = o.r * 1.7 * pulse;
+    const bLen = 0.35;
+    for (let i = 0; i < 4; i++) {
+      const ba = i * PI/2 + PI/4;
+      const cax = o.x + Math.cos(ba) * bR;
+      const cay = o.y + Math.sin(ba) * bR;
+      cx.beginPath();
+      cx.moveTo(cax + Math.cos(ba + PI/2) * bR * bLen, cay + Math.sin(ba + PI/2) * bR * bLen);
+      cx.lineTo(cax, cay);
+      cx.lineTo(cax + Math.cos(ba - PI/2) * bR * bLen, cay + Math.sin(ba - PI/2) * bR * bLen);
+      cx.stroke();
     }
   }
   cx.restore();
-  cx.globalAlpha = 1; cx.shadowBlur = 0;
+  cx.globalAlpha = 1; cx.shadowBlur = 0; cx.setLineDash([]);
 }
 
 // ═══════════════════════════════════════════
@@ -2599,6 +2678,31 @@ function updateHUD() {
     frzBar.style.width = pct + '%';
   } else {
     frzEl.classList.remove('on');
+  }
+
+  // ── Radar HUD panel ──
+  // Unlocks at Drifter (stage 1). Becomes increasingly informative as you evolve.
+  // Counts live in-range targets by category so the user always knows the radar
+  // is actively contributing — even if they don't watch the world-space halos.
+  const radHud = document.getElementById('radarHud');
+  const range = senseRange();
+  if (range > 0) {
+    radHud.classList.add('on');
+    document.getElementById('radarLvl').textContent = 'L' + P.stg;
+    document.getElementById('radarRange').textContent = Math.round(range) + 'px range';
+    let nEdib = 0, nPrec = 0, nThr = 0;
+    for (const o of orgs) {
+      if (!o._inRange) continue;
+      if (o._maskHide >= .7 && P.stg < 3) continue;  // masked targets not counted
+      if (o._edib === 1) nEdib++;
+      else if (o._edib === 0.5) nPrec++;
+      else if (o._pred) nThr++;
+    }
+    document.getElementById('rEdib').textContent = nEdib;
+    document.getElementById('rPrec').textContent = nPrec;
+    document.getElementById('rThr').textContent = nThr;
+  } else {
+    radHud.classList.remove('on');
   }
 }
 
