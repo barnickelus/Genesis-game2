@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENTINEL-7 // MATRIX CREATURE ENGINE</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: 'Share Tech Mono', monospace; }
+  #c { display: block; width: 100vw; height: 100vh; }
+
+  #ui {
+    position: fixed; top: 0; right: 0;
+    width: 270px; max-height: 100vh; overflow-y: auto;
+    background: rgba(0, 8, 4, 0.88);
+    border-left: 1px solid rgba(0,255,100,0.18);
+    padding: 14px 16px 20px;
+    backdrop-filter: blur(12px);
+    scrollbar-width: thin; scrollbar-color: #00ff6640 transparent;
+  }
+  #ui h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px; font-weight: 900; letter-spacing: 3px;
+    color: #00ff88; text-transform: uppercase;
+    border-bottom: 1px solid #00ff4430; padding-bottom: 8px; margin-bottom: 12px;
+  }
+  #ui h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 8px; font-weight: 700; letter-spacing: 2px;
+    color: #00cc6680; text-transform: uppercase; margin: 12px 0 6px;
+  }
+  .row { margin: 5px 0; }
+  .row label { display: flex; justify-content: space-between; align-items: center;
+    color: #88ffcc; font-size: 10px; margin-bottom: 3px; }
+  .row label span { color: #00ff88; font-size: 10px; min-width: 36px; text-align: right; }
+  .row input[type=range] {
+    width: 100%; height: 3px; -webkit-appearance: none; appearance: none;
+    background: linear-gradient(to right, #00ff88, #00ccff);
+    border-radius: 2px; cursor: pointer;
+  }
+  .row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 10px; height: 10px;
+    border-radius: 50%; background: #00ff88;
+    box-shadow: 0 0 8px #00ff88; cursor: pointer;
+  }
+  .btn-row { display: flex; gap: 6px; margin: 10px 0 4px; }
+  .btn {
+    flex: 1; padding: 6px 4px; border: 1px solid #00ff4440;
+    background: rgba(0,255,80,0.05); color: #00ff88;
+    font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: 1px;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s;
+  }
+  .btn:hover { background: rgba(0,255,80,0.15); border-color: #00ff88; box-shadow: 0 0 12px #00ff8830; }
+  .btn.active { background: rgba(0,255,80,0.2); border-color: #00ff88; color: #fff; box-shadow: 0 0 20px #00ff8850; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 9px;
+    color: #008844; margin: 2px 0; }
+  .stat-row span { color: #00ff88; }
+  #controls-hint {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,8,4,0.8); border: 1px solid rgba(0,255,100,0.15);
+    padding: 8px 18px; font-size: 10px; color: #00ff8880; letter-spacing: 2px;
+    pointer-events: none; backdrop-filter: blur(8px);
+  }
+  #mode-label {
+    position: fixed; top: 18px; left: 18px;
+    font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+    letter-spacing: 3px; color: #00ff88;
+    text-shadow: 0 0 20px #00ff88;
+    pointer-events: none;
+  }
+  #mode-label .sub { font-size: 8px; color: #00886640; margin-top: 2px; letter-spacing: 2px; }
+  .separator { height: 1px; background: rgba(0,255,100,0.1); margin: 10px 0; }
+
+  /* Scanline overlay */
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    z-index: 999;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="mode-label">
+  SENTINEL-7
+  <div class="sub">BIOMECHANICAL ENTITY // ACTIVE</div>
+</div>
+
+<div id="ui">
+  <h1>⬡ SENTINEL-7 DEBUG</h1>
+
+  <div class="stat-row">TENTACLES <span id="s-tentacles">24</span></div>
+  <div class="stat-row">SEGMENTS/TENTACLE <span id="s-segs">18</span></div>
+  <div class="stat-row">FPS <span id="s-fps">—</span></div>
+  <div class="stat-row">MODE <span id="s-mode">ORBIT</span></div>
+
+  <div class="separator"></div>
+  <h2>// PHYSICS</h2>
+
+  <div class="row">
+    <label>WIGGLE FORCE <span id="v-wiggle">1.5</span></label>
+    <input type="range" id="r-wiggle" min="0" max="5" step="0.05" value="1.5">
+  </div>
+  <div class="row">
+    <label>STIFFNESS <span id="v-stiff">0.988</span></label>
+    <input type="range" id="r-stiff" min="0.90" max="1.0" step="0.001" value="0.988">
+  </div>
+  <div class="row">
+    <label>GRAVITY <span id="v-grav">0.12</span></label>
+    <input type="range" id="r-grav" min="0" max="0.8" step="0.01" value="0.12">
+  </div>
+  <div class="row">
+    <label>CURL FORCE <span id="v-curl">0.8</span></label>
+    <input type="range" id="r-curl" min="0" max="3" step="0.05" value="0.8">
+  </div>
+  <div class="row">
+    <label>ANIM SPEED <span id="v-aspeed">0.6</span></label>
+    <input type="range" id="r-aspeed" min="0.05" max="3" step="0.05" value="0.6">
+  </div>
+  <div class="row">
+    <label>CONSTRAINT ITERS <span id="v-iters">4</span></label>
+    <input type="range" id="r-iters" min="1" max="10" step="1" value="4">
+  </div>
+
+  <div class="separator"></div>
+  <h2>// VISUAL</h2>
+
+  <div class="row">
+    <label>GLOW INTENSITY <span id="v-glow">2.2</span></label>
+    <input type="range" id="r-glow" min="0.5" max="6" step="0.1" value="2.2">
+  </div>
+  <div class="row">
+    <label>BLOOM STRENGTH <span id="v-bloom">1.8</span></label>
+    <input type="range" id="r-bloom" min="0" max="4" step="0.1" value="1.8">
+  </div>
+  <div class="row">
+    <label>BLOOM RADIUS <span id="v-bradius">0.5</span></label>
+    <input type="range" id="r-bradius" min="0" max="1" step="0.05" value="0.5">
+  </div>
+  <div class="row">
+    <label>CHROM. ABERR. <span id="v-chrom">0.004</span></label>
+    <input type="range" id="r-chrom" min="0" max="0.02" step="0.001" value="0.004">
+  </div>
+  <div class="row">
+    <label>TENTACLE RADIUS <span id="v-tradius">0.14</span></label>
+    <input type="range" id="r-tradius" min="0.04" max="0.4" step="0.01" value="0.14">
+  </div>
+  <div class="row">
+    <label>CORE PULSE <span id="v-pulse">1.0</span></label>
+    <input type="range" id="r-pulse" min="0.1" max="4" step="0.1" value="1.0">
+  </div>
+
+  <div class="separator"></div>
+  <h2>// COLOR CHANNEL</h2>
+
+  <div class="btn-row">
+    <button class="btn active" id="col-matrix" onclick="setScheme('matrix')">MATRIX</button>
+    <button class="btn" id="col-cyber" onclick="setScheme('cyber')">CYBER</button>
+    <button class="btn" id="col-inferno" onclick="setScheme('inferno')">INFERNO</button>
+  </div>
+
+  <div class="separator"></div>
+  <h2>// CONTROL MODE</h2>
+
+  <div class="btn-row">
+    <button class="btn active" id="btn-orbit" onclick="setMode('orbit')">ORBIT</button>
+    <button class="btn" id="btn-creature" onclick="setMode('creature')">DRIVE</button>
+  </div>
+
+  <div class="separator"></div>
+  <h2>// ACTIONS</h2>
+
+  <div class="btn-row">
+    <button class="btn" onclick="triggerAttack()">ATTACK</button>
+    <button class="btn" onclick="triggerPulse()">PULSE</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn" onclick="resetCreature()">RESET</button>
+    <button class="btn" onclick="toggleGrid()">GRID</button>
+  </div>
+</div>
+
+<div id="controls-hint">WASD/ARROWS: MOVE &nbsp;|&nbsp; Q/E: UP/DOWN &nbsp;|&nbsp; SPACE: ATTACK &nbsp;|&nbsp; TAB: TOGGLE MODE</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============================================================
+// CONFIG
+// ============================================================
+const CFG = {
+  tentacleCount: 24,
+  segCount: 18,
+  segLen: 1.1,
+  radialSegs: 7,
+  coreRadius: 2.2,
+
+  wiggle: 1.5,
+  stiffness: 0.988,
+  gravity: 0.12,
+  curl: 0.8,
+  animSpeed: 0.6,
+  constraintIters: 4,
+
+  glowIntensity: 2.2,
+  bloomStrength: 1.8,
+  bloomRadius: 0.5,
+  bloomThreshold: 0.0,
+  chromAberr: 0.004,
+  tentacleRadius: 0.14,
+  corePulse: 1.0,
+
+  showGrid: true,
+  attackMode: false,
+  scheme: 'matrix',
+};
+
+const SCHEMES = {
+  matrix:  { base: new THREE.Color(0x00ff77), glow: new THREE.Color(0x00ffaa), rim: new THREE.Color(0x00ccff) },
+  cyber:   { base: new THREE.Color(0xcc00ff), glow: new THREE.Color(0xff00cc), rim: new THREE.Color(0x0088ff) },
+  inferno: { base: new THREE.Color(0xff4400), glow: new THREE.Color(0xff8800), rim: new THREE.Color(0xffcc00) },
+};
+
+// ============================================================
+// RENDERER + SCENE
+// ============================================================
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000408, 0.022);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+camera.position.set(0, 8, 32);
+
+// ============================================================
+// POST-PROCESSING
+// ============================================================
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  CFG.bloomStrength, CFG.bloomRadius, CFG.bloomThreshold
+);
+composer.addPass(bloomPass);
+
+const ChromaticAberrationShader = {
+  uniforms: { tDiffuse: { value: null }, uAmount: { value: CFG.chromAberr } },
+  vertexShader: `varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uAmount;
+    varying vec2 vUv;
+    void main(){
+      vec2 d = (vUv - 0.5) * uAmount;
+      float r = texture2D(tDiffuse, vUv + d * vec2(1.5, 0.0)).r;
+      float g = texture2D(tDiffuse, vUv).g;
+      float b = texture2D(tDiffuse, vUv - d * vec2(1.5, 0.0)).b;
+      float a = texture2D(tDiffuse, vUv).a;
+      gl_FragColor = vec4(r, g, b, a);
+    }
+  `,
+};
+const chromPass = new ShaderPass(ChromaticAberrationShader);
+composer.addPass(chromPass);
+composer.addPass(new OutputPass());
+
+// ============================================================
+// ORBIT CONTROLS
+// ============================================================
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.maxDistance = 100;
+controls.minDistance = 5;
+controls.enabled = true;
+
+// ============================================================
+// NOISE
+// ============================================================
+function hash(n) {
+  const s = Math.sin(n) * 43758.5453;
+  return s - Math.floor(s);
+}
+function noise3D(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const fx = x-ix, fy = y-iy, fz = z-iz;
+  const ux = fx*fx*(3-2*fx), uy = fy*fy*(3-2*fy), uz = fz*fz*(3-2*fz);
+  function h(a,b,c){ return hash(a + b*57 + c*113); }
+  return ux*(uy*(uz*(h(ix+1,iy+1,iz+1)-h(ix,iy+1,iz+1))+h(ix+1,iy+1,iz)-h(ix,iy+1,iz))
+              +uz*(h(ix+1,iy,iz+1)-h(ix,iy,iz+1))+h(ix+1,iy,iz)-h(ix,iy,iz))
+       +(uy*(uz*(h(ix,iy+1,iz+1)-h(ix,iy,iz+1))+h(ix,iy+1,iz)-h(ix,iy,iz))
+         +uz*(h(ix,iy,iz+1)-h(ix,iy,iz))+h(ix,iy,iz));
+}
+
+// ============================================================
+// SHADERS
+// ============================================================
+const tentacleVert = `
+varying vec2 vUv;
+varying vec3 vWorldNormal;
+varying vec3 vWorldPos;
+void main(){
+  vUv = uv;
+  vWorldNormal = normalize((modelMatrix * vec4(normal,0.0)).xyz);
+  vWorldPos = (modelMatrix * vec4(position,1.0)).xyz;
+  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0);
+}`;
+
+const tentacleFrag = `
+uniform float uTime;
+uniform vec3 uBaseColor;
+uniform vec3 uGlowColor;
+uniform float uGlowIntensity;
+uniform float uAnimSpeed;
+varying vec2 vUv;
+varying vec3 vWorldNormal;
+varying vec3 vWorldPos;
+
+void main(){
+  float t = vUv.y;
+  float brightness = 1.0 - t * 0.72;
+  vec3 col = mix(uGlowColor, uBaseColor * 0.5, t);
+
+  // Flowing circuit lines
+  float phase = uTime * uAnimSpeed;
+  float flow  = mod(vUv.y * 6.0 - phase * 0.45, 1.0);
+  float ring  = step(0.88, flow);
+  float stripe= abs(sin(vUv.x * 3.14159 * 6.0));
+  float circuit = ring * (0.5 + stripe * 0.5);
+
+  // Radial glow dot traveling upward
+  float dot1 = exp(-50.0 * pow(mod(vUv.y - phase * 0.2, 1.0) - 0.5, 2.0));
+
+  col += uGlowColor * circuit * 4.0;
+  col += uGlowColor * dot1 * 2.0;
+
+  // Rim light
+  vec3 vDir = normalize(cameraPosition - vWorldPos);
+  float rim = pow(1.0 - max(dot(vWorldNormal, vDir), 0.0), 3.0);
+  col += uGlowColor * rim * 1.5;
+
+  col *= brightness * uGlowIntensity;
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+const coreVert = `
+varying vec3 vWorldNormal;
+varying vec3 vWorldPos;
+varying vec2 vUv;
+void main(){
+  vWorldNormal = normalize((modelMatrix * vec4(normal,0.0)).xyz);
+  vWorldPos = (modelMatrix * vec4(position,1.0)).xyz;
+  vUv = uv;
+  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0);
+}`;
+
+const coreFrag = `
+uniform float uTime;
+uniform vec3 uColor;
+uniform vec3 uRim;
+uniform float uPulse;
+uniform float uGlow;
+varying vec3 vWorldNormal;
+varying vec3 vWorldPos;
+varying vec2 vUv;
+
+void main(){
+  float pulse = 0.75 + 0.25 * sin(uTime * uPulse * 2.0);
+
+  // Organic circuit grid on sphere UV
+  float cx = step(0.97, mod(vUv.x * 12.0 + uTime * 0.2, 1.0));
+  float cy = step(0.97, mod(vUv.y * 8.0  - uTime * 0.15,1.0));
+  float diag = step(0.985, mod((vUv.x + vUv.y) * 7.0 + uTime * 0.1, 1.0));
+  float circuit = min(cx + cy + diag, 1.0);
+
+  // Organic flowing veins
+  float vein = sin(vWorldPos.x * 3.0 + uTime * 0.6)
+              * sin(vWorldPos.y * 3.0 + uTime * 0.45)
+              * sin(vWorldPos.z * 3.0 + uTime * 0.9);
+  vein = smoothstep(-0.1, 0.4, vein);
+
+  // Fresnel
+  vec3 viewDir = normalize(cameraPosition - vWorldPos);
+  float fresnel = pow(1.0 - max(dot(vWorldNormal, viewDir), 0.0), 2.5);
+
+  vec3 col = uColor * pulse;
+  col += uColor * circuit * 5.0;
+  col += uColor * vein * 0.6;
+  col += uRim   * fresnel * 3.5;
+  col *= uGlow;
+
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+const gridVert = `
+varying vec2 vPos;
+void main(){
+  vPos = position.xz;
+  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0);
+}`;
+
+const gridFrag = `
+uniform float uTime;
+uniform vec3 uColor;
+varying vec2 vPos;
+
+float gridLine(vec2 p, float sp){
+  vec2 g = abs(fract(p/sp - 0.5) - 0.5);
+  return min(g.x, g.y) < (0.03 / sp) ? 1.0 : 0.0;
+}
+void main(){
+  float g1 = gridLine(vPos, 5.0);
+  float g2 = gridLine(vPos, 1.0) * 0.35;
+  float g  = max(g1, g2);
+
+  float fade = 1.0 - smoothstep(30.0, 90.0, length(vPos));
+  float pulse = 0.6 + 0.4 * sin(uTime * 0.5 - length(vPos) * 0.04);
+  g *= fade * pulse;
+
+  gl_FragColor = vec4(uColor * g, g * 0.75);
+}`;
+
+// ============================================================
+// SCENE OBJECTS
+// ============================================================
+// Lights
+const ambientLight = new THREE.AmbientLight(0x001100, 0.4);
+scene.add(ambientLight);
+const coreLight = new THREE.PointLight(0x00ff88, 3.5, 30);
+scene.add(coreLight);
+const rimLight1 = new THREE.DirectionalLight(0x00ccff, 1.2);
+rimLight1.position.set(-10, 10, -8);
+scene.add(rimLight1);
+const rimLight2 = new THREE.DirectionalLight(0x00ff88, 0.6);
+rimLight2.position.set(10, -5, 8);
+scene.add(rimLight2);
+
+// Grid
+const gridGeo = new THREE.PlaneGeometry(200, 200, 1, 1);
+gridGeo.rotateX(-Math.PI / 2);
+const gridMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: {value:0}, uColor: {value: new THREE.Color(0x00ff55)} },
+  vertexShader: gridVert, fragmentShader: gridFrag,
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+});
+const gridMesh = new THREE.Mesh(gridGeo, gridMat);
+gridMesh.position.y = -16;
+scene.add(gridMesh);
+
+// Core sphere
+const coreGeo = new THREE.SphereGeometry(CFG.coreRadius, 48, 32);
+const coreMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uTime: {value:0},
+    uColor: {value: SCHEMES.matrix.glow.clone()},
+    uRim: {value: SCHEMES.matrix.rim.clone()},
+    uPulse: {value: CFG.corePulse},
+    uGlow: {value: CFG.glowIntensity},
+    cameraPosition: {value: camera.position},
+  },
+  vertexShader: coreVert, fragmentShader: coreFrag,
+});
+const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+scene.add(coreMesh);
+
+// Inner core glow sphere
+const innerGeo = new THREE.SphereGeometry(CFG.coreRadius * 0.6, 16, 16);
+const innerMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.08 });
+scene.add(new THREE.Mesh(innerGeo, innerMat));
+
+// Atmospheric halo
+const haloGeo = new THREE.SphereGeometry(CFG.coreRadius * 1.5, 16, 16);
+const haloMat = new THREE.MeshBasicMaterial({
+  color: 0x00ff44, transparent: true, opacity: 0.04, side: THREE.BackSide
+});
+scene.add(new THREE.Mesh(haloGeo, haloMat));
+
+// ============================================================
+// TENTACLE SYSTEM
+// ============================================================
+function fibonacciSphere(n) {
+  const pts = [];
+  const phi = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (i / (n - 1)) * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = phi * i;
+    pts.push(new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta)));
+  }
+  return pts;
+}
+
+class Tentacle {
+  constructor(attachDir, idx) {
+    this.dir = attachDir.clone().normalize();
+    this.idx = idx;
+    this.root = this.dir.clone().multiplyScalar(CFG.coreRadius * 0.85);
+    this.pos = [];
+    this.prev = [];
+    const startLen = CFG.segLen;
+    for (let i = 0; i < CFG.segCount; i++) {
+      const p = this.root.clone().add(this.dir.clone().multiplyScalar(i * startLen));
+      this.pos.push(p.clone());
+      this.prev.push(p.clone());
+    }
+    this.tipVelSq = 0;
+    this.attackTarget = null;
+  }
+
+  update(dt, time, coreWorldPos, attackActive) {
+    const rootWorld = coreWorldPos.clone().add(this.root);
+    this.pos[0].copy(rootWorld);
+    this.prev[0].copy(rootWorld);
+
+    const phase = this.idx * 0.618 * Math.PI * 2; // golden angle offset
+
+    for (let i = 1; i < CFG.segCount; i++) {
+      const p = this.pos[i], pp = this.prev[i];
+      const t = i / (CFG.segCount - 1);
+
+      // Verlet velocity
+      const vx = (p.x - pp.x) * CFG.stiffness;
+      const vy = (p.y - pp.y) * CFG.stiffness;
+      const vz = (p.z - pp.z) * CFG.stiffness;
+      pp.copy(p);
+      p.x += vx; p.y += vy; p.z += vz;
+
+      // Gravity
+      p.y -= CFG.gravity * dt * dt;
+
+      // Noise/wiggle force (stronger at tip)
+      const s = t * t * CFG.wiggle;
+      const ph = time * CFG.animSpeed + phase;
+      const nx = (noise3D(p.x*0.25,     p.y*0.25 + ph, p.z*0.25 + i*0.4) - 0.5) * 2;
+      const ny = (noise3D(p.x*0.25+100, p.y*0.25 + ph*0.7, p.z*0.25 + i*0.4+50) - 0.5) * 2;
+      const nz = (noise3D(p.x*0.25+200, p.y*0.25 + ph*0.9, p.z*0.25 + i*0.4+100) - 0.5) * 2;
+      p.x += nx * s * dt * dt * 30;
+      p.y += ny * s * dt * dt * 30;
+      p.z += nz * s * dt * dt * 30;
+
+      // Curl force — makes tentacles spiral
+      if (CFG.curl > 0) {
+        const curl = CFG.curl * t * t;
+        const cx = p.y * 0.1 * curl;
+        const cz = -p.x * 0.1 * curl;
+        p.x += Math.sin(time * CFG.animSpeed * 1.2 + phase) * cx * dt;
+        p.z += Math.cos(time * CFG.animSpeed * 0.9 + phase) * cz * dt;
+      }
+
+      // Attack: surge toward target
+      if (attackActive && this.attackTarget && t > 0.5) {
+        const at = this.attackTarget;
+        const dx = at.x - p.x, dy = at.y - p.y, dz = at.z - p.z;
+        const d2 = dx*dx + dy*dy + dz*dz;
+        const f = Math.min(200.0 / (d2 + 1.0), 5.0) * CFG.wiggle * t;
+        p.x += dx * f * dt * dt * 20;
+        p.y += dy * f * dt * dt * 20;
+        p.z += dz * f * dt * dt * 20;
+      }
+    }
+
+    // Constraint passes
+    for (let iter = 0; iter < CFG.constraintIters; iter++) {
+      this.pos[0].copy(rootWorld);
+      for (let i = 1; i < CFG.segCount; i++) {
+        const a = this.pos[i-1], b = this.pos[i];
+        const dx = b.x-a.x, dy = b.y-a.y, dz = b.z-a.z;
+        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        if (dist < 1e-5) continue;
+        const err = (dist - CFG.segLen) / dist * 0.5;
+        if (i > 1) { a.x += dx*err; a.y += dy*err; a.z += dz*err; }
+        b.x -= dx*err; b.y -= dy*err; b.z -= dz*err;
+      }
+    }
+
+    // Track tip velocity for particle emission
+    const tip = this.pos[CFG.segCount - 1];
+    const ptip = this.prev[CFG.segCount - 1];
+    const dvx = tip.x - ptip.x, dvy = tip.y - ptip.y, dvz = tip.z - ptip.z;
+    this.tipVelSq = dvx*dvx + dvy*dvy + dvz*dvz;
+  }
+}
+
+// Tentacle geometry helpers
+const _up  = new THREE.Vector3(0,1,0);
+const _alt = new THREE.Vector3(1,0,0);
+const _tan = new THREE.Vector3();
+const _nm  = new THREE.Vector3();
+const _bn  = new THREE.Vector3();
+const _pN  = new THREE.Vector3();
+
+function createTubeGeo(segCount, radialSegs) {
+  const verts = segCount * (radialSegs + 1);
+  const pos = new Float32Array(verts * 3);
+  const nor = new Float32Array(verts * 3);
+  const uvs = new Float32Array(verts * 2);
+  const indices = [];
+  for (let i = 0; i < segCount; i++) {
+    const vt = i / (segCount - 1);
+    for (let j = 0; j <= radialSegs; j++) {
+      const vi = i*(radialSegs+1)+j;
+      uvs[vi*2] = j/radialSegs; uvs[vi*2+1] = vt;
+      if (i < segCount-1 && j < radialSegs) {
+        const a=vi, b=a+1, c=(i+1)*(radialSegs+1)+j, d=c+1;
+        indices.push(a,b,d, a,d,c);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('normal',   new THREE.BufferAttribute(nor,3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('uv',       new THREE.BufferAttribute(uvs,2));
+  geo.setIndex(indices);
+  return geo;
+}
+
+function fillTubeGeo(geo, pts, radialSegs, baseR) {
+  const pos = geo.attributes.position.array;
+  const nor = geo.attributes.normal.array;
+  const n = pts.length, rs = radialSegs;
+  let firstFrame = true;
+
+  for (let i = 0; i < n; i++) {
+    if (i === 0)        _tan.subVectors(pts[1], pts[0]);
+    else if (i === n-1) _tan.subVectors(pts[n-1], pts[n-2]);
+    else                _tan.subVectors(pts[i+1], pts[i-1]);
+    _tan.normalize();
+
+    if (firstFrame) {
+      _nm.copy(Math.abs(_tan.dot(_up)) > 0.99 ? _alt : _up);
+      const c = _tan.dot(_nm); _nm.addScaledVector(_tan, -c).normalize();
+      _pN.copy(_nm); firstFrame = false;
+    } else {
+      const c = _pN.dot(_tan);
+      _nm.copy(_pN).addScaledVector(_tan, -c);
+      const len = _nm.length();
+      if (len > 1e-4) _nm.divideScalar(len); else _nm.copy(_pN);
+      _pN.copy(_nm);
+    }
+    _bn.crossVectors(_tan, _nm).normalize();
+
+    const t = i / (n-1);
+    const r = baseR * (1.0 - t * 0.88);
+    const base = i*(rs+1);
+    for (let j = 0; j <= rs; j++) {
+      const ang = (j/rs)*Math.PI*2;
+      const c2 = Math.cos(ang), s2 = Math.sin(ang);
+      const nx = c2*_nm.x + s2*_bn.x;
+      const ny = c2*_nm.y + s2*_bn.y;
+      const nz = c2*_nm.z + s2*_bn.z;
+      const vi = base+j;
+      pos[vi*3]   = pts[i].x + nx*r;
+      pos[vi*3+1] = pts[i].y + ny*r;
+      pos[vi*3+2] = pts[i].z + nz*r;
+      nor[vi*3]=nx; nor[vi*3+1]=ny; nor[vi*3+2]=nz;
+    }
+  }
+  geo.attributes.position.needsUpdate = true;
+  geo.attributes.normal.needsUpdate = true;
+}
+
+// Init tentacles
+const tentacleObjects = [];
+const attachDirs = fibonacciSphere(CFG.tentacleCount);
+
+attachDirs.forEach((dir, idx) => {
+  const tent = new Tentacle(dir, idx);
+  const geo  = createTubeGeo(CFG.segCount, CFG.radialSegs);
+  const mat  = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime:        {value:0},
+      uBaseColor:   {value: SCHEMES.matrix.base.clone()},
+      uGlowColor:   {value: SCHEMES.matrix.glow.clone()},
+      uGlowIntensity:{value: CFG.glowIntensity},
+      uAnimSpeed:   {value: CFG.animSpeed},
+      cameraPosition:{value: camera.position},
+    },
+    vertexShader: tentacleVert,
+    fragmentShader: tentacleFrag,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  tentacleObjects.push({ tent, geo, mat });
+});
+
+// ============================================================
+// PARTICLE SYSTEM
+// ============================================================
+const MAX_P = 400;
+const pPos  = new Float32Array(MAX_P*3);
+const pVel  = new Float32Array(MAX_P*3);
+const pLife = new Float32Array(MAX_P);
+const pMaxL = new Float32Array(MAX_P);
+const pAlpha= new Float32Array(MAX_P);
+let pIdx = 0;
+
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos,3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('alpha', new THREE.BufferAttribute(pAlpha,1).setUsage(THREE.DynamicDrawUsage));
+const pMat = new THREE.ShaderMaterial({
+  uniforms: { uColor: {value: new THREE.Color(0x00ff88)} },
+  vertexShader: `
+    attribute float alpha;
+    varying float vAlpha;
+    void main(){
+      vAlpha = alpha;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = max(2.0, 180.0 / -mv.z) * alpha;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    uniform vec3 uColor;
+    varying float vAlpha;
+    void main(){
+      float d = length(gl_PointCoord - 0.5) * 2.0;
+      float c = smoothstep(1.0, 0.1, d);
+      gl_FragColor = vec4(uColor * 4.0, c * vAlpha);
+    }`,
+  transparent: true, blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+const particles = new THREE.Points(pGeo, pMat);
+particles.frustumCulled = false;
+scene.add(particles);
+
+function emitSpark(x, y, z, vx, vy, vz) {
+  const i = pIdx % MAX_P;
+  pPos[i*3]  =x; pPos[i*3+1] =y; pPos[i*3+2] =z;
+  pVel[i*3]  =vx+(Math.random()-.5)*1.5;
+  pVel[i*3+1]=vy+Math.random()*0.8;
+  pVel[i*3+2]=vz+(Math.random()-.5)*1.5;
+  const life = 0.3 + Math.random() * 0.6;
+  pLife[i]=pMaxL[i]=life;
+  pAlpha[i]=1.0;
+  pIdx++;
+}
+
+function updateParticles(dt) {
+  for (let i = 0; i < MAX_P; i++) {
+    if (pLife[i] <= 0) { pAlpha[i]=0; continue; }
+    pLife[i] -= dt;
+    pPos[i*3]   += pVel[i*3]   * dt;
+    pPos[i*3+1] += pVel[i*3+1] * dt;
+    pPos[i*3+2] += pVel[i*3+2] * dt;
+    pVel[i*3+1] -= 3.0 * dt;
+    pVel[i*3]   *= 0.97; pVel[i*3+2] *= 0.97;
+    pAlpha[i] = Math.max(0, pLife[i] / pMaxL[i]);
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.alpha.needsUpdate = true;
+}
+
+// ============================================================
+// CREATURE MOVEMENT
+// ============================================================
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); triggerAttack(); }
+  if (e.code === 'Tab')   { e.preventDefault(); setMode(currentMode === 'orbit' ? 'creature' : 'orbit'); }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+let currentMode = 'orbit';
+const corePos  = new THREE.Vector3(0, 0, 0);
+const coreVel  = new THREE.Vector3();
+const coreTarget = new THREE.Vector3();
+let attackTimer = 0;
+let pulseTimer  = 0;
+
+window.setMode = function(mode) {
+  currentMode = mode;
+  controls.enabled = (mode === 'orbit');
+  document.getElementById('btn-orbit').classList.toggle('active', mode === 'orbit');
+  document.getElementById('btn-creature').classList.toggle('active', mode === 'creature');
+  document.getElementById('s-mode').textContent = mode.toUpperCase();
+  if (mode === 'creature') {
+    controls.enabled = false;
+  }
+};
+
+window.triggerAttack = function() {
+  attackTimer = 1.2;
+  CFG.attackMode = true;
+  const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  tentacleObjects.forEach(({tent}) => {
+    tent.attackTarget = camera.position.clone().add(camDir.multiplyScalar(10));
+  });
+  coreMat.uniforms.uGlow.value = CFG.glowIntensity * 3.0;
+};
+
+window.triggerPulse = function() {
+  pulseTimer = 1.5;
+  coreLight.intensity = 20;
+};
+
+window.resetCreature = function() {
+  corePos.set(0,0,0); coreVel.set(0,0,0);
+  tentacleObjects.forEach(({tent}) => {
+    tent.pos.forEach((p, i) => {
+      const startP = tent.root.clone().add(tent.dir.clone().multiplyScalar(i * CFG.segLen));
+      p.copy(startP); tent.prev[i].copy(startP);
+    });
+  });
+};
+
+window.toggleGrid = function() {
+  CFG.showGrid = !CFG.showGrid;
+  gridMesh.visible = CFG.showGrid;
+};
+
+window.setScheme = function(name) {
+  CFG.scheme = name;
+  const sc = SCHEMES[name];
+  ['matrix','cyber','inferno'].forEach(k => {
+    document.getElementById('col-'+k).classList.toggle('active', k === name);
+  });
+  coreMat.uniforms.uColor.value.copy(sc.glow);
+  coreMat.uniforms.uRim.value.copy(sc.rim);
+  pMat.uniforms.uColor.value.copy(sc.glow);
+  tentacleObjects.forEach(({mat}) => {
+    mat.uniforms.uBaseColor.value.copy(sc.base);
+    mat.uniforms.uGlowColor.value.copy(sc.glow);
+  });
+  const gc = new THREE.Color().lerpColors(sc.base, sc.glow, 0.5);
+  gridMat.uniforms.uColor.value.copy(gc);
+  coreLight.color.copy(sc.glow);
+};
+
+// ============================================================
+// UI WIRING
+// ============================================================
+function wire(id, cfgKey, valId, cb) {
+  const el = document.getElementById(id);
+  const vl = document.getElementById(valId);
+  el.addEventListener('input', () => {
+    CFG[cfgKey] = parseFloat(el.value);
+    vl.textContent = CFG[cfgKey];
+    if (cb) cb(CFG[cfgKey]);
+  });
+}
+wire('r-wiggle', 'wiggle', 'v-wiggle');
+wire('r-stiff',  'stiffness', 'v-stiff');
+wire('r-grav',   'gravity', 'v-grav');
+wire('r-curl',   'curl', 'v-curl');
+wire('r-aspeed', 'animSpeed', 'v-aspeed', v => {
+  tentacleObjects.forEach(({mat}) => mat.uniforms.uAnimSpeed.value = v);
+});
+wire('r-iters',  'constraintIters', 'v-iters');
+wire('r-glow',   'glowIntensity', 'v-glow', v => {
+  coreMat.uniforms.uGlow.value = v;
+  tentacleObjects.forEach(({mat}) => mat.uniforms.uGlowIntensity.value = v);
+});
+wire('r-bloom',  'bloomStrength', 'v-bloom', v => { bloomPass.strength = v; });
+wire('r-bradius','bloomRadius', 'v-bradius', v => { bloomPass.radius = v; });
+wire('r-chrom',  'chromAberr', 'v-chrom', v => { chromPass.uniforms.uAmount.value = v; });
+wire('r-tradius','tentacleRadius', 'v-tradius');
+wire('r-pulse',  'corePulse', 'v-pulse', v => { coreMat.uniforms.uPulse.value = v; });
+
+// ============================================================
+// RESIZE
+// ============================================================
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  bloomPass.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ============================================================
+// ANIMATION LOOP
+// ============================================================
+let lastTime = performance.now();
+let fpsAcc = 0, fpsCount = 0, fpsTimer = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt  = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime  = now;
+  const time = now / 1000;
+
+  // FPS counter
+  fpsTimer += dt; fpsCount++;
+  if (fpsTimer >= 0.5) {
+    document.getElementById('s-fps').textContent = Math.round(fpsCount / fpsTimer);
+    fpsTimer = fpsCount = 0;
+  }
+
+  // Creature movement (drive mode)
+  if (currentMode === 'creature') {
+    const speed = 8;
+    const fwd = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0, camera.rotation.y, 0));
+    const right = new THREE.Vector3(1,0,0).applyEuler(new THREE.Euler(0, camera.rotation.y, 0));
+    if (keys['KeyW'] || keys['ArrowUp'])    coreVel.addScaledVector(fwd,   speed*dt);
+    if (keys['KeyS'] || keys['ArrowDown'])  coreVel.addScaledVector(fwd,  -speed*dt);
+    if (keys['KeyA'] || keys['ArrowLeft'])  coreVel.addScaledVector(right,-speed*dt);
+    if (keys['KeyD'] || keys['ArrowRight']) coreVel.addScaledVector(right, speed*dt);
+    if (keys['KeyQ']) coreVel.y += speed * dt;
+    if (keys['KeyE']) coreVel.y -= speed * dt;
+    coreVel.multiplyScalar(0.88);
+    corePos.add(coreVel);
+    // Camera follows creature
+    const camTarget = corePos.clone().add(new THREE.Vector3(0, 4, 20));
+    camera.position.lerp(camTarget, 0.05);
+    camera.lookAt(corePos);
+  }
+
+  // Attack cooldown
+  if (attackTimer > 0) {
+    attackTimer -= dt;
+    if (attackTimer <= 0) {
+      CFG.attackMode = false;
+      coreMat.uniforms.uGlow.value = CFG.glowIntensity;
+    }
+  }
+
+  // Pulse cooldown
+  if (pulseTimer > 0) {
+    pulseTimer -= dt;
+    coreLight.intensity = THREE.MathUtils.lerp(coreLight.intensity, 3.5, dt * 3);
+    if (pulseTimer <= 0) coreLight.intensity = 3.5;
+  }
+
+  // Update core
+  coreMesh.position.copy(corePos);
+  coreLight.position.copy(corePos);
+
+  // Gentle idle bob
+  const bob = Math.sin(time * 0.4) * 0.3;
+  coreMesh.position.y += bob;
+  coreMesh.rotation.y += dt * 0.15;
+
+  // Shader uniforms
+  coreMat.uniforms.uTime.value = time;
+  coreMat.uniforms.cameraPosition.value.copy(camera.position);
+  gridMat.uniforms.uTime.value = time;
+
+  // Update tentacles
+  tentacleObjects.forEach(({tent, geo, mat}) => {
+    tent.update(dt, time, coreMesh.position, CFG.attackMode);
+    fillTubeGeo(geo, tent.pos, CFG.radialSegs, CFG.tentacleRadius);
+    mat.uniforms.uTime.value = time;
+    mat.uniforms.cameraPosition.value.copy(camera.position);
+    mat.uniforms.uGlowIntensity.value = CFG.glowIntensity + (CFG.attackMode ? 1.5 : 0);
+
+    // Emit sparks on fast-moving tentacles
+    if (tent.tipVelSq > 0.04 && Math.random() < 0.3) {
+      const tip = tent.pos[CFG.segCount - 1];
+      const ptip = tent.prev[CFG.segCount - 1];
+      const spd = 10;
+      emitSpark(tip.x, tip.y, tip.z,
+        (tip.x-ptip.x)*spd, (tip.y-ptip.y)*spd, (tip.z-ptip.z)*spd);
+    }
+  });
+
+  // Core pulsing light
+  coreLight.intensity = (attackTimer > 0 ? 12 : 3.5) + Math.sin(time * CFG.corePulse * 2.5) * 1.0;
+
+  // Particles
+  updateParticles(dt);
+
+  // Controls
+  if (currentMode === 'orbit') controls.update();
+
+  composer.render();
+}
+
+animate();
+
+// ============================================================
+// WELCOME FLASH: brief attack to show off the creature
+// ============================================================
+setTimeout(() => { triggerAttack(); }, 800);
+setTimeout(() => { triggerPulse(); }, 1200);
+
+</script>
+</body>
+</html>
