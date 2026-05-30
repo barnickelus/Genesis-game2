@@ -166,8 +166,24 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 // ═══════════════════════════════════════════
 const G = document.getElementById('g');
 const cx = G.getContext('2d', {alpha: false});
-let W, H;
-function resize() { W = G.width = innerWidth; H = G.height = innerHeight; }
+
+// ── High-DPI rendering ──────────────────────────────────────────────────────
+// The backing store is decoupled from the CSS box so the world renders pixel-
+// crisp on retina / mobile panels instead of being upscaled from a soft 1× buffer.
+//   W,H   — *device* pixels. Everything draws in this space (clears, transforms,
+//           offsets, screen-space overlays). This is the true framebuffer size.
+//   CW,CH — *CSS* pixels. Used only for pointer mapping and camera zoom, so the
+//           feel of the game is identical regardless of pixel density.
+// DPR is capped at 2 so a 3× phone doesn't pay for 9× the fill cost.
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W, H, CW, CH;
+function resize() {
+  CW = innerWidth; CH = innerHeight;
+  W = G.width  = Math.round(CW * DPR);
+  H = G.height = Math.round(CH * DPR);
+  G.style.width  = CW + 'px';
+  G.style.height = CH + 'px';
+}
 addEventListener('resize', resize); resize();
 
 // ═══════════════════════════════════════════
@@ -314,10 +330,12 @@ function stg() { return STAGES[P.stg]; }
 // ═══════════════════════════════════════════
 let ptr = {x:0, y:0, on:false, tap:false};
 const tw = e => {
-  // Guard against zm being 0 (shouldn't happen but defensive)
+  // Guard against zm being 0 (shouldn't happen but defensive).
+  // clientX/Y arrive in CSS pixels; the camera offset lives in device pixels,
+  // so scale the pointer up by DPR before un-projecting through the transform.
   const z = zm || 1;
-  const x = (e.clientX - off.x) / z;
-  const y = (e.clientY - off.y) / z;
+  const x = (e.clientX * DPR - off.x) / z;
+  const y = (e.clientY * DPR - off.y) / z;
   return { x: isFinite(x) ? x : P.x, y: isFinite(y) ? y : P.y };
 };
 
@@ -344,6 +362,7 @@ introEl.addEventListener('click', introTap);
 introEl.addEventListener('touchstart', introTap, {passive:false});
 addEventListener('keydown', e => {
   if (introActive && (e.key===' '||e.key==='Enter'||e.code==='Space')) { e.preventDefault(); beginGame(); }
+  if (e.key==='b'||e.key==='B') bloomOn = !bloomOn;   // toggle the bloom post-process
 });
 
 // ═══════════════════════════════════════════
@@ -1221,8 +1240,6 @@ function checkEvo() {
 // ═══════════════════════════════════════════
 // COLLISIONS
 // ═══════════════════════════════════════════
-// COLLISIONS
-// ═══════════════════════════════════════════
 function collide(dt) {
   const nearP=gNear(P.x,P.y,Math.max(P.r*2,80));
   // Frenzy expands eat range AND relaxes the threshold so you can punch up
@@ -1497,6 +1514,42 @@ function bioGlow(x, y, r, gl, a) {
     cx.fillStyle = g;
     cx.beginPath(); cx.arc(x, y, r, 0, TAU); cx.fill();
   } catch(e) { /* fail silent — never let a glow abort the frame */ }
+  cx.globalAlpha = 1;
+}
+
+// ═══════════════════════════════════════════
+// BLOOM — layered additive glow post-process
+// ═══════════════════════════════════════════
+// Two-tap downsample → additive composite. The frame is shrunk to ¼ and ⅛
+// resolution (the browser's bilinear filter does the blurring for free), then
+// both buffers are drawn back over the scene with 'lighter'. The tight ¼ buffer
+// hugs bright edges; the wide ⅛ buffer throws a soft halo. On the near-black
+// nebula backdrop the additive bias on dark pixels is negligible, so only the
+// neon biology, projectiles, radar and frenzy effects actually bloom — giving the
+// whole game a luminous, lensed feel for the cost of four drawImage calls/frame.
+const bloomA = document.createElement('canvas'), bxA = bloomA.getContext('2d');
+const bloomB = document.createElement('canvas'), bxB = bloomB.getContext('2d');
+let bloomOn = true;
+function applyBloom() {
+  if (!bloomOn) return;
+  const w4 = Math.max(1, W >> 2), h4 = Math.max(1, H >> 2),
+        w8 = Math.max(1, W >> 3), h8 = Math.max(1, H >> 3);
+  if (bloomA.width !== w4) { bloomA.width = w4; bloomA.height = h4; }
+  if (bloomB.width !== w8) { bloomB.width = w8; bloomB.height = h8; }
+
+  // Downsample the rendered frame: full → ¼ → ⅛
+  bxA.globalCompositeOperation = 'source-over'; bxA.globalAlpha = 1; bxA.imageSmoothingEnabled = true;
+  bxA.clearRect(0, 0, w4, h4); bxA.drawImage(G, 0, 0, w4, h4);
+  bxB.globalCompositeOperation = 'source-over'; bxB.globalAlpha = 1; bxB.imageSmoothingEnabled = true;
+  bxB.clearRect(0, 0, w8, h8); bxB.drawImage(bloomA, 0, 0, w8, h8);
+
+  // Composite the blurred buffers back additively at full size
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+  cx.imageSmoothingEnabled = true;
+  cx.globalCompositeOperation = 'lighter';
+  cx.globalAlpha = .42; cx.drawImage(bloomA, 0, 0, W, H);
+  cx.globalAlpha = .36; cx.drawImage(bloomB, 0, 0, W, H);
+  cx.globalCompositeOperation = 'source-over';
   cx.globalAlpha = 1;
 }
 
@@ -2102,35 +2155,35 @@ function drawPlayerScreenSpace(ts) {
   cx.globalCompositeOperation = 'source-over';
   cx.setLineDash([]);
 
-  // Outer glow halo — stage colored
+  // This overlay used to slap a near-opaque disc over the player, smothering the
+  // hand-drawn world-space body. It now renders as a *faint* locator: a soft
+  // stage-colored halo and a small luminous pip. The artistic body (drawPlayer)
+  // shows through clearly, while this still guarantees the player is findable —
+  // and grows brighter only when the world-space render genuinely failed.
+  const failsafe = !isFinite(P.x) || !isFinite(P.y);  // artistic body couldn't place itself
+  const bodyA = failsafe ? 0.82 : 0.10;
+  const pipA  = failsafe ? 0.95 : 0.40;
+
+  // Outer glow halo — stage colored, soft
   cx.shadowBlur = r * 1.2;
   cx.shadowColor = s.c.pri;
   cx.fillStyle = s.c.pri;
-  cx.globalAlpha = 0.20;
+  cx.globalAlpha = failsafe ? 0.28 : 0.14;
   cx.beginPath(); cx.arc(cx2, cy2, r * 1.5, 0, TAU); cx.fill();
 
-  // Body fill — solid stage color
-  cx.shadowBlur = r * 0.6;
+  // Faint body wash (full disc only when failsafe-bright)
+  cx.shadowBlur = r * 0.5;
   cx.shadowColor = s.c.pri;
   cx.fillStyle = s.c.pri;
-  cx.globalAlpha = 0.78;
+  cx.globalAlpha = bodyA;
   cx.beginPath(); cx.arc(cx2, cy2, r, 0, TAU); cx.fill();
 
-  // White highlight (gives 3D feel)
-  cx.shadowBlur = 0;
+  // Small luminous center pip — the anchor
+  cx.shadowBlur = r * 0.3;
+  cx.shadowColor = '#fff';
   cx.fillStyle = '#ffffff';
-  cx.globalAlpha = 0.32;
-  cx.beginPath(); cx.arc(cx2 - r*0.3, cy2 - r*0.3, r * 0.45, 0, TAU); cx.fill();
-
-  // Bright white center pip — unmistakable anchor
-  cx.fillStyle = '#ffffff';
-  cx.globalAlpha = 0.95;
-  cx.beginPath(); cx.arc(cx2, cy2, Math.max(2, r * 0.18), 0, TAU); cx.fill();
-
-  // Stage-color inner dot (identity)
-  cx.fillStyle = s.c.pri;
-  cx.globalAlpha = 1;
-  cx.beginPath(); cx.arc(cx2, cy2, Math.max(1, r * 0.09), 0, TAU); cx.fill();
+  cx.globalAlpha = pipA;
+  cx.beginPath(); cx.arc(cx2, cy2, Math.max(1.5, r * 0.11), 0, TAU); cx.fill();
 
   // Damage feedback ring — bright red pulse around player when hurt
   if (P.blink > 0) {
@@ -2657,15 +2710,27 @@ function drawAnomalies(ts) {
 // ═══════════════════════════════════════════
 function drawVig() {
   cx.setTransform(1,0,0,1,0,0);
-  const g=cx.createRadialGradient(W/2,H/2,W*.14,W/2,H/2,W*.62);
-  g.addColorStop(0,'transparent'); g.addColorStop(1,'rgba(0,5,14,.52)');
+  const c=stg().c;
+  // Edge darkening — slightly deeper, with a softer mid-rolloff
+  const g=cx.createRadialGradient(W/2,H/2,W*.14,W/2,H/2,W*.66);
+  g.addColorStop(0,'transparent'); g.addColorStop(.7,'rgba(0,5,14,.16)'); g.addColorStop(1,'rgba(0,5,14,.58)');
   cx.fillStyle=g; cx.fillRect(0,0,W,H);
+  // Faint stage-colored atmosphere bleeding in from the edges — shifts hue as you evolve
+  cx.globalCompositeOperation='lighter';
+  const g2=cx.createRadialGradient(W/2,H/2,W*.30,W/2,H/2,W*.7);
+  g2.addColorStop(0,'transparent'); g2.addColorStop(1,c.gl+'.04)');
+  cx.fillStyle=g2; cx.fillRect(0,0,W,H);
+  cx.globalCompositeOperation='source-over';
 }
 
 // ═══════════════════════════════════════════
 // HUD
 // ═══════════════════════════════════════════
-const cdCtx=document.getElementById('cdC').getContext('2d');
+// Cooldown ring — back the small HUD canvas at device resolution and scale the
+// context so all draw coords stay in the original 26×26 design space, crisp on retina.
+const cdEl=document.getElementById('cdC');
+cdEl.width=26*DPR; cdEl.height=26*DPR; cdEl.style.width='26px'; cdEl.style.height='26px';
+const cdCtx=cdEl.getContext('2d'); cdCtx.scale(DPR,DPR);
 function updateHUD() {
   const s=stg(), nx=STAGES[P.stg+1];
   document.getElementById('stgName').textContent=s.name;
@@ -2733,7 +2798,9 @@ function updateHUD() {
 // ═══════════════════════════════════════════
 // MINIMAP
 // ═══════════════════════════════════════════
-const mmCtx=document.getElementById('mmC').getContext('2d');
+const mmEl=document.getElementById('mmC');
+mmEl.width=80*DPR; mmEl.height=80*DPR; mmEl.style.width='80px'; mmEl.style.height='80px';
+const mmCtx=mmEl.getContext('2d'); mmCtx.scale(DPR,DPR);  // draw in 80×80 design space, crisp on retina
 function drawMinimap() {
   mmCtx.clearRect(0,0,80,80); mmCtx.fillStyle='rgba(0,5,14,.35)'; mmCtx.fillRect(0,0,80,80);
   const sc=76/3200;
@@ -2822,7 +2889,7 @@ function loop(ts) {
   // comparable amounts of world. The zoom cap scales DOWN on small screens
   // so iPhones don't over-zoom at small player sizes; the previous fixed 1.5
   // cap looked correct on iPad but ~25% too zoomed on iPhone.
-  const minDim = Math.min(W, H);
+  const minDim = Math.min(CW, CH);  // CSS pixels — keeps zoom feel density-independent
   const screenFactor = cl(minDim / 800, .55, 1.15);  // 0.55 on phones, ~1.0 on tablets, capped
   const zMin = .28 * screenFactor;
   const zMax = 1.6  * screenFactor;
@@ -2921,6 +2988,11 @@ function loop(ts) {
     cx.setTransform(1,0,0,1,0,0);
     cx.globalAlpha=.022+.012*Math.sin(ts*.007); cx.fillStyle='#4080f0'; cx.fillRect(0,0,W,H); cx.globalAlpha=1;
   }
+
+  // Bloom — layered additive glow over the fully-composed world/player frame.
+  // Wrapped so a context hiccup can never blacken the frame; the vignette and
+  // HUD (separate DOM/canvas) always follow.
+  try { applyBloom(); } catch(e) { cx.setTransform(1,0,0,1,0,0); cx.globalCompositeOperation='source-over'; cx.globalAlpha=1; }
 
   drawVig();
   updateHUD();
