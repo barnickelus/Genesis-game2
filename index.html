@@ -1162,7 +1162,10 @@ function calcDecay(m, dt) {
   // to hold. The correct value rejoins the documented curve (1.5 → 4.0/sec) and is
   // continuous with the m≥1500 branch below.
   if (m<1500) return (.0011 + (m-400) * .0000027) * dt;
-  return (.0040 + (m-1500) * .00015) * dt;
+  // BUGFIX: coefficient was .00015 — a ~37× typo that made TITAN-era decay
+  // catastrophic (~109/sec at 2200, ~530/sec at 5000), so TITAN was effectively
+  // unreachable/unplayable. .000004 matches the documented curve (8.0/sec at 2500).
+  return (.0040 + (m-1500) * .000004) * dt;
 }
 
 function updateP(dt) {
@@ -1190,6 +1193,12 @@ function updateP(dt) {
   if (!isFinite(P.x) || !isFinite(P.y)) { P.x = 0; P.y = 0; P.vx = 0; P.vy = 0; }
 
   P.r=calcR(P.mass, s.bR);
+  // TITAN balloons physically — calcR alone is logarithmic and tops out near r42,
+  // far too small for the camera to ever pull back. This super-linear bonus makes
+  // the giant genuinely dwarf its world, which is what drives the zoom-out and lets
+  // the filter-ratio treat the old fauna as plankton. (PRIMORDIAL handles its own
+  // scale in Phase 2.)
+  if (P.stg===4) P.r += Math.max(0, P.mass - STAGES[4].thr) * 0.12;
 
   const floor=STAGES[P.stg].thr*.78+3;
   P.mass=Math.max(floor, P.mass-calcDecay(P.mass,dt));
