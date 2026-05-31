@@ -1535,7 +1535,7 @@ function bioGlow(x, y, r, gl, a) {
 // ═══════════════════════════════════════════
 // BLOOM — layered additive glow post-process
 // ═══════════════════════════════════════════
-// Two-tap downsample → additive composite. The frame is shrunk to ¼ and ⅛
+// Two-level downsample → additive composite. The frame is shrunk to ¼ and ⅛
 // resolution (the browser's bilinear filter does the blurring for free), then
 // both buffers are drawn back over the scene with 'lighter'. The tight ¼ buffer
 // hugs bright edges; the wide ⅛ buffer throws a soft halo. On the near-black
