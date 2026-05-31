@@ -249,6 +249,12 @@ const ORGS = {
   phantom:  { col:'#C050E0', dim:'#240840', minR:16,  maxR:30,  spd:1,    hp:18, mass:60,  beh:'lure',    spW:1400, mx:4              },
   behemoth: { col:'#D01818', dim:'#300202', minR:40,  maxR:65,  spd:1.2,  hp:50, mass:140, beh:'apex',    spW:1800, mx:2              },
   echo:     { col:'#D8ECF4', dim:'#303e44', minR:11,  maxR:20,  spd:1,    hp:18, mass:65,  beh:'mirror',  spW:1100, mx:2              },
+  // GRAZER — a docile colossus introduced at NAGA to break the mass wall. It is
+  // deliberately mass-rich (150) yet kept to a modest radius (≤26) so a NAGA-sized
+  // player can still swallow it, and slow enough to run down. This is the large,
+  // safe meal the mid-game was missing; it is never a threat (low radius ⇒ never a
+  // predator) and only ever appears from stage 3 onward (gated in the maintenance loop).
+  grazer:   { col:'#7CE8B4', dim:'#1c4636', minR:19,  maxR:26,  spd:.45,  hp:8,  mass:150, beh:'graze',   spW:1600, mx:6              },
 };
 
 const PREY_OF = {
@@ -857,6 +863,7 @@ const COLOR_FAMILY = {
   hunter:'red', behemoth:'red',
   levia:'blue',
   echo:'white',
+  grazer:'green',
 };
 
 // Vulnerable angle per creature type (relative to the prey's heading).
@@ -873,6 +880,7 @@ const VULN = {
   echo:     { ang:PI,   w:0.9  }, // narrow rear seam
   levia:    { ang:PI,   w:1.2  }, // tail flukes
   behemoth: { ang:PI,   w:0.7  }, // tiny apex weakspot
+  grazer:   { ang:0,    w:TAU  }, // omni-edible — it's meant to be a free meal
 };
 
 function canEatAngle(o) {
@@ -1030,6 +1038,13 @@ function aiOrg(o, dt) {
       o.wAng+=(Math.random()-.5)*.006*dt; tx=o.x+Math.cos(o.wAng)*spd; ty=o.y+Math.sin(o.wAng)*spd;
       if (smaller&&dist<fleeR*.7) { const fa=ang(P,o); tx=o.x+Math.cos(fa)*spd*2; ty=o.y+Math.sin(fa)*spd*2; }
       if (o.flT>0&&bigger&&dist<250) { const ha=ang(o,P); tx=o.x+Math.cos(ha)*spd*2.5; ty=o.y+Math.sin(ha)*spd*2.5; } break;
+
+    case 'graze':
+      // Serene drifter. Meanders gently and only ambles away when the player gets
+      // close enough to eat it — slow enough (spd .45) to be run down, so it reads
+      // as a reliable big meal rather than a frustrating chase.
+      o.wAng+=(Math.random()-.5)*.004*dt; tx=o.x+Math.cos(o.wAng)*spd; ty=o.y+Math.sin(o.wAng)*spd;
+      if (smaller&&dist<fleeR*.85) { const fa=ang(P,o),u=1-dist/(fleeR*.85); tx=o.x+Math.cos(fa)*spd*(1.4+u*1.2); ty=o.y+Math.sin(fa)*spd*(1.4+u*1.2); } break;
 
     case 'lure':
       if (smaller&&dist<fleeR) { const fa=ang(P,o); tx=o.x+Math.cos(fa)*spd*2.5; ty=o.y+Math.sin(fa)*spd*2.5; }
@@ -1215,8 +1230,8 @@ function checkEvo() {
     burst(P.x,P.y,s.c.pri,45,5); ring(P.x,P.y,'#fff',P.r*2,18); shk(8,400); sfxEvo();
     setStageAudio(P.stg);
     if(P.stg>=2) spawn('hunter',3);
-    if(P.stg>=3){spawn('phantom',2);if(Math.random()<.5)spawn('echo',1);}
-    if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);}
+    if(P.stg>=3){spawn('phantom',2);spawn('grazer',5);if(Math.random()<.5)spawn('echo',1);}
+    if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);spawn('grazer',3);}
     if(P.stg>=5) spawn('behemoth',2);
 
     // ── Radar unlocks at Drifter (stg=1). Show a second tutorial panel 2.6s
@@ -1814,6 +1829,33 @@ function drawCreature(o, ts) {
       for (let i=0;i<6;i++) { const sa=(i/6)*TAU+ts*.001,tip=r*1.38; cx.beginPath(); cx.moveTo(Math.cos(sa-.09)*r,Math.sin(sa-.09)*r); cx.lineTo(Math.cos(sa)*tip,Math.sin(sa)*tip); cx.lineTo(Math.cos(sa+.09)*r,Math.sin(sa+.09)*r); cx.fill(); }
       // Central eye
       if (r*zm>6) { cx.fillStyle='#fff'; cx.globalAlpha=.75; cx.beginPath(); cx.arc(r*.38,-r*.05,r*.1,0,TAU); cx.fill(); cx.fillStyle='#600'; cx.globalAlpha=1; cx.beginPath(); cx.ellipse(r*.39,-r*.05,r*.03,r*.07,0,0,TAU); cx.fill(); }
+      break; }
+
+    case 'grazer': {
+      // Docile colossus — a broad, translucent, gently-undulating body with a
+      // luminous core and a slow tail fluke. Reads as serene and edible.
+      cx.fillStyle=col; cx.globalAlpha=.30;
+      cx.beginPath();
+      cx.moveTo(r*1.05,0);
+      cx.quadraticCurveTo(r*.7,-r*.62, -r*.1,-r*.6);
+      cx.quadraticCurveTo(-r*.72,-r*.5, -r*.95,-r*.16);
+      cx.quadraticCurveTo(-r*1.1,0, -r*.95,r*.16);
+      cx.quadraticCurveTo(-r*.72,r*.5, -r*.1,r*.6);
+      cx.quadraticCurveTo(r*.7,r*.62, r*1.05,0);
+      cx.fill();
+      // Tail fluke — sways with finPh
+      cx.fillStyle=dim; cx.globalAlpha=.26;
+      const gf=Math.sin(o.finPh)*r*.12;
+      cx.beginPath(); cx.moveTo(-r*.9,0); cx.lineTo(-r*1.3,-r*.34+gf); cx.lineTo(-r*1.05,0); cx.lineTo(-r*1.3,r*.34+gf); cx.closePath(); cx.fill();
+      // Internal bioluminescent core
+      cx.fillStyle='rgba(255,255,255,.16)'; cx.globalAlpha=.4+.2*Math.sin(o.breathPh);
+      cx.beginPath(); cx.arc(r*.1,0,r*.34,0,TAU); cx.fill();
+      // Glowing nodes drifting through the body
+      cx.fillStyle=col;
+      for (let i=0;i<6;i++) { const sa=(i/6)*TAU+ts*.0006; cx.globalAlpha=.3+.18*Math.sin(o.breathPh+i*1.1); cx.beginPath(); cx.arc(Math.cos(sa)*r*.5,Math.sin(sa)*r*.34,r*.07,0,TAU); cx.fill(); }
+      // Trailing feeding fronds
+      cx.strokeStyle=col; cx.lineWidth=.6; cx.lineCap='round'; cx.globalAlpha=.16;
+      for (let t=0;t<4;t++) { const bx=-r*.2+t*r*.12; let fx=bx,fy=r*.5; cx.beginPath(); cx.moveTo(bx,r*.5); for (let seg=0;seg<4;seg++){ fx+=Math.sin(o.finPh+t+seg*.8)*r*.07; fy+=r*.2; cx.lineTo(fx,fy); } cx.stroke(); }
       break; }
 
     default: {
@@ -2900,6 +2942,7 @@ function loop(ts) {
   // Ecosystem maintenance
   for (const [type,T] of Object.entries(ORGS)) {
     if (type==='echo') continue;
+    if (type==='grazer' && P.stg < 3) continue;   // grazers only graze the NAGA-era world onward
     if (orgs.filter(o=>o.type===type).length < T.mx*.3) spawn(type,1);
   }
 
