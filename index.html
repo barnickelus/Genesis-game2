@@ -231,7 +231,7 @@ const STAGES = [
   { name: 'DRIFTER',    thr: 120,  next: 380,  c: COL.drift, spd: 3.2, bR: 7, desc: 'Propulsion stirs — the world declares itself.', ab: 'dash', abT: '↑ Dash',    cd: 700  },
   { name: 'MEDUSA',     thr: 380,  next: 850,  c: COL.medu,  spd: 2.6, bR: 8, desc: 'Sting aura radiates. Soft seams glow.', ab: 'sting',  abT: 'Sting Aura',cd: 0    },
   { name: 'NAGA',       thr: 850,  next: 2200, c: COL.naga,  spd: 3.4, bR: 7, desc: 'The lash awakens. Veils unravel.',     ab: 'whip',     abT: '↑ Whip',    cd: 1000 },
-  { name: 'TITAN',      thr: 2200, next: 5000, c: COL.titan, spd: 2.3, bR: 9, desc: 'Gravity bends to will.',               ab: 'gravity',  abT: 'Gravity',   cd: 0    },
+  { name: 'TITAN',      thr: 2200, next: 5000, c: COL.titan, spd: 2.3, bR: 9, desc: 'The filter-feeder wakes. Swallow the ocean.', ab: 'echo', abT: '↑ Stun Echo', cd: 900  },
   { name: 'PRIMORDIAL', thr: 5000, next: 1/0,  c: COL.primo, spd: 2.8, bR: 8, desc: 'The first and the last.',              ab: 'bolt',     abT: '↑ Bolt',    cd: 400  },
 ];
 
@@ -281,6 +281,12 @@ let frenzy, fTime, fMax, frenzyOrbs;
 let shOn, shTime;
 let pill, shld, beacons;
 let anoms, anomCd;
+// ── TITAN filter-feeder state ──
+// titanPhase: 0 = Awakening (prey still sized, stun-echo matters), 1 = Colossus
+// (overwhelmingly large, board reads as plankton, echo auto-pulses).
+let titanPhase, titanEchoT, titanColossusShown;
+let viewR = 2200;   // active world radius for spawn/despawn — grows as the camera pulls back
+const TITAN_COLOSSUS = 3500;   // mass where TITAN tips Awakening → Colossus
 let frenzyTutorialShown = false;  // persists across restarts intentionally
 let radarTutorialShown = false;
 let behMem;
@@ -300,6 +306,7 @@ function init() {
   shld = { x:0, y:0, r:9, on:false, cd:0 };
   beacons = [{x:0,y:-1400},{x:0,y:1400},{x:1400,y:0},{x:-1400,y:0}].map(p=>({...p,r:14}));
   anoms = []; anomCd = 5000;  // first anomaly appears ~5s after start
+  titanPhase = 0; titanEchoT = 0; titanColossusShown = false; viewR = 2200;
 
   spawn('bloom',10); spawn('mote',45); spawn('polyp',22); spawn('tendril',8);
   spawn('hunter',4); spawn('lurker',2); spawn('levia',2); spawn('phantom',2); spawn('behemoth',1);
@@ -326,7 +333,13 @@ function spawn(type, n) {
   for (let i=0; i<n; i++) {
     if (type==='echo' && orgs.filter(o=>o.type==='echo').length >= 2) return;
     const r = rng(T.minR, T.maxR) * rScale, a = Math.random()*TAU;
-    const d = rng(type==='bloom'?60:180, T.spW);
+    // Spread spawns across the active view so a zoomed-out TITAN sees a full
+    // plankton field rather than everything clustered at arm's length. Only TITAN
+    // widens the spread; earlier stages keep their original tuned spawn spacing.
+    const big = (typeof P !== 'undefined' && P && P.stg === 4);
+    const spread = big ? Math.max(1, viewR / 2200) : 1;
+    const dMax   = big ? Math.max(T.spW, viewR * 0.9) : T.spW;
+    const d = rng((type==='bloom'?60:180) * spread, dMax);
     orgs.push({
       type, x:P.x+Math.cos(a)*d, y:P.y+Math.sin(a)*d,
       r, br:r, hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU, massMul,
@@ -831,6 +844,13 @@ function ring(x, y, c, rad, n=12) {
   }
 }
 function fTxt(x, y, t, c) { if (txts.length<30) txts.push({x,y,t,c,life:900,ml:900}); }
+// Centre-screen announcement banner — reuses the evolution announce box for any
+// titled callout (stage phases, system unlocks, etc.).
+function announce(title, color, sub, dur=2600) {
+  const eT=document.getElementById('evoT'), eS=document.getElementById('evoS'), eA=document.getElementById('evoAnn');
+  eT.textContent=title; eT.style.color=color; eS.textContent=sub||'';
+  eA.style.opacity='1'; setTimeout(()=>{eA.style.opacity='0';}, dur);
+}
 function shk(i, d) {
   // Hard-cap shake intensity at 5px so the player never appears to leap out of
   // their own frame. Big events still feel impactful via flash/particles/audio.
@@ -847,7 +867,7 @@ function shk(i, d) {
 //   MOTE/DRIFTER: 0.80× — must find food clearly smaller
 //   MEDUSA:       0.85× — sting + slightly wider mouth lets you eat tendrils/small hunters
 //   NAGA:         0.85× — same threshold, lash extends effective reach
-//   TITAN:        0.88× — gravity pulls prey in
+//   TITAN:        0.88× — bite threshold for sizeable prey; small prey are filter-fed
 //   PRIMORDIAL:   0.90× — apex predator
 const EAT_RATIO = [0.80, 0.80, 0.85, 0.85, 0.88, 0.90];
 function canEat(o) { return o.r < P.r * (EAT_RATIO[P.stg] || 0.80); }
@@ -1117,7 +1137,8 @@ function aiOrg(o, dt) {
 
   o.x+=o.vx*(dt/16); o.y+=o.vy*(dt/16);
   o.hd=Math.atan2(o.vy,o.vx);
-  if (dst(P,o)>2200) { const a=Math.random()*TAU,dd=rng(500,T.spW); o.x=P.x+Math.cos(a)*dd; o.y=P.y+Math.sin(a)*dd; o.hp=o.mhp; o.ambR=T.beh==='ambush'; }
+  { const big=P.stg===4, cull=big?viewR*1.15:2200;
+    if (dst(P,o)>cull) { const a=Math.random()*TAU, dd=big?rng(viewR*.5,viewR*1.05):rng(500,T.spW); o.x=P.x+Math.cos(a)*dd; o.y=P.y+Math.sin(a)*dd; o.hp=o.mhp; o.ambR=T.beh==='ambush'; } }
 }
 
 // ═══════════════════════════════════════════
@@ -1204,11 +1225,18 @@ function updateP(dt) {
       }
     }
   }
-  if (s.ab==='gravity') {
-    for (const o of gNear(P.x,P.y,P.r*6)) {
-      const dd=dst(P,o); if(dd<P.r*6&&o.r<P.r*.8){ const ps=.5*(1-dd/(P.r*6)),a=ang(o,P); o.vx+=Math.cos(a)*ps; o.vy+=Math.sin(a)*ps; }
+  // ── TITAN: filter-feeder phase tracking + Colossus auto-echo ──
+  if (P.stg===4) {
+    const wasColossus = titanPhase;
+    titanPhase = P.mass >= TITAN_COLOSSUS ? 1 : 0;
+    if (titanPhase===1 && !wasColossus && !titanColossusShown) {
+      titanColossusShown = true;
+      announce('COLOSSUS', '#5AC8FF', 'The board is plankton now. Filter the deep.', 3200);
+      shk(7, 500); ring(P.x, P.y, '#5AC8FF', P.r*2.2, 24); audioBend(3, 1.4);
     }
-  }
+    // In Colossus the stun-echo pulses on its own — the giant is too vast to aim.
+    if (titanPhase===1) { titanEchoT -= dt; if (titanEchoT <= 0) { titanEchoT = 2600; stunEcho(true); } }
+  } else { titanPhase = 0; }
   behMem.push({vx:P.vx,vy:P.vy,hd:P.hd}); if(behMem.length>120)behMem.shift();
 }
 
@@ -1229,7 +1257,64 @@ function useAbil() {
       const a=ang(P, ptr.on?ptr:{x:P.x+Math.cos(P.hd)*100,y:P.y+Math.sin(P.hd)*100});
       projs.push({x:P.x+Math.cos(a)*P.r,y:P.y+Math.sin(a)*P.r,vx:Math.cos(a)*8,vy:Math.sin(a)*8,r:4,life:1200,dmg:8,c:COL.primo.pri});
       burst(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,COL.primo.pri,4,1.2); shk(1.5,40); break; }
+    case 'echo': stunEcho(false); abil_cd=s.cd; break;
   }
+}
+
+// ═══════════════════════════════════════════
+// TITAN — STUN ECHO
+// ═══════════════════════════════════════════
+// An expanding shockwave that stuns and arrests prey, so the slow colossus can
+// still catch larger/faster creatures and sweep them into the intake. `auto` is
+// the Colossus self-pulse (quieter, no screen shake spam).
+function stunEcho(auto) {
+  const eR = P.r * (titanPhase ? 4.6 : 3.6);
+  for (const o of gNear(P.x, P.y, eR)) {
+    const d = dst(P, o); if (d >= eR) continue;
+    o.stunT = Math.max(o.stunT, auto ? 900 : 1400);
+    o.flT = Math.max(o.flT, 150);
+    o.vx *= .25; o.vy *= .25;                 // arrest momentum — fast prey can't flee
+    const a = ang(P, o);                       // and nudge gently toward the maw
+    o.vx += Math.cos(a) * .4; o.vy += Math.sin(a) * .4;
+  }
+  ring(P.x, P.y, COL.titan.pri, eR, auto ? 20 : 28);
+  ring(P.x, P.y, '#cfeeff', eR*.6, 14);
+  for (let i=0;i<(auto?12:20);i++){ const a=(i/(auto?12:20))*TAU; parts.push({x:P.x+Math.cos(a)*P.r,y:P.y+Math.sin(a)*P.r,vx:Math.cos(a)*4,vy:Math.sin(a)*4,r:2.4,life:420,ml:420,c:COL.titan.pri,t:'c'}); }
+  if (!auto) { shk(3.5, 180); sfxEvo(); } else { shk(1.2, 90); }
+  audioFilterPulse(STAGE_CUTOFF[P.stg]*1.4, .2);
+}
+
+// ═══════════════════════════════════════════
+// TITAN — FILTER FEEDING (passive engulf)
+// ═══════════════════════════════════════════
+// Plankton-scale prey inside the intake current are drawn into the maw and
+// consumed automatically. The intake widens (and the "what counts as plankton"
+// ratio relaxes) once the giant reaches Colossus, so late TITAN truly filters
+// the whole board. Larger prey are ignored here — they need the stun-echo + the
+// normal bite (EAT_RATIO) to bring them down.
+function filterFeed(dt) {
+  if (P.stg !== 4) return;
+  const intake = P.r * (titanPhase ? 3.4 : 2.3);
+  const ratio  = titanPhase ? 0.58 : 0.42;     // o.r below this fraction of player = plankton
+  const mouth  = P.r * 0.95;
+  let eaten = 0;
+  for (const o of gNear(P.x, P.y, intake)) {
+    const d = dst(P, o); if (d >= intake) continue;
+    if (o.r >= P.r * ratio) continue;          // too big to filter
+    const t = 1 - d/intake, a = ang(o, P);
+    o.vx += Math.cos(a) * (.5 + t*1.5);        // the intake current
+    o.vy += Math.sin(a) * (.5 + t*1.5);
+    if (d < mouth && eaten < 40) {
+      const T = ORGS[o.type];
+      const gain = calcGain(T.mass*(o.massMul||1), P.mass) * .9;  // small filter discount; volume wins
+      P.mass += gain; score += Math.floor(gain*6); eaten++;
+      if (parts.length < 250) burst(o.x, o.y, T.col, 3, 1);
+      const idx = orgs.indexOf(o); if (idx>=0) orgs.splice(idx,1);
+      const cnt = orgs.filter(q=>q.type===o.type).length;
+      if (cnt < ORGS[o.type].mx) setTimeout(()=>spawn(o.type,1), rng(700,2200));
+    }
+  }
+  if (eaten) { checkEvo(); audioFilterPulse(STAGE_CUTOFF[P.stg]*1.5, .1); }
 }
 
 function checkEvo() {
@@ -2520,6 +2605,41 @@ function drawRadarHalos(ts) {
 // Shows the radius within which small prey are stunned and damaged. Pulsing
 // translucent purple-pink ring with subtle inner gradient.
 // ═══════════════════════════════════════════
+// TITAN intake aura — a slow indrawing current that reads as "filter feeding".
+// Concentric pulses sweep INWARD toward the maw; widens in Colossus.
+function drawTitanIntake(ts) {
+  if (P.stg !== 4) return;
+  const intake = P.r * (titanPhase ? 3.4 : 2.3);
+  // Soft inward gradient
+  const grd = cx.createRadialGradient(P.x, P.y, P.r*0.7, P.x, P.y, intake);
+  grd.addColorStop(0, 'rgba(90,200,255,0.10)');
+  grd.addColorStop(0.7, 'rgba(90,200,255,0.03)');
+  grd.addColorStop(1, 'rgba(90,200,255,0)');
+  cx.fillStyle = grd; cx.globalAlpha = 0.7 + 0.2*Math.sin(ts*0.003);
+  cx.beginPath(); cx.arc(P.x, P.y, intake, 0, TAU); cx.fill();
+  // Inward-sweeping rings (phase moves from outer→inner)
+  cx.strokeStyle = COL.titan.pri; cx.shadowBlur = 0;
+  for (let i=0;i<3;i++) {
+    const ph = ((ts*0.00018) + i/3) % 1;            // 0→1 over time
+    const rr = intake * (1 - ph*0.78);              // shrinks toward the maw
+    cx.globalAlpha = 0.16 * Math.sin(ph*PI);        // fade in/out at the ends
+    cx.lineWidth = 0.8 + (1-ph)*1.2;
+    cx.beginPath(); cx.arc(P.x, P.y, rr, 0, TAU); cx.stroke();
+  }
+  // Intake filaments — short radial ticks angled like an indraft
+  cx.lineWidth = 0.5; cx.globalAlpha = 0.12;
+  const n = titanPhase ? 20 : 14;
+  for (let i=0;i<n;i++) {
+    const a = (i/n)*TAU + ts*0.0004;
+    const r1 = intake*0.92, r2 = P.r*1.15;
+    cx.beginPath();
+    cx.moveTo(P.x+Math.cos(a)*r1, P.y+Math.sin(a)*r1);
+    cx.lineTo(P.x+Math.cos(a+0.12)*r2, P.y+Math.sin(a+0.12)*r2);
+    cx.stroke();
+  }
+  cx.globalAlpha = 1; cx.shadowBlur = 0;
+}
+
 function drawStingAura(ts) {
   const s = STAGES[P.stg];
   if (!s || s.ab !== 'sting') return;
@@ -2815,7 +2935,7 @@ cdEl.width=26*DPR; cdEl.height=26*DPR; cdEl.style.width='26px'; cdEl.style.heigh
 const cdCtx=cdEl.getContext('2d'); cdCtx.scale(DPR,DPR);
 function updateHUD() {
   const s=stg(), nx=STAGES[P.stg+1];
-  document.getElementById('stgName').textContent=s.name;
+  document.getElementById('stgName').textContent = (P.stg===4) ? (titanPhase ? 'TITAN · COLOSSUS' : 'TITAN · AWAKENING') : s.name;
   document.getElementById('stgName').style.color=s.c.pri;
   document.getElementById('stgName').style.textShadow=`0 0 14px ${s.c.pri}`;
   document.getElementById('massV').textContent=Math.floor(P.mass);
@@ -2965,6 +3085,7 @@ function loop(ts) {
   updateSense();              // annotate radar/mask flags on creatures (read by AI + draw)
   for (const o of orgs) aiOrg(o,dt);
   collide(dt);
+  filterFeed(dt);
   ecoCollide();
 
   // Camera — zoom adapts to actual screen size so phones and tablets show
@@ -2973,17 +3094,33 @@ function loop(ts) {
   // cap looked correct on iPad but ~25% too zoomed on iPhone.
   const minDim = Math.min(CW, CH);  // CSS pixels — keeps zoom feel density-independent
   const screenFactor = cl(minDim / 800, .55, 1.15);  // 0.55 on phones, ~1.0 on tablets, capped
-  const zMin = .28 * screenFactor;
+  // TITAN keeps pulling the lens back as the giant grows, so the old world
+  // shrinks to a plankton field. Colossus zooms out hardest.
+  const zMin = (titanPhase===1 ? .07 : P.stg===4 ? .14 : .28) * screenFactor;
   const zMax = 1.6  * screenFactor;
   const tz = cl((minDim / (P.r * 6.2)) * screenFactor, zMin, zMax);
   zm = lp(zm, tz, .04);
   off.x=W/2-P.x*zm; off.y=H/2-P.y*zm;
+  // Active world radius — grows with the zoomed-out view so creatures don't
+  // despawn while still on-screen, and so spawns spread across the plankton field.
+  viewR = Math.max(2200, (Math.max(W, H) / zm) * 0.62);
 
   // Ecosystem maintenance
   for (const [type,T] of Object.entries(ORGS)) {
     if (type==='echo') continue;
     if (type==='grazer' && P.stg < 3) continue;   // grazers only graze the NAGA-era world onward
     if (orgs.filter(o=>o.type===type).length < T.mx*.3) spawn(type,1);
+  }
+
+  // TITAN plankton bloom — top up the small drifting types so the zoomed-out
+  // ocean stays dense. Population target scales with TITAN phase but is capped so
+  // the per-frame AI cost stays bounded on phones.
+  if (P.stg === 4) {
+    const planktonCap = titanPhase ? 240 : 170;
+    if (orgs.length < planktonCap && (gt & 3) === 0) {  // ~every 4th frame
+      const pick = ['mote','polyp','bloom','mote','tendril'][rni(0,5)];
+      spawn(pick, 1);
+    }
   }
 
   // ── Audio choreography: threat layer swells when a real predator is close ──
@@ -3042,6 +3179,7 @@ function loop(ts) {
   try { drawRadarHalos(ts); }  catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   try { drawVulnArcs(ts); }    catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   try { drawStingAura(ts); }   catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
+  try { drawTitanIntake(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
 
   try { drawPlayer(ts); }      catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
 
