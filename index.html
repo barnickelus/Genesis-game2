@@ -277,7 +277,7 @@ let shx, shy, shi, shd;
 let abil_cd, streak, streakT;
 let off, zm;
 let muted = false;
-let frenzy, fTime, frenzyOrbs;
+let frenzy, fTime, fMax, frenzyOrbs;
 let shOn, shTime;
 let pill, shld, beacons;
 let anoms, anomCd;
@@ -294,7 +294,7 @@ function init() {
         tail:[], blink:0, dash:false, dashT:0, boost:0, flash:{c:'#fff',t:0} };
   orgs=[]; projs=[]; parts=[]; txts=[]; dust=[]; frenzyOrbs=[];
   score=0; abil_cd=0; streak=0; streakT=0; gt=0; behMem=[];
-  frenzy=false; fTime=0; shOn=false; shTime=0;
+  frenzy=false; fTime=0; fMax=8000; shOn=false; shTime=0;
   shx=shy=0; shi=shd=0; off={x:0,y:0}; zm=1;
   pill = { x:0, y:0, r:9, on:false, cd:0 };
   shld = { x:0, y:0, r:9, on:false, cd:0 };
@@ -311,15 +311,25 @@ function init() {
   });
 }
 
+// "Elder" prey scaling — the basic food types grow up with the player. As you
+// evolve, freshly-spawned bloom/mote/polyp/tendril arrive larger and far more
+// mass-rich, so the familiar small fry stay worth eating instead of becoming
+// rounding error. Radius is scaled gently (and the eat threshold guarantees they
+// stay edible); mass is scaled hard via a per-instance multiplier (massMul) read
+// back in collide(). Predators are never scaled here.
+const FOOD_TYPES = { bloom:1, mote:1, polyp:1, tendril:1 };
 function spawn(type, n) {
   const T = ORGS[type];
+  const tier = FOOD_TYPES[type] ? P.stg : 0;
+  const rScale  = 1 + tier * 0.15;   // gentle — keeps them comfortably edible
+  const massMul = 1 + tier * 0.65;   // steep — NAGA tendril ≈ 2.95× base mass
   for (let i=0; i<n; i++) {
     if (type==='echo' && orgs.filter(o=>o.type==='echo').length >= 2) return;
-    const r = rng(T.minR, T.maxR), a = Math.random()*TAU;
+    const r = rng(T.minR, T.maxR) * rScale, a = Math.random()*TAU;
     const d = rng(type==='bloom'?60:180, T.spW);
     orgs.push({
       type, x:P.x+Math.cos(a)*d, y:P.y+Math.sin(a)*d,
-      r, br:r, hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU,
+      r, br:r, hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU, massMul,
       stT:0, stunT:0, wAng:Math.random()*TAU, ph:rng(0,TAU),
       ambR: type==='lurker', lAng:rng(0,TAU), trail:[],
       flT:0, hSh:rng(-10,10), finPh:rng(0,TAU),
@@ -1125,7 +1135,12 @@ function calcDecay(m, dt) {
   //   m=2500: 0.0080/ms → 8.0/sec    (Titan)
   if (m<80)   return .0005 * dt;
   if (m<400)  return (.0008 + (m-80) * .0000038) * dt;
-  if (m<1500) return (.0011 + (m-400) * .000027) * dt;   // half the prior coefficient
+  // BUGFIX: this coefficient was .000027 — a 10× typo that made NAGA-band decay
+  // peak near ~31/sec just below 1500 and then *crash* to 4/sec at 1500 (decay
+  // running backwards). That single error is what made NAGA mass nearly impossible
+  // to hold. The correct value rejoins the documented curve (1.5 → 4.0/sec) and is
+  // continuous with the m≥1500 branch below.
+  if (m<1500) return (.0011 + (m-400) * .0000027) * dt;
   return (.0040 + (m-1500) * .00015) * dt;
 }
 
@@ -1231,6 +1246,9 @@ function checkEvo() {
     setStageAudio(P.stg);
     if(P.stg>=2) spawn('hunter',3);
     if(P.stg>=3){spawn('phantom',2);spawn('grazer',5);if(Math.random()<.5)spawn('echo',1);}
+    // NAGA adaptation: hand the player the upgraded frenzy immediately by dropping
+    // a pill right beside them, so the new wall-breaking frenzy is felt at once.
+    if(P.stg===3 && !frenzy){ pill={x:P.x+rng(-260,260),y:P.y+rng(-260,260),r:9,on:true,cd:0}; }
     if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);spawn('grazer',3);}
     if(P.stg>=5) spawn('behemoth',2);
 
@@ -1253,6 +1271,24 @@ function checkEvo() {
 }
 
 // ═══════════════════════════════════════════
+// FRENZY POWER — scales with evolution
+// ═══════════════════════════════════════════
+// Pre-NAGA the frenzy is a pleasant burst. From NAGA (stg 3) on it becomes a
+// genuine mass-wall breaker: it lasts longer, pulls food from a wider radius,
+// relaxes the eat threshold enough to swallow same-size (and slightly larger)
+// prey, and pays out on a steeper kill-streak multiplier.
+const FRENZY_BASE = 8000;
+function frenzyDur()       { return P.stg >= 3 ? 11000 : FRENZY_BASE; }
+function frenzyEatRatio()  { return P.stg >= 3 ? 1.08 : 0.95; }   // >1 ⇒ can eat slightly-larger prey
+function frenzyVortexRng() { return 320 + P.stg * 45; }            // NAGA 455 · TITAN 500 · PRIMO 545
+function frenzyGainMul()   {
+  const base = P.stg >= 3 ? 2.1 : 1.5;
+  const step = P.stg >= 3 ? 0.22 : 0.15;
+  return base + Math.min(streak, 12) * step;                       // NAGA: up to ~4.7×
+}
+function frenzyCap()       { return P.stg >= 3 ? 16000 : 12000; }  // max extended duration
+
+// ═══════════════════════════════════════════
 // COLLISIONS
 // ═══════════════════════════════════════════
 function collide(dt) {
@@ -1264,12 +1300,12 @@ function collide(dt) {
     const d=dst(P,o);
 
     // Frenzy: temporarily relaxed eat threshold (.95 vs .8 normal)
-    const frenzyEdible = frenzy && (o.r < P.r * .95);
+    const frenzyEdible = frenzy && (o.r < P.r * frenzyEatRatio());
     if ((canEat(o) || canEatAngle(o) || frenzyEdible)&&d<P.r*eatReachMul) {
       const T=ORGS[o.type], angleKill = !canEat(o) && !frenzyEdible && canEatAngle(o);
-      let gain=calcGain(T.mass,P.mass);
+      let gain=calcGain(T.mass*(o.massMul||1),P.mass);  // elder prey carry a per-instance mass bonus
       if (angleKill) gain *= 1.6;                              // precision bonus
-      if (frenzy) gain *= (1.5 + Math.min(streak, 10) * .15);  // frenzy combo multiplier — up to 3×
+      if (frenzy) gain *= frenzyGainMul();  // stage-scaled combo multiplier (up to ~4.7× at NAGA)
       P.mass+=gain; score+=Math.floor(gain*8); streak++; streakT = frenzy ? 1500 : 2500;
       burst(o.x,o.y,T.col,angleKill?14:8,angleKill?2.6:1.8);
       if (angleKill) { ring(o.x,o.y,'#ffd860',o.r*1.4,14); fTxt(o.x,o.y-24,'PRECISION','#ffd860'); }
@@ -1281,7 +1317,7 @@ function collide(dt) {
 
       // Frenzy chain pulse — stun and damage nearby creatures, extend frenzy duration
       if (frenzy) {
-        fTime = Math.min(12000, fTime + 200);  // each kill extends frenzy by 200ms
+        fTime = Math.min(frenzyCap(), fTime + 250);  // each kill extends the frenzy
         ring(o.x, o.y, '#40c8f0', 60, 14);
         for (const n of gNear(o.x, o.y, 80)) {
           if (n === o || !orgs.includes(n)) continue;
@@ -1303,7 +1339,7 @@ function collide(dt) {
       if (P.stg>0&&P.mass<STAGES[P.stg].thr*.55) { P.stg=Math.max(0,P.stg-1); fTxt(P.x,P.y-28,'DE-EVOLVED','#ff4444'); shk(6,300); setStageAudio(P.stg); audioBend(-4,1.2); }
     }
     if (o.hp<=0) {
-      const T=ORGS[o.type], gain=calcGain(T.mass*.4,P.mass);
+      const T=ORGS[o.type], gain=calcGain(T.mass*.4*(o.massMul||1),P.mass);
       P.mass+=gain; score+=Math.floor(gain*5); burst(o.x,o.y,T.col,12,2.5); fTxt(o.x,o.y-10,'+'+Math.floor(gain),T.col);
       const idx=orgs.indexOf(o); if(idx>=0)orgs.splice(idx,1); checkEvo();
     }
@@ -1336,7 +1372,7 @@ function collide(dt) {
   // Duration: 8 seconds base, extends with kills.
   // ═══════════════════════════════════════════
   if (pill.on&&dst(P,pill)<P.r+pill.r) {
-    P.flash={c:'#40c8f0',t:280}; frenzy=true; fTime=8000; pill.on=false; sfxFrenzy();
+    P.flash={c:'#40c8f0',t:280}; frenzy=true; fTime=frenzyDur(); fMax=fTime; pill.on=false; sfxFrenzy();
     audioSetFrenzy(true); audioFilterPulse(STAGE_CUTOFF[P.stg]*1.8, .8);
     burst(pill.x,pill.y,'#40c8f0',24,3.5); ring(P.x,P.y,'#40c8f0',P.r*3.5,16); shk(2.5,160);
     fTxt(P.x, P.y-40, 'FEEDING FRENZY', '#40c8f0');
@@ -1362,9 +1398,10 @@ function collide(dt) {
     } else {
       // ── Apply vortex pull to edible food within range ──
       // The food itself becomes the visual — they swirl into the player.
-      const VORTEX_RANGE = 320;
+      const VORTEX_RANGE = frenzyVortexRng();
+      const pullRatio = frenzyEatRatio();
       for (const o of gNear(P.x, P.y, VORTEX_RANGE)) {
-        if (!canEat(o)) continue;        // only pull what we can actually eat
+        if (o.r >= P.r * pullRatio) continue;  // pull everything the frenzy can actually swallow
         const d = dst(P, o);
         if (d < 3) continue;
         if (d > VORTEX_RANGE) continue;
@@ -1389,7 +1426,10 @@ function collide(dt) {
       }
     }
   }
-  if (!pill.on&&!frenzy) { pill.cd+=dt; if(pill.cd>22000+rng(0,8000)){pill={x:P.x+rng(-600,600),y:P.y+rng(-600,600),r:9,on:true,cd:0};} }
+  // Pills arrive ~twice as often from NAGA on, so the stronger frenzy is actually
+  // reachable when the mass wall bites.
+  const pillBase = P.stg >= 3 ? 11000 : 22000, pillRand = P.stg >= 3 ? 5000 : 8000;
+  if (!pill.on&&!frenzy) { pill.cd+=dt; if(pill.cd>pillBase+rng(0,pillRand)){pill={x:P.x+rng(-600,600),y:P.y+rng(-600,600),r:9,on:true,cd:0};} }
 
   // Shield
   if (shld.on&&dst(P,shld)<P.r+shld.r) { P.flash={c:'#e8c040',t:400}; shOn=true; shTime=5000; shld.on=false; sfxEat(); burst(shld.x,shld.y,'#e8c040',12,2); shk(2,100); }
@@ -2570,7 +2610,7 @@ function drawFrenzyOrbs(ts) {
   cx.beginPath(); cx.arc(P.x, P.y, auraR, 0, TAU); cx.stroke();
 
   // 2. Duration arc — visible time remaining as a sweep around the aura
-  const dRem = fTime / 8000;
+  const dRem = fTime / (fMax || 8000);
   cx.strokeStyle = '#fff';
   cx.lineWidth = 2.6;
   cx.globalAlpha = .65;
@@ -2805,7 +2845,7 @@ function updateHUD() {
   const frzBar = frzEl.querySelector('#frzBar i');
   if (frenzy) {
     frzEl.classList.add('on');
-    const pct = Math.max(0, fTime / 8000) * 100;
+    const pct = Math.max(0, fTime / (fMax || 8000)) * 100;
     frzBar.style.width = pct + '%';
   } else {
     frzEl.classList.remove('on');
