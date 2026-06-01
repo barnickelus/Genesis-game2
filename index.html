@@ -287,6 +287,16 @@ let anoms, anomCd;
 let titanPhase, titanEchoT, titanColossusShown;
 let viewR = 2200;   // active world radius for spawn/despawn — grows as the camera pulls back
 const TITAN_COLOSSUS = 7000;   // mass where TITAN (now the 5000+ endgame) tips Awakening → Colossus
+const COLOSSUS_BREAK = 12000;  // mass where the mitosis CHOICE becomes available
+
+// ── MICRO branch state (mitosis → swarm → colony) ──
+// mode: 'single' = normal one-body game · 'choice' = breakpoint prompt up ·
+//       'swarm' = herding a cloud of cells · (colony build comes later)
+// See docs/MICRO_BRANCH.md for the full design.
+let microMode = 'single';
+let cells = [];                 // swarm cells once mitosis fires
+let breakPressure = 0;          // 0..1 — builds while pinned at the COLOSSUS ceiling
+let microChoiceShown = false;
 let frenzyTutorialShown = false;  // persists across restarts intentionally
 let radarTutorialShown = false;
 let behMem;
@@ -307,6 +317,7 @@ function init() {
   beacons = [{x:0,y:-1400},{x:0,y:1400},{x:1400,y:0},{x:-1400,y:0}].map(p=>({...p,r:14}));
   anoms = []; anomCd = 5000;  // first anomaly appears ~5s after start
   titanPhase = 0; titanEchoT = 0; titanColossusShown = false; viewR = 2200;
+  microMode = 'single'; cells = []; breakPressure = 0; microChoiceShown = false;
 
   spawn('bloom',10); spawn('mote',45); spawn('polyp',22); spawn('tendril',8);
   spawn('hunter',4); spawn('lurker',2); spawn('levia',2); spawn('phantom',2); spawn('behemoth',1);
@@ -1169,11 +1180,19 @@ function calcDecay(m, dt) {
 }
 
 function updateP(dt) {
+  // ── Micro branch takes over the player loop once we leave the single body ──
+  if (microMode === 'swarm') { ptr.tap = false; updateSwarm(dt); return; }
+  if (microMode === 'choice') {
+    // Breakpoint prompt is up: a tap commits to mitosis.
+    if (ptr.tap) { ptr.tap = false; doMitosis(); return; }
+  }
+
   const s=stg(); let dx=0, dy=0;
   if (ptr.on) { dx=ptr.x-P.x; dy=ptr.y-P.y; }
   const dL=Math.hypot(dx,dy); if(dL>.5) P.hd=Math.atan2(dy,dx);
   if (ptr.tap && s.ab && s.cd>0) useAbil();
   ptr.tap=false;
+  updateBreakPressure(dt);
 
   let spd=s.spd*(1+Math.log2(Math.max(1,P.mass))*.08);
   if (P.dash) { spd*=2.5; P.dashT-=dt; if(P.dashT<=0)P.dash=false; }
@@ -1325,6 +1344,165 @@ function filterFeed(dt) {
     }
   }
   if (eaten) { checkEvo(); audioFilterPulse(STAGE_CUTOFF[P.stg]*1.5, .1); }
+}
+
+// ═══════════════════════════════════════════
+// MICRO BRANCH — mitosis → swarm  (Steps 1–2)
+// See docs/MICRO_BRANCH.md. COLOSSUS is a singularity, not a ceiling: once the
+// lone cell hits the hard size limit, pressure builds until the player splits
+// into a multicellular swarm. The colony-building fork tree comes after this.
+// ═══════════════════════════════════════════
+
+// Build the COLOSSUS "pressure" while pinned at the ceiling, and surface the
+// one-time choice prompt. Called from updateP only during TITAN·COLOSSUS.
+function updateBreakPressure(dt) {
+  if (microMode !== 'single') return;
+  if (P.stg === 5 && titanPhase === 1 && P.mass >= COLOSSUS_BREAK) {
+    breakPressure = Math.min(1, breakPressure + dt / 4000);  // ~4s to full
+    if (breakPressure >= 1 && !microChoiceShown) {
+      microChoiceShown = true;
+      microMode = 'choice';
+      announce('THE SINGULARITY', '#9CF0FF',
+        'A single cell can grow no further. Tap to divide — become many.', 6000);
+    }
+  } else {
+    breakPressure = Math.max(0, breakPressure - dt / 2000);
+  }
+}
+
+// Fire mitosis: dissolve the single body into a cloud of swarm cells that carry
+// the accumulated mass between them. Reuses the world's particle FX + audio.
+function doMitosis() {
+  const N = 60;
+  const massEach = P.mass / N;
+  cells = [];
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * TAU + rng(-.2, .2), d = rng(P.r * .2, P.r * 1.1);
+    cells.push({
+      x: P.x + Math.cos(a) * d, y: P.y + Math.sin(a) * d,
+      vx: Math.cos(a) * rng(2, 6), vy: Math.sin(a) * rng(2, 6),
+      r: 3.4, mass: massEach, ph: rng(0, TAU), bound: false,
+    });
+  }
+  microMode = 'swarm';
+  breakPressure = 0;
+  // Big visual + audio beat
+  burst(P.x, P.y, '#9CF0FF', 60, 6);
+  ring(P.x, P.y, '#fff', P.r * 1.4, 40);
+  ring(P.x, P.y, '#9CF0FF', P.r * 2.2, 30);
+  shk(9, 600);
+  try { sfxEvo(); audioBend(5, 1.6); } catch (e) {}
+  announce('MITOSIS', '#9CF0FF', 'You are a swarm now. Steer the cloud; graze the deep.', 4200);
+}
+
+// Swarm physics: cells flock (cohesion + separation) toward the pointer, eat
+// plankton on contact, and feed a shared pool we mirror back into P.mass/P.x/P.y
+// so the rest of the engine (camera, HUD, evo bar) keeps working unchanged.
+function updateSwarm(dt) {
+  if (microMode !== 'swarm') return;
+  const target = ptr.on ? { x: ptr.x, y: ptr.y } : { x: P.x, y: P.y };
+
+  // Centroid (drives camera + world systems via P)
+  let cxg = 0, cyg = 0, totalMass = 0;
+  for (const c of cells) { cxg += c.x; cyg += c.y; totalMass += c.mass; }
+  const n = cells.length || 1;
+  cxg /= n; cyg /= n;
+
+  const SEP = 16, NEIGH = 70;
+  for (const c of cells) {
+    c.ph += dt * .004;
+    // Seek pointer
+    const sa = ang(c, target);
+    let ax = Math.cos(sa) * .22, ay = Math.sin(sa) * .22;
+    // Cohesion toward centroid (keeps the cloud together)
+    ax += (cxg - c.x) * .0015; ay += (cyg - c.y) * .0015;
+    // Local separation
+    for (const o of gNearCells(c, NEIGH)) {
+      if (o === c) continue;
+      const dx = c.x - o.x, dy = c.y - o.y, dd = Math.hypot(dx, dy);
+      if (dd > 0 && dd < SEP) { const w = (SEP - dd) / SEP; ax += (dx / dd) * w * .9; ay += (dy / dd) * w * .9; }
+    }
+    c.vx = c.vx * .9 + ax; c.vy = c.vy * .9 + ay;
+    const v = Math.hypot(c.vx, c.vy), VMAX = 7;
+    if (v > VMAX) { c.vx = c.vx / v * VMAX; c.vy = c.vy / v * VMAX; }
+    c.x += c.vx * (dt / 16); c.y += c.vy * (dt / 16);
+
+    // Graze plankton on contact
+    for (const o of gNear(c.x, c.y, c.r + 8)) {
+      if (!orgs.includes(o)) continue;
+      if (o.r > c.r * 2.2) continue;            // cells only eat the small stuff
+      if (dst(c, o) < c.r + o.r) {
+        const T = ORGS[o.type];
+        c.mass += calcGain(T.mass * (o.massMul || 1), totalMass) * .5;
+        if (parts.length < 250) burst(o.x, o.y, T.col, 2, .8);
+        const idx = orgs.indexOf(o); if (idx >= 0) orgs.splice(idx, 1);
+        const cnt = orgs.filter(q => q.type === o.type).length;
+        if (cnt < ORGS[o.type].mx) setTimeout(() => spawn(o.type, 1), rng(700, 2200));
+      }
+    }
+  }
+
+  // Mirror swarm into the player proxy so camera/HUD/world keep functioning.
+  P.x = cxg; P.y = cyg; P.mass = totalMass;
+  P.vx = lp(P.vx, (cxg - P.x) , .1);   // (centroid already moved; keep vel tame)
+  // Player radius for camera = spread of the cloud
+  let spread = 0; for (const c of cells) spread = Math.max(spread, dst({x:cxg,y:cyg}, c));
+  P.r = cl(spread * .6 + 20, 30, 600);
+}
+
+// Lightweight neighbor query for cells (they're not in the org spatial hash).
+// Small N (≤~80) so an O(n) scan per cell is fine and avoids a second grid.
+function gNearCells(c, radius) {
+  const out = [];
+  for (const o of cells) { if (Math.abs(o.x - c.x) < radius && Math.abs(o.y - c.y) < radius) out.push(o); }
+  return out;
+}
+
+// Render the swarm: soft connective haze (reads as one organism) + bright cells.
+function drawSwarm(ts) {
+  if (microMode !== 'swarm' || !cells.length) return;
+  const col = COL.titan.pri;
+  // Connective membrane haze
+  cx.globalCompositeOperation = 'lighter';
+  cx.fillStyle = col;
+  for (const c of cells) {
+    cx.globalAlpha = .05;
+    cx.beginPath(); cx.arc(c.x, c.y, c.r * 4.5, 0, TAU); cx.fill();
+  }
+  cx.globalCompositeOperation = 'source-over';
+  // Cell bodies
+  for (const c of cells) {
+    cx.globalAlpha = .85;
+    cx.fillStyle = col;
+    cx.shadowBlur = 6 * zm; cx.shadowColor = col;
+    cx.beginPath(); cx.arc(c.x, c.y, c.r * (1 + .12 * Math.sin(c.ph)), 0, TAU); cx.fill();
+    cx.shadowBlur = 0;
+    cx.globalAlpha = .9;
+    cx.fillStyle = '#fff';
+    cx.beginPath(); cx.arc(c.x - c.r * .25, c.y - c.r * .25, c.r * .32, 0, TAU); cx.fill();
+  }
+  cx.globalAlpha = 1; cx.shadowBlur = 0;
+}
+
+// The COLOSSUS pressure ring — a tightening, brightening halo that signals the
+// singularity is approaching, then the pulsing "tap to divide" cue at full charge.
+function drawBreakPressure(ts) {
+  if (breakPressure <= 0 || microMode === 'swarm') return;
+  const p = breakPressure;
+  const baseR = P.r * (1.6 - .5 * p);                 // ring tightens as it charges
+  cx.globalAlpha = .2 + .5 * p;
+  cx.strokeStyle = '#9CF0FF'; cx.lineWidth = 1.5 + 2 * p;
+  cx.shadowBlur = 16 * zm * p; cx.shadowColor = '#9CF0FF';
+  cx.setLineDash([5, 6]); cx.lineDashOffset = -ts * .04;
+  cx.beginPath(); cx.arc(P.x, P.y, baseR, 0, TAU); cx.stroke();
+  cx.setLineDash([]);
+  if (microMode === 'choice') {
+    // Full charge: bright pulsing "divide" cue
+    const pulse = .5 + .5 * Math.sin(ts * .006);
+    cx.globalAlpha = .4 + .4 * pulse;
+    cx.lineWidth = 2.5; cx.beginPath(); cx.arc(P.x, P.y, P.r * (1.15 + .08 * pulse), 0, TAU); cx.stroke();
+  }
+  cx.globalAlpha = 1; cx.shadowBlur = 0;
 }
 
 function checkEvo() {
@@ -3191,7 +3369,13 @@ function loop(ts) {
   try { drawStingAura(ts); }   catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
   try { drawTitanIntake(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
 
-  try { drawPlayer(ts); }      catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+  // Micro branch: the swarm replaces the single-body render once mitosis fires.
+  if (microMode === 'swarm') {
+    try { drawSwarm(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+  } else {
+    try { drawBreakPressure(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
+    try { drawPlayer(ts); }        catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+  }
 
   // Float texts
   cx.textAlign='center'; cx.font='500 11px "Cormorant Garamond",serif';
@@ -3211,7 +3395,7 @@ function loop(ts) {
   // player is always visible at screen center.
   // ═══════════════════════════════════════════
   cx.setTransform(1, 0, 0, 1, 0, 0);
-  drawPlayerScreenSpace(ts);
+  if (microMode !== 'swarm') drawPlayerScreenSpace(ts);  // swarm has no single body to anchor
   cx.setTransform(zm, 0, 0, zm, off.x+shx, off.y+shy);
 
   // Frenzy screen tint
