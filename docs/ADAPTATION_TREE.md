@@ -56,7 +56,9 @@ Bigger persistent world, biomes, distinct regional fauna, landmarks worth travel
 Mostly content + the existing view-radius/streaming systems scaled up. No netcode yet.
 
 ### Phase E — MULTIPLAYER  💭 (major architecture, not a feature commit)
-Honest scoping for the end goal:
+**Decision: NOT building it now. Building TOWARD it.** Single-player ships; the goal is
+that turning multiplayer on later is an *addition*, never a rewrite.
+Honest scoping for the eventual end goal:
 - **This is a real backend project**, not an edit to index.html. Needs an authoritative
   server (state sync, anti-cheat), a transport (WebSocket/WebRTC), interest management
   (only send nearby entities — the spatial hash already helps), and client prediction.
@@ -65,6 +67,40 @@ Honest scoping for the end goal:
 - Cheapest believable step toward it: **async/ghost multiplayer** first — other players'
   runs replayed as AI "ghosts" in your world (no real-time netcode), which sells a
   populated world and de-risks the jump to true real-time.
+
+---
+
+## MULTIPLAYER-READY PRINCIPLES  ⭐ (apply to EVERY commit from now on)
+
+We are not writing netcode yet, but we keep the door open by following cheap rules now.
+These cost ~nothing in single-player and save a rewrite later. Each new system gets a
+quick check against this list.
+
+1. **The player is not special — it's "entity 0".** Anything that reads/writes the global
+   `P` should work if there were `P2`, `P3`… Prefer functions that take an actor argument
+   over ones that hardcode `P`. (We won't refactor existing code wholesale, but *new*
+   systems — adaptations, abilities — take an actor.)
+2. **Simulation is deterministic & input-driven.** Game state advances from (state + dt +
+   inputs). Keep using a fixed-ish `dt` step and the seedable RNG path where practical, so
+   the same inputs → same result. This is what lets a server replay/validate later.
+3. **Separate SIM from RENDER.** Update logic must never depend on canvas/DOM. (Mostly true
+   today — the headless harness proves the sim runs with stubbed DOM. Keep it that way: no
+   game rules inside draw functions.)
+4. **Inputs are messages, not direct mutations.** Funnel control through an intent object
+   (e.g. `{move, tap, ability}`) rather than touching state in event handlers. Today `ptr`
+   already approximates this — keep new actions going through a small input struct so they
+   can later arrive over a wire instead of from a mouse.
+5. **State is serializable.** Entities are plain data (numbers/strings/arrays), no closures
+   or DOM nodes stored on them. Anything you'd need to sync should JSON-cleanly. (Audit:
+   `_maskAnchor` holds an object ref — fine locally, but note it as non-serializable.)
+6. **Spatial queries already scale.** The grid/`gNear` interest model is exactly what a
+   server uses to send "only what's near you." Keep routing proximity logic through it.
+7. **No wall-clock gameplay.** Use the sim clock (`gt`/accumulated dt), never `Date.now()`,
+   for anything that affects state — so replays and server time stay consistent.
+
+> The headless harness (`tools/playtest-harness.js`) is our proof of #2/#3: it runs the
+> whole sim with no browser. If a future change breaks the harness, it has probably
+> coupled sim to render — a multiplayer red flag. Run it after any logic change.
 
 ---
 
