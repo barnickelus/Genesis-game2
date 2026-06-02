@@ -1725,8 +1725,23 @@ function collide(dt) {
       if (P.stg>0&&P.mass<STAGES[P.stg].thr*.55) { P.stg=Math.max(0,P.stg-1); fTxt(P.x,P.y-28,'DE-EVOLVED','#ff4444'); shk(6,300); setStageAudio(P.stg); audioBend(-4,1.2); }
     }
     if (o.hp<=0) {
-      const T=ORGS[o.type], gain=calcGain(T.mass*.4*(o.massMul||1),P.mass);
-      P.mass+=gain; score+=Math.floor(gain*5); burst(o.x,o.y,T.col,12,2.5); fTxt(o.x,o.y-10,'+'+Math.floor(gain),T.col);
+      const T=ORGS[o.type];
+      // Effort-scaled payout: tough creatures (high max HP) are a real hunt, so a
+      // kill-by-damage pays far more than the old flat 40%. The bonus ramps with
+      // mhp, so the big red apex (hunter/lurker/behemoth) finally pays off big.
+      const effort = cl(o.mhp/50, 0, 1);           // 0 (fodder) → 1 (behemoth-tier)
+      const killMul = 0.45 + effort * 1.75;        // .45 (fry) → 2.2 (apex)
+      const gain=calcGain(T.mass*killMul*(o.massMul||1),P.mass);
+      P.mass+=gain; score+=Math.floor(gain*5);
+      const apex = o.mhp >= 30;                     // levia/behemoth-class takedown
+      burst(o.x,o.y,T.col, apex?34:12, apex?4:2.5);
+      fTxt(o.x,o.y-10,'+'+Math.floor(gain),T.col);
+      if (apex) {
+        ring(o.x,o.y,'#fff',o.r*1.6,22); ring(o.x,o.y,T.col,o.r*2.4,18);
+        fTxt(o.x,o.y-30,'APEX SLAIN','#fff'); shk(6,360);
+        streak++; streakT=3000;
+        try { sfxAnomalyGrab(); } catch(e) { try{ sfxEvo(); }catch(_){} }
+      } else { try { sfxEat(); } catch(e){} }
       const idx=orgs.indexOf(o); if(idx>=0)orgs.splice(idx,1); checkEvo();
     }
   }
