@@ -46,9 +46,17 @@ Right after mitosis you control a **loose cloud of cells** (reuse boids/flocking
 - Spread wide = cover more plankton; clump = safer / punchier.
 - Fragile: cells can be scattered or picked off; you re-gather them.
 
-### 3b. COLONY (multicellular build)  ⚪
-Spend mass to **bind swarm cells into a fixed structure** grown from a core along the stem.
-Structure = ability. This is the "filter-feeding efficiency build" the player wants.
+### 3b. COLONY (multicellular build)  🟢 first pass
+**Bind swarm cells into a shaped formation** — shape = ability. Cycle shapes with the
+MORPH button (point-and-grow heading orients the shape to your travel direction).
+Implemented shapes & their feeding profile:
+- **FILAMENT** — broadside rake; widest reach (eatR 1.7, feed .85) → the filter net.
+- **RADIAL** — ring/bloom; omnidirectional (eatR 1.4, feed .7).
+- **SPHERE** — packed disc; compact & durable (eatR 1.15, feed .6).
+- **SWARM** — loose flock; max coverage, lowest per-cell yield (.5).
+
+Still ⚪: cell-type differentiation (mouth/sting/flagella/membrane), per-shape special
+abilities beyond feeding, branching/coral recursion, threats at this scale.
 
 ---
 
@@ -84,12 +92,15 @@ Morphologies grown from the core. Each is a distinct playstyle; branches can be 
 
 ## 6. Build order (how we ship it)
 
-1. ⚪ **Mitosis MOMENT** — COLOSSUS pressure meter → choice prompt → burst-into-swarm transition.
-2. 🟡 **Swarm control** — herd the cloud, graze plankton as a swarm (validate the feel).
-3. ⚪ **Binding & the first structure** — bind cells into FILAMENT; prove "shape = ability."
+1. 🟢 **Mitosis MOMENT** — COLOSSUS pressure meter → choice prompt → burst-into-swarm transition.
+2. 🟢 **Swarm control** — herd the cloud, graze plankton as a swarm.
+3. 🟢 **Binding & shapes** — bind into FILAMENT / RADIAL / SPHERE via MORPH; shape = feeding ability.
 4. ⚪ **Cell types & differentiation** — mouth/sting/flagella/membrane.
-5. ⚪ **Full fork tree + node UI** — radial/sphere/branching, hybrids.
+5. ⚪ **Full fork tree + hybrids** — branching/coral recursion, mixed builds.
 6. ⚪ **Art pass** — the rug aesthetic (stems, blooms, leaves, colors).
+
+> Decision locked: **point-and-grow** directional accretion (shape orients to travel
+> heading), not a tap-a-node radial menu. Most faithful to the rug, cleanest on touch.
 
 ---
 
