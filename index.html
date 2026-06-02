@@ -321,7 +321,8 @@ let introActive = true;
 // ═══════════════════════════════════════════
 function init() {
   P = { x:0, y:0, r:6, mass:10, vx:0, vy:0, hd:0, stg:0,
-        tail:[], blink:0, dash:false, dashT:0, boost:0, flash:{c:'#fff',t:0} };
+        tail:[], blink:0, dash:false, dashT:0, boost:0, flash:{c:'#fff',t:0},
+        traits:[], traitLv:{}, traitCd:{} };   // adaptation engine (see docs/TRAIT_SYSTEM.md)
   orgs=[]; projs=[]; parts=[]; txts=[]; dust=[]; frenzyOrbs=[];
   score=0; abil_cd=0; streak=0; streakT=0; gt=0; behMem=[];
   frenzy=false; fTime=0; fMax=8000; shOn=false; shTime=0;
@@ -1209,8 +1210,11 @@ function updateP(dt) {
   const s=stg(); let dx=0, dy=0;
   if (ptr.on) { dx=ptr.x-P.x; dy=ptr.y-P.y; }
   const dL=Math.hypot(dx,dy); if(dL>.5) P.hd=Math.atan2(dy,dx);
-  if (ptr.tap && s.ab && s.cd>0) useAbil();
+  // Tap activates an ability if the actor has either a legacy stage ability or
+  // any activated trait. The trait engine (traitTap, inside useAbil) gets first dibs.
+  if (ptr.tap && ((s.ab && s.cd>0) || P.traits.length)) useAbil();
   ptr.tap=false;
+  traitTick(P, dt);
   updateBreakPressure(dt);
 
   let spd=s.spd*(1+Math.log2(Math.max(1,P.mass))*.08);
@@ -1287,7 +1291,80 @@ function updateP(dt) {
   behMem.push({vx:P.vx,vy:P.vy,hd:P.hd}); if(behMem.length>120)behMem.shift();
 }
 
+// ═══════════════════════════════════════════
+// TRAIT ENGINE — the adaptation system (see docs/TRAIT_SYSTEM.md)
+// Traits are data + optional hooks held on an ACTOR (never globals), so the same
+// code drives P, and later P2/P3… (multiplayer principle #1). Adding a fork =
+// adding a registry entry; the core loop never changes. This is what keeps the
+// number of evolutionary directions open-ended.
+// ═══════════════════════════════════════════
+// Hook contract (all optional, all take the actor `a` first):
+//   onTap(a)         — activated ability; return true if it consumed the tap
+//   onTick(a, dt)    — every frame (auras, regen, passive procs)
+//   onKill(a, prey)  — when the actor kills a creature
+//   mod(a, st)       — fold passive modifiers into a stats object st {spd,decay,...}
+//   draw(a, ts)      — per-trait world-space visual
+//   cd               — cooldown (ms) for activated traits; tracked per-actor in a.traitCd
+const TRAITS = {
+  bolt: {
+    id:'bolt', name:'Bolt', cat:'acquisition', max:3, cd:400,
+    desc:'Fire a damaging projectile at the cursor.',
+    onTap(a) {
+      const lv = a.traitLv.bolt || 1;
+      const aim = ang(a, ptr.on ? ptr : { x:a.x+Math.cos(a.hd)*100, y:a.y+Math.sin(a.hd)*100 });
+      const spread = lv >= 3 ? [-.18, 0, .18] : lv >= 2 ? [-.10, .10] : [0];  // stacks → more shots
+      for (const off of spread) {
+        const an = aim + off;
+        projs.push({ x:a.x+Math.cos(an)*a.r, y:a.y+Math.sin(an)*a.r,
+          vx:Math.cos(an)*8, vy:Math.sin(an)*8, r:4, life:1200, dmg:8, c:COL.primo.pri });
+      }
+      burst(a.x+Math.cos(aim)*a.r, a.y+Math.sin(aim)*a.r, COL.primo.pri, 4, 1.2);
+      shk(1.5, 40);
+      return true;
+    },
+  },
+};
+
+// Per-stage seed traits — the default (linear) path grants these so nothing
+// regresses while the choice UI is still being built. Migrating one ability
+// (bolt at PRIMORDIAL=4) proves the engine; the rest stay on the legacy switch
+// for now and move over in the next step.
+const STAGE_SEED_TRAITS = { 4: ['bolt'] };
+
+function grantTrait(a, id) {
+  const def = TRAITS[id]; if (!def) return;
+  if (!a.traits.includes(id)) { a.traits.push(id); a.traitLv[id] = 1; }
+  else if ((a.traitLv[id]||1) < (def.max||1)) a.traitLv[id]++;
+}
+function hasTrait(a, id) { return a.traits.includes(id); }
+
+// Keep an actor's seed traits in sync with its stage (called from checkEvo).
+function syncSeedTraits(a) {
+  const seeds = STAGE_SEED_TRAITS[a.stg];
+  if (seeds) for (const id of seeds) if (!hasTrait(a, id)) grantTrait(a, id);
+}
+
+// ── Dispatchers — fan a phase out across an actor's traits ──
+function traitTick(a, dt) {
+  for (const k in a.traitCd) if (a.traitCd[k] > 0) a.traitCd[k] = Math.max(0, a.traitCd[k] - dt);
+  for (const id of a.traits) { const t = TRAITS[id]; if (t && t.onTick) t.onTick(a, dt); }
+}
+function traitTap(a) {
+  // First activated trait that's off cooldown consumes the tap.
+  for (const id of a.traits) {
+    const t = TRAITS[id]; if (!t || !t.onTap) continue;
+    if ((a.traitCd[id]||0) > 0) continue;
+    if (t.onTap(a)) { if (t.cd) a.traitCd[id] = t.cd; return true; }
+  }
+  return false;
+}
+function traitOnKill(a, prey) { for (const id of a.traits) { const t = TRAITS[id]; if (t && t.onKill) t.onKill(a, prey); } }
+function traitDraw(a, ts)     { for (const id of a.traits) { const t = TRAITS[id]; if (t && t.draw) t.draw(a, ts); } }
+
 function useAbil() {
+  // Trait-based activated abilities get first dibs on the tap (engine path).
+  if (traitTap(P)) return;
+  // ── Legacy stage abilities (not yet migrated to traits) ──
   if (abil_cd>0) return;
   const s=stg(); if(!s.ab||s.cd===0) return;
   switch (s.ab) {
@@ -1299,11 +1376,7 @@ function useAbil() {
       }
       for (let i=0;i<16;i++){const a=bA-PI*.55+(i/16)*PI*1.1,d=wR*rng(.4,1);parts.push({x:P.x+Math.cos(a)*d,y:P.y+Math.sin(a)*d,vx:Math.cos(a)*2,vy:Math.sin(a)*2,r:2,life:250,ml:250,c:COL.naga.pri,t:'c'});}
       shk(4,150); sfxHurt(); break; }
-    case 'bolt': {
-      abil_cd=s.cd;
-      const a=ang(P, ptr.on?ptr:{x:P.x+Math.cos(P.hd)*100,y:P.y+Math.sin(P.hd)*100});
-      projs.push({x:P.x+Math.cos(a)*P.r,y:P.y+Math.sin(a)*P.r,vx:Math.cos(a)*8,vy:Math.sin(a)*8,r:4,life:1200,dmg:8,c:COL.primo.pri});
-      burst(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,COL.primo.pri,4,1.2); shk(1.5,40); break; }
+    // 'bolt' migrated to the trait engine (TRAITS.bolt) — handled by traitTap above.
     case 'echo': stunEcho(false); abil_cd=s.cd; break;
   }
 }
@@ -1621,6 +1694,7 @@ function drawBreakPressure(ts) {
 function checkEvo() {
   if (P.stg < STAGES.length-1 && P.mass >= STAGES[P.stg+1].thr) {
     P.stg++;
+    syncSeedTraits(P);   // grant this stage's default-path traits (e.g. bolt at PRIMORDIAL)
     const s=stg();
     const fl=document.getElementById('flash');
     fl.style.background=`radial-gradient(circle,${s.c.pri}40 0%,transparent 68%)`;
@@ -1742,6 +1816,7 @@ function collide(dt) {
         streak++; streakT=3000;
         try { sfxAnomalyGrab(); } catch(e) { try{ sfxEvo(); }catch(_){} }
       } else { try { sfxEat(); } catch(e){} }
+      traitOnKill(P, o);   // venom procs, lifesteal, etc. (engine hook)
       const idx=orgs.indexOf(o); if(idx>=0)orgs.splice(idx,1); checkEvo();
     }
   }
@@ -3507,6 +3582,7 @@ function loop(ts) {
   } else {
     try { drawBreakPressure(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
     try { drawPlayer(ts); }        catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+    try { traitDraw(P, ts); }      catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   }
 
   // Float texts
