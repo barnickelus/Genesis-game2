@@ -1224,10 +1224,8 @@ function calcDecay(m, dt) {
 function updateP(dt) {
   // ── Micro branch takes over the player loop once we leave the single body ──
   if (microMode === 'swarm') { ptr.tap = false; updateSwarm(dt); return; }
-  if (microMode === 'choice') {
-    // Breakpoint prompt is up: a tap commits to mitosis.
-    if (ptr.tap) { ptr.tap = false; doMitosis(); return; }
-  }
+  // microMode==='choice' is handled by the paused singularity fork overlay
+  // (openSingularityFork) — no in-world tap handling needed here.
 
   const s=stg(); let dx=0, dy=0;
   if (ptr.on) { dx=ptr.x-P.x; dy=ptr.y-P.y; }
@@ -1617,26 +1615,52 @@ function updateBreakPressure(dt) {
     if (breakPressure >= 1 && !microChoiceShown) {
       microChoiceShown = true;
       microMode = 'choice';
-      announce('THE SINGULARITY', '#9CF0FF',
-        'A single cell can grow no further. Tap to divide — become many.', 6000);
+      openSingularityFork();   // a real branch choice, not a single tap
     }
   } else {
     breakPressure = Math.max(0, breakPressure - dt / 2000);
   }
 }
 
+// THE SINGULARITY — the macro/micro fork. A two-card choice (reuses the adapt
+// overlay styling). DIVIDE → mitosis → colony (micro). ASCEND → stay a single
+// colossus and keep filter-feeding (macro path; full macro branch is a stub for now).
+function openSingularityFork() {
+  paused = true;
+  const wrap = document.getElementById('adaptCards');
+  wrap.innerHTML = '';
+  document.getElementById('adaptTitle').textContent = 'THE SINGULARITY';
+  document.getElementById('adaptSub').textContent = 'A single cell can grow no further. Choose your path.';
+  const forks = [
+    { name:'DIVIDE', cat:'MICRO · mitosis', desc:'Burst into a living colony of cells. Grow by numbers — feed cells until they divide, and shape the colony to filter the deep.', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; doMitosis(); } },
+    { name:'ASCEND', cat:'MACRO · colossus', desc:'Stay whole. Remain the colossus and keep drawing the ocean in. (The macro branch expands in a future update.)', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; microMode='single'; microChoiceShown=false; breakPressure=0; P.mass*=.85; announce('ASCENDANT','#5AC8FF','You remain singular. Filter on.',3000); } },
+  ];
+  for (const f of forks) {
+    const card = document.createElement('div');
+    card.className = 'adaptCard';
+    card.innerHTML = `<div class="cCat">${f.cat}</div><div class="cName">${f.name}</div><div class="cDesc">${f.desc}</div><div class="cLv">CHOOSE</div>`;
+    card.onclick = f.go;
+    wrap.appendChild(card);
+  }
+  document.getElementById('adapt').classList.add('on');
+}
+
 // Fire mitosis: dissolve the single body into a cloud of swarm cells that carry
 // the accumulated mass between them. Reuses the world's particle FX + audio.
 function doMitosis() {
-  const N = 60;
-  const massEach = P.mass / N;
+  // A FRESH colony — not a continuation of the giant's huge mass. Starting small
+  // (≈14 mass/cell) makes growth visible and meaningful: a few good bites noticeably
+  // grow a cell and push it toward dividing, instead of being lost in a 14k pool.
+  const N = 24;
+  const massEach = 14;
+  P.mass = N * massEach;
   cells = [];
   for (let i = 0; i < N; i++) {
-    const a = (i / N) * TAU + rng(-.2, .2), d = rng(P.r * .2, P.r * 1.1);
+    const a = (i / N) * TAU + rng(-.2, .2), d = rng(20, 70);
     cells.push({
       x: P.x + Math.cos(a) * d, y: P.y + Math.sin(a) * d,
       vx: Math.cos(a) * rng(2, 6), vy: Math.sin(a) * rng(2, 6),
-      r: 3.4, mass: massEach, ph: rng(0, TAU), bound: false,
+      r: cl(3.4 + Math.sqrt(massEach) * .5, 3.4, 26), mass: massEach, ph: rng(0, TAU), bound: false, fed: 0,
     });
   }
   microMode = 'swarm';
@@ -1658,13 +1682,18 @@ function doMitosis() {
 //   filament — a wide sweeping line broadside to travel: the filter NET
 //   radial   — a ring around the core: omnidirectional intake (manta/medusa)
 //   sphere   — packed disc: dense, tanky, short reach
+// Each shape is a real trade-off (the player couldn't tell them apart before):
+//   eatR  — eat reach per cell ·  feed — mass yield ·  spd — colony speed
+//   The descriptions name the actual advantage so the choice is legible.
 const COLONY = {
-  swarm:    { eatR: 1.0, feed: 0.5,  label: 'SWARM',    desc: 'Loose cloud — wide coverage.' },
-  filament: { eatR: 1.7, feed: 0.85, label: 'FILAMENT', desc: 'A drifting net — filter the deep.' },
-  radial:   { eatR: 1.4, feed: 0.7,  label: 'RADIAL',   desc: 'A bloom — intake from all sides.' },
-  sphere:   { eatR: 1.15,feed: 0.6,  label: 'SPHERE',   desc: 'Packed colony — dense and durable.' },
+  swarm:    { eatR: 1.0, feed: 0.6, spd: 1.35, label: 'SWARM',    desc: 'Fast & wide. Most coverage, least yield.' },
+  filament: { eatR: 2.0, feed: 1.0, spd: 0.85, label: 'FILAMENT', desc: 'The net. Huge reach + best yield, but slow.' },
+  radial:   { eatR: 1.5, feed: 0.8, spd: 1.0,  label: 'RADIAL',   desc: 'The bloom. Eats from all sides, balanced.' },
+  sphere:   { eatR: 1.2, feed: 0.7, spd: 1.1,  label: 'SPHERE',   desc: 'Packed & tough. Fast, durable, short reach.' },
 };
 const COLONY_ORDER = ['swarm', 'filament', 'radial', 'sphere'];
+const CELL_SPLIT = 9;    // mass a cell must eat before it divides into a new cell
+const CELL_MAX   = 160;  // hard cap on cell count (perf)
 
 // Local-space target slot for cell i of n in the active shape. Scale grows with
 // cell count so bigger colonies sweep wider. x axis = colony facing.
@@ -1742,24 +1771,50 @@ function updateSwarm(dt) {
       const sep = bound ? SEP * .6 : SEP;
       if (dd > 0 && dd < sep) { const w = (sep - dd) / sep; ax += (dx / dd) * w * .9; ay += (dy / dd) * w * .9; }
     }
+    // Auto-forage: each cell drifts toward the nearest edible plankton it senses.
+    // This is what makes the colony actively FEED (and grow) even with light steering
+    // — the player guides the cloud, the cells home in on the food within it.
+    let bf = null, bfd = 200;
+    for (const o of gNear(c.x, c.y, 200)) {
+      if (o.r > c.r * 1.5) continue;
+      const fd = dst(c, o); if (fd < bfd) { bfd = fd; bf = o; }
+    }
+    if (bf) { const fa = ang(c, bf); ax += Math.cos(fa) * .8; ay += Math.sin(fa) * .8; }
     c.vx = c.vx * (bound ? .82 : .9) + ax; c.vy = c.vy * (bound ? .82 : .9) + ay;
-    const v = Math.hypot(c.vx, c.vy), VMAX = 7;
+    const v = Math.hypot(c.vx, c.vy), VMAX = 7 * cfg.spd;
     if (v > VMAX) { c.vx = c.vx / v * VMAX; c.vy = c.vy / v * VMAX; }
     c.x += c.vx * (dt / 16); c.y += c.vy * (dt / 16);
 
-    // Graze plankton on contact — eat reach + yield scale with the bound shape.
-    const reach = c.r * cfg.eatR + 8;
+    // Graze on contact. FIX: cells were r3.4 and could only eat <7.5px prey, but
+    // COLOSSUS-era plankton is ~9–10px — so the colony never ate and mass froze.
+    // Cells now grow with their own mass (so reach scales) and can eat anything up
+    // to ~1.4× their radius. Eat reach + yield scale with the bound shape.
+    const reach = c.r * (cfg.eatR + 0.8) + 10;
     for (const o of gNear(c.x, c.y, reach)) {
       if (!orgs.includes(o)) continue;
-      if (o.r > c.r * 2.2) continue;            // cells only eat the small stuff
-      if (dst(c, o) < c.r * cfg.eatR + o.r) {
+      if (o.r > c.r * 1.5) continue;            // can eat prey up to ~1.5× cell radius
+      if (dst(c, o) < c.r * cfg.eatR + o.r + 4) {
         const T = ORGS[o.type];
-        c.mass += calcGain(T.mass * (o.massMul || 1), totalMass) * cfg.feed;
+        // Flat yield from prey mass (NOT diluted by colony mass) — the colony is a
+        // fresh food chain, so every bite stays meaningful as it grows.
+        const g = T.mass * (o.massMul || 1) * .5 * cfg.feed;
+        c.mass += g; c.fed += g; score += Math.floor(g * 4);
+        c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26);   // cell visibly grows as it eats
         if (parts.length < 250) burst(o.x, o.y, T.col, 2, .8);
         const oi = orgs.indexOf(o); if (oi >= 0) orgs.splice(oi, 1);
         const cnt = orgs.filter(q => q.type === o.type).length;
-        if (cnt < ORGS[o.type].mx) setTimeout(() => spawn(o.type, 1), rng(700, 2200));
+        if (cnt < ORGS[o.type].mx) setTimeout(() => spawn(o.type, 1), rng(500, 1600));
       }
+    }
+    // Growth objective: a well-fed cell DIVIDES into a new cell — the colony
+    // literally grows in numbers as you feed it (mitosis all the way down).
+    if (c.fed >= CELL_SPLIT && cells.length < CELL_MAX) {
+      c.fed = 0; c.mass *= .6;
+      c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26);
+      const na = rng(0, TAU);
+      cells.push({ x: c.x + Math.cos(na)*c.r*2, y: c.y + Math.sin(na)*c.r*2,
+        vx: Math.cos(na)*2, vy: Math.sin(na)*2, r: c.r, mass: c.mass, ph: rng(0,TAU), bound:false, fed:0 });
+      if (parts.length < 240) burst(c.x, c.y, '#9CF0FF', 4, 1.4);
     }
     idx++;
   }
@@ -3508,7 +3563,13 @@ function updateHUD() {
   document.getElementById('abilTxt').textContent=s.abT+(streak>2?`  ${streak}×`:'');
   // Evo bar
   const bar=document.getElementById('evoBar');
-  if (nx) {
+  if (microMode === 'swarm') {
+    // Colony objective: grow the colony toward CELL_MAX. The bar tracks cell count,
+    // and the label tells the player the goal (more cells = bigger filter).
+    const pct = cl(cells.length / CELL_MAX * 100, 0, 100);
+    bar.style.width = pct + '%'; bar.style.background = `linear-gradient(90deg,#9CF0FF,#fff)`;
+    document.getElementById('evoNxtLbl').textContent = `${cells.length} / ${CELL_MAX} cells · feed to divide`;
+  } else if (nx) {
     const pct=cl((P.mass-s.thr)/(nx.thr-s.thr)*100,0,100);
     bar.style.width=pct+'%'; bar.style.background=`linear-gradient(90deg,${s.c.pri},${nx.c.pri})`;
     document.getElementById('evoNxtLbl').textContent=`${nx.name} · ${nx.thr}`;
@@ -3680,11 +3741,29 @@ function loop(ts) {
   // TITAN plankton bloom — top up the small drifting types so the zoomed-out
   // ocean stays dense. Population target scales with TITAN phase but is capped so
   // the per-frame AI cost stays bounded on phones.
-  if (P.stg === 5) {
+  if (P.stg === 5 && microMode === 'single') {
     const planktonCap = titanPhase ? 240 : 170;
     if (orgs.length < planktonCap && (gt & 3) === 0) {  // ~every 4th frame
       const pick = ['mote','polyp','bloom','mote','tendril'][rni(0,5)];
       spawn(pick, 1);
+    }
+  }
+
+  // COLONY plankton field — the swarm is small and the world is otherwise sparse
+  // at this zoom, so spawn dense, CLOSE plankton drifting just outside the cloud.
+  // This is the food that makes the colony grow (cells eat → divide). Without it
+  // the colony starves and mass freezes (the bug the player hit).
+  if (microMode === 'swarm') {
+    const cap = 260;
+    if (orgs.length < cap) {                              // every frame while below cap — keep it fed
+      const pick = ['mote','polyp','bloom','mote','tendril','mote'][rni(0,6)];
+      const a = Math.random()*TAU, d = rng(P.r + 40, P.r + 240);  // tight ring just outside the colony
+      const T = ORGS[pick], r = rng(T.minR, T.maxR);
+      orgs.push({ type:pick, x:P.x+Math.cos(a)*d, y:P.y+Math.sin(a)*d, r, br:r,
+        hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU, massMul:1,
+        stT:0, stunT:0, wAng:Math.random()*TAU, ph:rng(0,TAU), ambR:false, lAng:0, trail:[],
+        flT:0, hSh:rng(-10,10), finPh:rng(0,TAU), breathPh:rng(0,TAU), eyeAng:0, scatterT:0,
+        lobes: pick==='bloom' ? Array.from({length:5},()=>({a:rng(0,TAU),d:rng(.25,.4),r:rng(.45,.6),ph:rng(0,TAU)})) : null });
     }
   }
 
