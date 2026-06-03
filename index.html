@@ -1633,7 +1633,7 @@ function openSingularityFork() {
   document.getElementById('adaptSub').textContent = 'A single cell can grow no further. Choose your path.';
   const forks = [
     { name:'DIVIDE', cat:'MICRO · mitosis', desc:'Burst into a living colony of cells. Grow by numbers — feed cells until they divide, and shape the colony to filter the deep.', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; doMitosis(); } },
-    { name:'ASCEND', cat:'MACRO · colossus', desc:'Stay whole. Remain the colossus and keep drawing the ocean in. (The macro branch expands in a future update.)', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; microMode='single'; microChoiceShown=false; breakPressure=0; P.mass*=.85; announce('ASCENDANT','#5AC8FF','You remain singular. Filter on.',3000); } },
+    { name:'ASCEND', cat:'MACRO · colossus', desc:'Stay whole. Remain the colossus and keep drawing the ocean in. (The macro branch expands in a future update.)', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; microMode='single'; breakPressure=0; announce('ASCENDANT','#5AC8FF','You remain singular. Filter on.',3000); } },
   ];
   for (const f of forks) {
     const card = document.createElement('div');
@@ -1746,8 +1746,13 @@ function updateSwarm(dt) {
   const slotScale = 7 + Math.sqrt(n) * 3.4;             // wider with more cells
 
   const SEP = 16, NEIGH = 70;
+  // Iterate a snapshot of the current cells; cells born this frame (from division)
+  // are collected separately and appended after, so we don't mutate the list we're
+  // looping and don't re-process newborns in the same frame.
+  const roster = cells.slice();
+  const newborns = [];
   let idx = 0;
-  for (const c of cells) {
+  for (const c of roster) {
     c.ph += dt * .004;
     let ax, ay;
     if (bound) {
@@ -1808,16 +1813,17 @@ function updateSwarm(dt) {
     }
     // Growth objective: a well-fed cell DIVIDES into a new cell — the colony
     // literally grows in numbers as you feed it (mitosis all the way down).
-    if (c.fed >= CELL_SPLIT && cells.length < CELL_MAX) {
+    if (c.fed >= CELL_SPLIT && cells.length + newborns.length < CELL_MAX) {
       c.fed = 0; c.mass *= .6;
       c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26);
       const na = rng(0, TAU);
-      cells.push({ x: c.x + Math.cos(na)*c.r*2, y: c.y + Math.sin(na)*c.r*2,
+      newborns.push({ x: c.x + Math.cos(na)*c.r*2, y: c.y + Math.sin(na)*c.r*2,
         vx: Math.cos(na)*2, vy: Math.sin(na)*2, r: c.r, mass: c.mass, ph: rng(0,TAU), bound:false, fed:0 });
       if (parts.length < 240) burst(c.x, c.y, '#9CF0FF', 4, 1.4);
     }
     idx++;
   }
+  if (newborns.length) for (const nb of newborns) cells.push(nb);
 
   // Mirror swarm into the player proxy so camera/HUD/world keep functioning.
   P.x = cxg; P.y = cyg; P.mass = totalMass; P.hd = colonyHd;
