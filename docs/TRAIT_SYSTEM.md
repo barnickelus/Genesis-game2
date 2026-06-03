@@ -72,9 +72,13 @@ so nothing regresses.
    Bolt migrated to a trait as proof — auto-granted at PRIMORDIAL, fires via the engine,
    and stacks (L1→1 shot, L2→2, L3→3, capped). Legacy abilities still on the switch.
    `traitStats` (passive-mod folding) is stubbed in the contract, wired next step.
-2. ⚪ Migrate remaining stage abilities to seed traits (dash/sting/whip/echo/gravity).
-3. ⚪ Evolution trait-card UI (pick 1 of 3).
-4. ⚪ World gene-drops.
+2. 🟢 **Trait pool + chooser UI**: 7 traits across all 5 categories (bolt, gravity_well,
+   venom_tip, membrane, efficient, fins, deepscan). `traitStats` folds passive mods
+   (spd/decay/dmgTaken/senseMul) into player update, decay, predator damage, and sense
+   range. Pick-1-of-3 card overlay (`openAdapt`) deals a category-varied hand at every
+   evolution from DRIFTER on; choosing grants/stacks and resumes.  ⚪ still: migrate the
+   *remaining* legacy abilities (dash/sting/whip/echo) to traits.
+3. ⚪ World gene-drops.
 5. ⚪ Flesh out the pool across all 5 categories; synergies/hybrids.
 6. ⚪ Art per trait (rug-coded organs).
 

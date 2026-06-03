@@ -104,9 +104,19 @@ Morphologies grown from the core. Each is a distinct playstyle; branches can be 
 
 ---
 
-## 7. Open questions  💭
+## 6b. Colony loop FIXED (playtest feedback) 🟢
+The first colony pass was a dead-end: cells (r3.4) couldn't eat COLOSSUS-era
+plankton (r9–10) so mass froze, shapes felt identical, and there was no goal.
+Now:
+- **It's a fresh colony** — mitosis resets to 24 cells × 14 mass (not the giant's
+  14k), so growth is visible and every bite matters.
+- **Growth objective**: cells auto-forage nearby plankton → fatten → **divide**
+  into new cells. The colony grows in NUMBER toward CELL_MAX (160); HUD bar tracks it.
+- **Cells grow** with mass (radius scales), can eat prey up to 1.5× their radius,
+  and a dense close plankton field spawns around the swarm so it's never starved.
+- **Shapes are real trade-offs now**: filament = huge reach + best yield but slow;
+  swarm = fast/wide/low yield; radial = balanced omnidirectional; sphere = fast/tough/short.
+- **The fork is a real choice**: the SINGULARITY shows two cards — DIVIDE (micro)
+  vs ASCEND (stay colossus; macro stub).
 
-- Mitosis: one-way commitment, or can you re-merge the swarm back into a single body?
-- Node UI: tap-a-node radial menu, or "point and grow" directional accretion?
-- Does the colony keep a single mass pool, or does each cell carry mass (lose cells = lose mass)?
-- Threats at this scale: do old creatures return as predators, or is it pure building/grazing?
+## 7. Open questions  💭

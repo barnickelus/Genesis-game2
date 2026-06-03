@@ -83,6 +83,21 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 #pMenu button{width:138px;padding:10px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:14px;color:rgba(255,255,255,.38);background:transparent;border:1px solid rgba(255,255,255,.07);cursor:pointer;letter-spacing:2px;transition:all .3s}
 #pMenu button:hover{color:rgba(255,255,255,.75);border-color:rgba(255,255,255,.2)}
 
+/* ── Adaptation chooser ── */
+#adapt{position:fixed;inset:0;z-index:32;background:rgba(0,5,14,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;backdrop-filter:blur(20px)}
+#adapt.on{display:flex;animation:adaptIn .5s ease}
+@keyframes adaptIn{from{opacity:0}to{opacity:1}}
+#adaptTitle{font-family:'Cinzel',serif;font-size:clamp(16px,3vw,24px);letter-spacing:10px;color:#9CF0FF;text-shadow:0 0 18px rgba(156,240,255,.5)}
+#adaptSub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:13px;letter-spacing:3px;color:rgba(255,255,255,.4);margin-bottom:18px}
+#adaptCards{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;max-width:680px;padding:0 14px}
+.adaptCard{width:180px;min-height:172px;padding:18px 16px;background:rgba(8,18,30,.7);border:1px solid rgba(156,240,255,.18);border-top:2px solid #9CF0FF;border-radius:3px;cursor:pointer;display:flex;flex-direction:column;gap:9px;transition:transform .12s,background .15s,border-color .15s;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.adaptCard:hover,.adaptCard:active{transform:translateY(-4px);background:rgba(14,30,46,.85);border-color:rgba(156,240,255,.5)}
+.adaptCard .cName{font-family:'Cinzel',serif;font-size:14px;letter-spacing:3px;color:#9CF0FF}
+.adaptCard .cCat{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.3);text-transform:uppercase}
+.adaptCard .cDesc{font-family:'Cormorant Garamond',serif;font-size:13px;line-height:1.35;color:rgba(255,255,255,.6);flex:1}
+.adaptCard .cLv{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;color:rgba(156,240,255,.7)}
+.adaptCard .cLv.up{color:#FFD860}
+
 /* ── Minimap ── */
 #mmap{position:fixed;bottom:14px;left:14px;z-index:10;border:1px solid rgba(255,255,255,.04);background:rgba(0,0,0,.18)}
 
@@ -152,6 +167,13 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
   <button id="resumeB">Resume</button>
   <button id="restartB">Restart</button>
   <button id="muteB">Mute</button>
+</div>
+
+<!-- Adaptation chooser — pick 1 of 3 trait cards at evolution (see docs/TRAIT_SYSTEM.md) -->
+<div id="adapt">
+  <h2 id="adaptTitle">ADAPT</h2>
+  <p id="adaptSub">Choose an adaptation</p>
+  <div id="adaptCards"></div>
 </div>
 
 <div id="mmap"><canvas id="mmC" width="80" height="80"></canvas></div>
@@ -957,7 +979,7 @@ function canEatAngle(o) {
   return df < v.w / 2;
 }
 
-function senseRange() { return SENSE_RANGE[P.stg] || 0; }
+function senseRange() { return (SENSE_RANGE[P.stg] || 0) * traitStats(P).senseMul; }
 function senseLevel() { return P.stg; }
 
 function updateSense() {
@@ -1202,10 +1224,8 @@ function calcDecay(m, dt) {
 function updateP(dt) {
   // ── Micro branch takes over the player loop once we leave the single body ──
   if (microMode === 'swarm') { ptr.tap = false; updateSwarm(dt); return; }
-  if (microMode === 'choice') {
-    // Breakpoint prompt is up: a tap commits to mitosis.
-    if (ptr.tap) { ptr.tap = false; doMitosis(); return; }
-  }
+  // microMode==='choice' is handled by the paused singularity fork overlay
+  // (openSingularityFork) — no in-world tap handling needed here.
 
   const s=stg(); let dx=0, dy=0;
   if (ptr.on) { dx=ptr.x-P.x; dy=ptr.y-P.y; }
@@ -1216,8 +1236,9 @@ function updateP(dt) {
   ptr.tap=false;
   traitTick(P, dt);
   updateBreakPressure(dt);
+  const tstats = traitStats(P);   // passive trait modifiers (spd/decay/dmgTaken/senseMul)
 
-  let spd=s.spd*(1+Math.log2(Math.max(1,P.mass))*.08);
+  let spd=s.spd*(1+Math.log2(Math.max(1,P.mass))*.08)*tstats.spd;
   if (P.dash) { spd*=2.5; P.dashT-=dt; if(P.dashT<=0)P.dash=false; }
   if (P.boost>0) { spd*=1.2; P.boost=Math.max(0,P.boost-dt); }
   if (frenzy) spd *= 1.4;
@@ -1243,7 +1264,7 @@ function updateP(dt) {
   if (P.stg===5) P.r += Math.max(0, P.mass - STAGES[5].thr) * 0.085;  // gentler balloon — TITAN is the relaxed endgame
 
   const floor=STAGES[P.stg].thr*.78+3;
-  P.mass=Math.max(floor, P.mass-calcDecay(P.mass,dt));
+  P.mass=Math.max(floor, P.mass-calcDecay(P.mass,dt)*tstats.decay);
   P.tail.unshift({x:P.x, y:P.y});
   while (P.tail.length > Math.floor(16+Math.log2(Math.max(1,P.mass))*8)) P.tail.pop();
 
@@ -1323,7 +1344,82 @@ const TRAITS = {
       return true;
     },
   },
+
+  // ── ACQUISITION: gravity well — pull small prey inward (the TITAN technique,
+  //    now a chooseable trait). Opposite of bolt: passive, area, no aim.
+  gravity_well: {
+    id:'gravity_well', name:'Gravity Well', cat:'acquisition', max:3,
+    desc:'Continuously draw smaller prey toward you. Stacks widen the well.',
+    onTick(a, dt) {
+      const lv = a.traitLv.gravity_well || 1;
+      const R = a.r * (4 + lv * 1.2);
+      for (const o of gNear(a.x, a.y, R)) {
+        const d = dst(a, o); if (d < 4 || d > R || o.r > a.r * .8) continue;
+        const pull = .35 * lv * (1 - d / R), ga = ang(o, a);
+        o.vx += Math.cos(ga) * pull; o.vy += Math.sin(ga) * pull;
+      }
+    },
+    draw(a, ts) {
+      const lv = a.traitLv.gravity_well || 1, R = a.r * (4 + lv * 1.2);
+      cx.globalAlpha = .05 + .03 * Math.sin(ts * .003);
+      cx.strokeStyle = COL.titan.pri; cx.lineWidth = .6;
+      for (let i = 0; i < lv + 1; i++) { cx.beginPath(); cx.arc(a.x, a.y, R * (1 - i * .18), 0, TAU); cx.stroke(); }
+      cx.globalAlpha = 1;
+    },
+  },
+
+  // ── ACQUISITION: venom — kills leave a damaging spore cloud; stacks linger longer.
+  venom_tip: {
+    id:'venom_tip', name:'Venom', cat:'acquisition', max:3,
+    desc:'Your kills burst into a damaging spore cloud.',
+    onKill(a, prey) {
+      const lv = a.traitLv.venom_tip || 1;
+      for (const o of gNear(prey.x, prey.y, 60 + lv * 18)) {
+        if (o === prey || !orgs.includes(o)) continue;
+        if (dst(prey, o) < 60 + lv * 18) { o.hp -= 1.2 * lv; o.flT = 160; o.stunT = Math.max(o.stunT, 200); }
+      }
+      for (let i = 0; i < 6 + lv * 2; i++) { const an = rng(0, TAU), d = rng(0, 40 + lv * 15);
+        parts.push({ x: prey.x + Math.cos(an)*d, y: prey.y + Math.sin(an)*d, vx: 0, vy: 0,
+          r: rng(1, 2.6), life: 600 + lv * 200, ml: 600 + lv * 200, c: '#9CE84A', t: 'c' }); }
+    },
+  },
+
+  // ── DEFENSE: membrane — passive armor (less damage taken). Pure stat mod.
+  membrane: {
+    id:'membrane', name:'Membrane', cat:'defense', max:3,
+    desc:'A toughened membrane. Take less damage from predators.',
+    mod(a, st) { st.dmgTaken *= (1 - .22 * (a.traitLv.membrane || 1)); },
+  },
+
+  // ── METABOLISM: efficient — slower mass decay. Pure stat mod.
+  efficient: {
+    id:'efficient', name:'Efficient Digestion', cat:'metabolism', max:3,
+    desc:'Burn mass more slowly. Decay is reduced.',
+    mod(a, st) { st.decay *= (1 - .18 * (a.traitLv.efficient || 1)); },
+  },
+
+  // ── MOVEMENT: fins — passive speed. Pure stat mod.
+  fins: {
+    id:'fins', name:'Fins', cat:'movement', max:3,
+    desc:'Streamlined fins. Move faster.',
+    mod(a, st) { st.spd *= (1 + .12 * (a.traitLv.fins || 1)); },
+  },
+
+  // ── SENSES: deep-scan — extends radar/sense range. Pure stat mod.
+  deepscan: {
+    id:'deepscan', name:'Deep Scan', cat:'senses', max:3,
+    desc:'Sharper senses. Radar range extends.',
+    mod(a, st) { st.senseMul *= (1 + .25 * (a.traitLv.deepscan || 1)); },
+  },
 };
+
+// Fold all passive trait modifiers into a stats object. Callers read these
+// instead of hardcoding, so traits compose. Defaults = identity (no traits → no change).
+function traitStats(a) {
+  const st = { spd: 1, decay: 1, dmgTaken: 1, senseMul: 1, eatRatio: 1 };
+  for (const id of a.traits) { const t = TRAITS[id]; if (t && t.mod) t.mod(a, st); }
+  return st;
+}
 
 // Per-stage seed traits — the default (linear) path grants these so nothing
 // regresses while the choice UI is still being built. Migrating one ability
@@ -1360,6 +1456,71 @@ function traitTap(a) {
 }
 function traitOnKill(a, prey) { for (const id of a.traits) { const t = TRAITS[id]; if (t && t.onKill) t.onKill(a, prey); } }
 function traitDraw(a, ts)     { for (const id of a.traits) { const t = TRAITS[id]; if (t && t.draw) t.draw(a, ts); } }
+
+// ═══════════════════════════════════════════
+// ADAPTATION CHOOSER — deal a hand of trait cards, pick one (see docs/TRAIT_SYSTEM.md)
+// ═══════════════════════════════════════════
+let adaptOpen = false;
+
+// Which traits the actor is *eligible* to be offered: not yet maxed.
+function eligibleTraits(a) {
+  return Object.keys(TRAITS).filter(id => {
+    const def = TRAITS[id];
+    const lv = a.traitLv[id] || 0;
+    return lv < (def.max || 1);
+  });
+}
+
+// Deal up to `n` distinct cards, weighted toward category variety so a hand isn't
+// three of the same flavor. Cards already owned read as "upgrades", new ones as "new".
+function dealHand(a, n = 3) {
+  const pool = eligibleTraits(a);
+  const picked = [], seenCat = {};
+  // Shuffle (Fisher–Yates)
+  for (let i = pool.length - 1; i > 0; i--) { const j = rni(0, i + 1); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  // First pass: prefer unseen categories for variety
+  for (const id of pool) {
+    if (picked.length >= n) break;
+    const c = TRAITS[id].cat;
+    if (seenCat[c]) continue;
+    picked.push(id); seenCat[c] = 1;
+  }
+  // Second pass: fill remaining slots with anything left
+  for (const id of pool) { if (picked.length >= n) break; if (!picked.includes(id)) picked.push(id); }
+  return picked;
+}
+
+function openAdapt(a) {
+  const hand = dealHand(a, 3);
+  if (!hand.length) return;                 // everything maxed — skip silently
+  adaptOpen = true; paused = true;          // freeze sim while choosing
+  const wrap = document.getElementById('adaptCards');
+  wrap.innerHTML = '';
+  for (const id of hand) {
+    const def = TRAITS[id], owned = (a.traitLv[id] || 0) > 0;
+    const card = document.createElement('div');
+    card.className = 'adaptCard';
+    const lvTxt = owned ? `▲ UPGRADE · LV ${(a.traitLv[id]||0)+1}/${def.max}` : 'NEW ADAPTATION';
+    card.innerHTML =
+      `<div class="cCat">${def.cat}</div>` +
+      `<div class="cName">${def.name}</div>` +
+      `<div class="cDesc">${def.desc}</div>` +
+      `<div class="cLv${owned?' up':''}">${lvTxt}</div>`;
+    card.onclick = () => chooseAdapt(a, id);
+    wrap.appendChild(card);
+  }
+  document.getElementById('adapt').classList.add('on');
+}
+
+function chooseAdapt(a, id) {
+  grantTrait(a, id);
+  adaptOpen = false; paused = false;
+  document.getElementById('adapt').classList.remove('on');
+  const def = TRAITS[id];
+  burst(P.x, P.y, '#9CF0FF', 22, 3); ring(P.x, P.y, '#9CF0FF', P.r * 1.6, 18);
+  fTxt(P.x, P.y - 30, def.name.toUpperCase(), '#9CF0FF');
+  try { sfxEvo(); } catch (e) {}
+}
 
 function useAbil() {
   // Trait-based activated abilities get first dibs on the tap (engine path).
@@ -1454,26 +1615,52 @@ function updateBreakPressure(dt) {
     if (breakPressure >= 1 && !microChoiceShown) {
       microChoiceShown = true;
       microMode = 'choice';
-      announce('THE SINGULARITY', '#9CF0FF',
-        'A single cell can grow no further. Tap to divide — become many.', 6000);
+      openSingularityFork();   // a real branch choice, not a single tap
     }
   } else {
     breakPressure = Math.max(0, breakPressure - dt / 2000);
   }
 }
 
+// THE SINGULARITY — the macro/micro fork. A two-card choice (reuses the adapt
+// overlay styling). DIVIDE → mitosis → colony (micro). ASCEND → stay a single
+// colossus and keep filter-feeding (macro path; full macro branch is a stub for now).
+function openSingularityFork() {
+  paused = true;
+  const wrap = document.getElementById('adaptCards');
+  wrap.innerHTML = '';
+  document.getElementById('adaptTitle').textContent = 'THE SINGULARITY';
+  document.getElementById('adaptSub').textContent = 'A single cell can grow no further. Choose your path.';
+  const forks = [
+    { name:'DIVIDE', cat:'MICRO · mitosis', desc:'Burst into a living colony of cells. Grow by numbers — feed cells until they divide, and shape the colony to filter the deep.', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; doMitosis(); } },
+    { name:'ASCEND', cat:'MACRO · colossus', desc:'Stay whole. Remain the colossus and keep drawing the ocean in. (The macro branch expands in a future update.)', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; microMode='single'; microChoiceShown=false; breakPressure=0; P.mass*=.85; announce('ASCENDANT','#5AC8FF','You remain singular. Filter on.',3000); } },
+  ];
+  for (const f of forks) {
+    const card = document.createElement('div');
+    card.className = 'adaptCard';
+    card.innerHTML = `<div class="cCat">${f.cat}</div><div class="cName">${f.name}</div><div class="cDesc">${f.desc}</div><div class="cLv">CHOOSE</div>`;
+    card.onclick = f.go;
+    wrap.appendChild(card);
+  }
+  document.getElementById('adapt').classList.add('on');
+}
+
 // Fire mitosis: dissolve the single body into a cloud of swarm cells that carry
 // the accumulated mass between them. Reuses the world's particle FX + audio.
 function doMitosis() {
-  const N = 60;
-  const massEach = P.mass / N;
+  // A FRESH colony — not a continuation of the giant's huge mass. Starting small
+  // (≈14 mass/cell) makes growth visible and meaningful: a few good bites noticeably
+  // grow a cell and push it toward dividing, instead of being lost in a 14k pool.
+  const N = 24;
+  const massEach = 14;
+  P.mass = N * massEach;
   cells = [];
   for (let i = 0; i < N; i++) {
-    const a = (i / N) * TAU + rng(-.2, .2), d = rng(P.r * .2, P.r * 1.1);
+    const a = (i / N) * TAU + rng(-.2, .2), d = rng(20, 70);
     cells.push({
       x: P.x + Math.cos(a) * d, y: P.y + Math.sin(a) * d,
       vx: Math.cos(a) * rng(2, 6), vy: Math.sin(a) * rng(2, 6),
-      r: 3.4, mass: massEach, ph: rng(0, TAU), bound: false,
+      r: cl(3.4 + Math.sqrt(massEach) * .5, 3.4, 26), mass: massEach, ph: rng(0, TAU), bound: false, fed: 0,
     });
   }
   microMode = 'swarm';
@@ -1495,13 +1682,18 @@ function doMitosis() {
 //   filament — a wide sweeping line broadside to travel: the filter NET
 //   radial   — a ring around the core: omnidirectional intake (manta/medusa)
 //   sphere   — packed disc: dense, tanky, short reach
+// Each shape is a real trade-off (the player couldn't tell them apart before):
+//   eatR  — eat reach per cell ·  feed — mass yield ·  spd — colony speed
+//   The descriptions name the actual advantage so the choice is legible.
 const COLONY = {
-  swarm:    { eatR: 1.0, feed: 0.5,  label: 'SWARM',    desc: 'Loose cloud — wide coverage.' },
-  filament: { eatR: 1.7, feed: 0.85, label: 'FILAMENT', desc: 'A drifting net — filter the deep.' },
-  radial:   { eatR: 1.4, feed: 0.7,  label: 'RADIAL',   desc: 'A bloom — intake from all sides.' },
-  sphere:   { eatR: 1.15,feed: 0.6,  label: 'SPHERE',   desc: 'Packed colony — dense and durable.' },
+  swarm:    { eatR: 1.0, feed: 0.6, spd: 1.35, label: 'SWARM',    desc: 'Fast & wide. Most coverage, least yield.' },
+  filament: { eatR: 2.0, feed: 1.0, spd: 0.85, label: 'FILAMENT', desc: 'The net. Huge reach + best yield, but slow.' },
+  radial:   { eatR: 1.5, feed: 0.8, spd: 1.0,  label: 'RADIAL',   desc: 'The bloom. Eats from all sides, balanced.' },
+  sphere:   { eatR: 1.2, feed: 0.7, spd: 1.1,  label: 'SPHERE',   desc: 'Packed & tough. Fast, durable, short reach.' },
 };
 const COLONY_ORDER = ['swarm', 'filament', 'radial', 'sphere'];
+const CELL_SPLIT = 9;    // mass a cell must eat before it divides into a new cell
+const CELL_MAX   = 160;  // hard cap on cell count (perf)
 
 // Local-space target slot for cell i of n in the active shape. Scale grows with
 // cell count so bigger colonies sweep wider. x axis = colony facing.
@@ -1579,24 +1771,50 @@ function updateSwarm(dt) {
       const sep = bound ? SEP * .6 : SEP;
       if (dd > 0 && dd < sep) { const w = (sep - dd) / sep; ax += (dx / dd) * w * .9; ay += (dy / dd) * w * .9; }
     }
+    // Auto-forage: each cell drifts toward the nearest edible plankton it senses.
+    // This is what makes the colony actively FEED (and grow) even with light steering
+    // — the player guides the cloud, the cells home in on the food within it.
+    let bf = null, bfd = 200;
+    for (const o of gNear(c.x, c.y, 200)) {
+      if (o.r > c.r * 1.5) continue;
+      const fd = dst(c, o); if (fd < bfd) { bfd = fd; bf = o; }
+    }
+    if (bf) { const fa = ang(c, bf); ax += Math.cos(fa) * .8; ay += Math.sin(fa) * .8; }
     c.vx = c.vx * (bound ? .82 : .9) + ax; c.vy = c.vy * (bound ? .82 : .9) + ay;
-    const v = Math.hypot(c.vx, c.vy), VMAX = 7;
+    const v = Math.hypot(c.vx, c.vy), VMAX = 7 * cfg.spd;
     if (v > VMAX) { c.vx = c.vx / v * VMAX; c.vy = c.vy / v * VMAX; }
     c.x += c.vx * (dt / 16); c.y += c.vy * (dt / 16);
 
-    // Graze plankton on contact — eat reach + yield scale with the bound shape.
-    const reach = c.r * cfg.eatR + 8;
+    // Graze on contact. FIX: cells were r3.4 and could only eat <7.5px prey, but
+    // COLOSSUS-era plankton is ~9–10px — so the colony never ate and mass froze.
+    // Cells now grow with their own mass (so reach scales) and can eat anything up
+    // to ~1.4× their radius. Eat reach + yield scale with the bound shape.
+    const reach = c.r * (cfg.eatR + 0.8) + 10;
     for (const o of gNear(c.x, c.y, reach)) {
       if (!orgs.includes(o)) continue;
-      if (o.r > c.r * 2.2) continue;            // cells only eat the small stuff
-      if (dst(c, o) < c.r * cfg.eatR + o.r) {
+      if (o.r > c.r * 1.5) continue;            // can eat prey up to ~1.5× cell radius
+      if (dst(c, o) < c.r * cfg.eatR + o.r + 4) {
         const T = ORGS[o.type];
-        c.mass += calcGain(T.mass * (o.massMul || 1), totalMass) * cfg.feed;
+        // Flat yield from prey mass (NOT diluted by colony mass) — the colony is a
+        // fresh food chain, so every bite stays meaningful as it grows.
+        const g = T.mass * (o.massMul || 1) * .5 * cfg.feed;
+        c.mass += g; c.fed += g; score += Math.floor(g * 4);
+        c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26);   // cell visibly grows as it eats
         if (parts.length < 250) burst(o.x, o.y, T.col, 2, .8);
         const oi = orgs.indexOf(o); if (oi >= 0) orgs.splice(oi, 1);
         const cnt = orgs.filter(q => q.type === o.type).length;
-        if (cnt < ORGS[o.type].mx) setTimeout(() => spawn(o.type, 1), rng(700, 2200));
+        if (cnt < ORGS[o.type].mx) setTimeout(() => spawn(o.type, 1), rng(500, 1600));
       }
+    }
+    // Growth objective: a well-fed cell DIVIDES into a new cell — the colony
+    // literally grows in numbers as you feed it (mitosis all the way down).
+    if (c.fed >= CELL_SPLIT && cells.length < CELL_MAX) {
+      c.fed = 0; c.mass *= .6;
+      c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26);
+      const na = rng(0, TAU);
+      cells.push({ x: c.x + Math.cos(na)*c.r*2, y: c.y + Math.sin(na)*c.r*2,
+        vx: Math.cos(na)*2, vy: Math.sin(na)*2, r: c.r, mass: c.mass, ph: rng(0,TAU), bound:false, fed:0 });
+      if (parts.length < 240) burst(c.x, c.y, '#9CF0FF', 4, 1.4);
     }
     idx++;
   }
@@ -1712,6 +1930,12 @@ function checkEvo() {
     if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);spawn('grazer',3);}
     if(P.stg>=5) spawn('behemoth',2);
 
+    // ── Adaptation choice: a beat after the evolution lands, offer a hand of
+    //    trait cards. Skipped in the micro/swarm branch (it has its own systems). ──
+    if (P.stg >= 1 && microMode === 'single') {
+      setTimeout(() => { if (!paused && !introActive && microMode === 'single') openAdapt(P); }, 1200);
+    }
+
     // ── Radar unlocks at Drifter (stg=1). Show a second tutorial panel 2.6s
     //    after the stage announcement fades, explaining what just appeared. ──
     if (P.stg === 1 && !radarTutorialShown) {
@@ -1792,8 +2016,9 @@ function collide(dt) {
       checkEvo(); continue;
     }
     if (isPred(o)&&d<o.r&&P.blink<=0&&!shOn) {
-      // Frenzy = glass cannon: take 1.5× damage during the window
-      const dmgMul = frenzy ? 1.5 : 1;
+      // Frenzy = glass cannon: take 1.5× damage during the window.
+      // Defense traits (membrane) reduce damage taken via traitStats.
+      const dmgMul = (frenzy ? 1.5 : 1) * traitStats(P).dmgTaken;
       P.mass=Math.max(5,P.mass-ORGS[o.type].mass*.08*dmgMul*(dt/16)); P.blink=250;
       shk(2.5,80); burst(P.x,P.y,'#ff2244',4,1.2); sfxHurt();
       if (P.stg>0&&P.mass<STAGES[P.stg].thr*.55) { P.stg=Math.max(0,P.stg-1); fTxt(P.x,P.y-28,'DE-EVOLVED','#ff4444'); shk(6,300); setStageAudio(P.stg); audioBend(-4,1.2); }
@@ -3338,7 +3563,13 @@ function updateHUD() {
   document.getElementById('abilTxt').textContent=s.abT+(streak>2?`  ${streak}×`:'');
   // Evo bar
   const bar=document.getElementById('evoBar');
-  if (nx) {
+  if (microMode === 'swarm') {
+    // Colony objective: grow the colony toward CELL_MAX. The bar tracks cell count,
+    // and the label tells the player the goal (more cells = bigger filter).
+    const pct = cl(cells.length / CELL_MAX * 100, 0, 100);
+    bar.style.width = pct + '%'; bar.style.background = `linear-gradient(90deg,#9CF0FF,#fff)`;
+    document.getElementById('evoNxtLbl').textContent = `${cells.length} / ${CELL_MAX} cells · feed to divide`;
+  } else if (nx) {
     const pct=cl((P.mass-s.thr)/(nx.thr-s.thr)*100,0,100);
     bar.style.width=pct+'%'; bar.style.background=`linear-gradient(90deg,${s.c.pri},${nx.c.pri})`;
     document.getElementById('evoNxtLbl').textContent=`${nx.name} · ${nx.thr}`;
@@ -3510,11 +3741,29 @@ function loop(ts) {
   // TITAN plankton bloom — top up the small drifting types so the zoomed-out
   // ocean stays dense. Population target scales with TITAN phase but is capped so
   // the per-frame AI cost stays bounded on phones.
-  if (P.stg === 5) {
+  if (P.stg === 5 && microMode === 'single') {
     const planktonCap = titanPhase ? 240 : 170;
     if (orgs.length < planktonCap && (gt & 3) === 0) {  // ~every 4th frame
       const pick = ['mote','polyp','bloom','mote','tendril'][rni(0,5)];
       spawn(pick, 1);
+    }
+  }
+
+  // COLONY plankton field — the swarm is small and the world is otherwise sparse
+  // at this zoom, so spawn dense, CLOSE plankton drifting just outside the cloud.
+  // This is the food that makes the colony grow (cells eat → divide). Without it
+  // the colony starves and mass freezes (the bug the player hit).
+  if (microMode === 'swarm') {
+    const cap = 260;
+    if (orgs.length < cap) {                              // every frame while below cap — keep it fed
+      const pick = ['mote','polyp','bloom','mote','tendril','mote'][rni(0,6)];
+      const a = Math.random()*TAU, d = rng(P.r + 40, P.r + 240);  // tight ring just outside the colony
+      const T = ORGS[pick], r = rng(T.minR, T.maxR);
+      orgs.push({ type:pick, x:P.x+Math.cos(a)*d, y:P.y+Math.sin(a)*d, r, br:r,
+        hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU, massMul:1,
+        stT:0, stunT:0, wAng:Math.random()*TAU, ph:rng(0,TAU), ambR:false, lAng:0, trail:[],
+        flT:0, hSh:rng(-10,10), finPh:rng(0,TAU), breathPh:rng(0,TAU), eyeAng:0, scatterT:0,
+        lobes: pick==='bloom' ? Array.from({length:5},()=>({a:rng(0,TAU),d:rng(.25,.4),r:rng(.45,.6),ph:rng(0,TAU)})) : null });
     }
   }
 
