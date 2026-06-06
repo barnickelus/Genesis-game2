@@ -104,6 +104,23 @@ Morphologies grown from the core. Each is a distinct playstyle; branches can be 
 
 ---
 
+## 6c. Morph use-cases + food patches 🟢 (playtest feedback)
+Shapes only differed by numbers, so no *situation* demanded one. Now there's a
+mobility spectrum and a reason to travel:
+- **Food PATCHES**: food clumps in ~5 drifting blooms with empty gaps between
+  them (700–1500px). Crossing the void is a real cost → travel form matters.
+  Patches deplete as eaten, regrow slowly, retire when spent; a green chevron
+  points to the richest nearby patch (the colony always has somewhere to go).
+- **Mobility spectrum** (COLONY_ORDER, mobile→stationary):
+  - DART — condensed teardrop, fastest (spd 2.0), low reach → cross gaps
+  - SWARM — fast & wide harvest
+  - RADIAL — balanced omnidirectional
+  - FILAMENT — huge reach + yield, slow → harvest a dense patch
+  - PLANT — nearly rooted (spd .28) but vast intake + photosynthesis
+    (passive mass/sec) → camp on a rich patch and soak
+- Verified: dart closes ~666px/200f vs ~40 for harvest forms vs ~0 for plant;
+  plant gains +592 mass/300f from photosynthesis alone (no food).
+
 ## 6b. Colony loop FIXED (playtest feedback) 🟢
 The first colony pass was a dead-end: cells (r3.4) couldn't eat COLOSSUS-era
 plankton (r9–10) so mass froze, shapes felt identical, and there was no goal.
