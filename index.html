@@ -355,6 +355,7 @@ function init() {
   anoms = []; anomCd = 5000;  // first anomaly appears ~5s after start
   titanPhase = 0; titanEchoT = 0; titanColossusShown = false; viewR = 2200;
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false;
+  patches = [];
 
   spawn('bloom',10); spawn('mote',45); spawn('polyp',22); spawn('tendril',8);
   spawn('hunter',4); spawn('lurker',2); spawn('levia',2); spawn('phantom',2); spawn('behemoth',1);
@@ -1677,28 +1678,41 @@ function doMitosis() {
 // ── Colony shapes (Step 3: shape = ability) ──────────────────────────────────
 // Each shape is a slot generator: given a cell index, count, and a unit scale,
 // it returns the cell's target offset (in colony-local space, +x = facing dir).
-// The morphology you bind into determines reach and feeding, per docs/MICRO_BRANCH.md:
-//   swarm    — no slots (loose flock); max coverage, fragile
-//   filament — a wide sweeping line broadside to travel: the filter NET
-//   radial   — a ring around the core: omnidirectional intake (manta/medusa)
-//   sphere   — packed disc: dense, tanky, short reach
-// Each shape is a real trade-off (the player couldn't tell them apart before):
-//   eatR  — eat reach per cell ·  feed — mass yield ·  spd — colony speed
-//   The descriptions name the actual advantage so the choice is legible.
+// Shapes span a MOBILITY SPECTRUM so different situations want different forms
+// (the player's ask: travel form vs harvest form vs plant form):
+//   dart     — condensed teardrop, fastest, low reach: the TRAVELER (cross gaps)
+//   swarm    — loose flock, fast & wide: spread harvest
+//   radial   — ring/bloom, balanced omnidirectional intake
+//   filament — broadside rake, huge reach + yield, slow: harvest a dense patch
+//   plant    — stationary, rooted: huge intake radius + passive photosynthesis,
+//              but barely moves — camp on a rich patch and soak
+// Fields: eatR reach · feed yield · spd colony speed · passive mass/sec/cell
 const COLONY = {
-  swarm:    { eatR: 1.0, feed: 0.6, spd: 1.35, label: 'SWARM',    desc: 'Fast & wide. Most coverage, least yield.' },
-  filament: { eatR: 2.0, feed: 1.0, spd: 0.85, label: 'FILAMENT', desc: 'The net. Huge reach + best yield, but slow.' },
-  radial:   { eatR: 1.5, feed: 0.8, spd: 1.0,  label: 'RADIAL',   desc: 'The bloom. Eats from all sides, balanced.' },
-  sphere:   { eatR: 1.2, feed: 0.7, spd: 1.1,  label: 'SPHERE',   desc: 'Packed & tough. Fast, durable, short reach.' },
+  dart:     { eatR: 0.8, feed: 0.5, spd: 2.0,  passive: 0,    label: 'DART',     desc: 'Aerodynamic. Fastest travel, low intake — cross the void.' },
+  swarm:    { eatR: 1.0, feed: 0.6, spd: 1.35, passive: 0,    label: 'SWARM',    desc: 'Fast & wide. Most coverage, least yield.' },
+  radial:   { eatR: 1.5, feed: 0.8, spd: 1.0,  passive: 0,    label: 'RADIAL',   desc: 'The bloom. Eats from all sides, balanced.' },
+  filament: { eatR: 2.0, feed: 1.0, spd: 0.7,  passive: 0,    label: 'FILAMENT', desc: 'The net. Huge reach + best yield, but slow.' },
+  plant:    { eatR: 2.4, feed: 1.1, spd: 0.28, passive: 0.06, label: 'PLANT',    desc: 'Rooted. Vast intake + photosynthesis, but nearly still.' },
 };
-const COLONY_ORDER = ['swarm', 'filament', 'radial', 'sphere'];
+const COLONY_ORDER = ['dart', 'swarm', 'radial', 'filament', 'plant'];  // mobile → stationary
 const CELL_SPLIT = 9;    // mass a cell must eat before it divides into a new cell
 const CELL_MAX   = 160;  // hard cap on cell count (perf)
+
+// ── Food PATCHES — clumped resources with gaps between them, so morph choice
+// matters: dart across the void, then swarm/filament/plant to harvest. Each patch
+// is a drifting nutrient bloom that depletes as you eat it and regrows slowly.
+let patches = [];
+const PATCH_MAX = 5;
 
 // Local-space target slot for cell i of n in the active shape. Scale grows with
 // cell count so bigger colonies sweep wider. x axis = colony facing.
 function colonySlot(i, n, scale) {
   switch (colonyShape) {
+    case 'dart': {
+      // Condensed teardrop pointing along facing (+x): a tight, aerodynamic body.
+      const a = i * 2.39996323, rr = scale * 0.5 * Math.sqrt((i + .5) / n);
+      return { x: Math.cos(a) * rr * 1.5 + scale * 0.3, y: Math.sin(a) * rr * 0.7 };
+    }
     case 'filament': {
       // Cells strung broadside (perpendicular to facing): a wide rake.
       const t = n > 1 ? i / (n - 1) - 0.5 : 0;          // -0.5..0.5
@@ -1710,9 +1724,9 @@ function colonySlot(i, n, scale) {
       const rr = scale * 1.7;
       return { x: Math.cos(a) * rr, y: Math.sin(a) * rr };
     }
-    case 'sphere': {
-      // Phyllotaxis packing → even disc.
-      const a = i * 2.39996323, rr = scale * 0.9 * Math.sqrt((i + .5) / n);
+    case 'plant': {
+      // Rooted rosette — cells fan out in a broad, dense disc (max intake area).
+      const a = i * 2.39996323, rr = scale * 1.5 * Math.sqrt((i + .5) / n);
       return { x: Math.cos(a) * rr, y: Math.sin(a) * rr };
     }
     default: return null;  // swarm: no slot
@@ -1806,9 +1820,9 @@ function updateSwarm(dt) {
         c.mass += g; c.fed += g; score += Math.floor(g * 4);
         c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26);   // cell visibly grows as it eats
         if (parts.length < 250) burst(o.x, o.y, T.col, 2, .8);
+        if (o._patch) o._patch.food = Math.max(0, o._patch.food - 1);  // deplete the patch
         const oi = orgs.indexOf(o); if (oi >= 0) orgs.splice(oi, 1);
-        const cnt = orgs.filter(q => q.type === o.type).length;
-        if (cnt < ORGS[o.type].mx) setTimeout(() => spawn(o.type, 1), rng(500, 1600));
+        // (no respawn here — colony food is replenished by updateColonyPatches via patches)
       }
     }
     // Growth objective: a well-fed cell DIVIDES into a new cell — the colony
@@ -1824,6 +1838,15 @@ function updateSwarm(dt) {
     idx++;
   }
   if (newborns.length) for (const nb of newborns) cells.push(nb);
+
+  // PLANT passive: rooted forms photosynthesize — slow, free mass per cell that
+  // makes camping a viable strategy (the stationary use-case). Recompute total.
+  if (cfg.passive > 0) {
+    const gain = cfg.passive * cells.length * (dt / 16);
+    let add = gain / cells.length;
+    for (const c of cells) { c.mass += add; c.fed += add * 0.5; }
+    totalMass += gain;
+  }
 
   // Mirror swarm into the player proxy so camera/HUD/world keep functioning.
   P.x = cxg; P.y = cyg; P.mass = totalMass; P.hd = colonyHd;
@@ -1844,12 +1867,87 @@ function cycleColony() {
   try { sfxEvo(); } catch (e) {}
 }
 
+// ── Food patches: clumped resource blooms with gaps between them ─────────────
+// Maintains PATCH_MAX drifting patches around the colony. Food (orgs) spawns
+// INSIDE patches, dense; the space between patches is empty, so crossing it is a
+// real cost — that's what makes a fast "dart" form vs a harvest form matter.
+function updateColonyPatches(dt) {
+  // Spawn new patches at a distance until we have enough — always a next target.
+  while (patches.length < PATCH_MAX) {
+    const a = Math.random()*TAU, d = rng(700, 1500);   // far enough to require travel
+    patches.push({ x: P.x + Math.cos(a)*d, y: P.y + Math.sin(a)*d,
+      r: rng(140, 240), food: rng(28, 46), max: 46,
+      vx: rng(-.2,.2), vy: rng(-.2,.2), ph: rng(0,TAU) });
+  }
+  for (let i = patches.length - 1; i >= 0; i--) {
+    const p = patches[i];
+    p.x += p.vx * (dt/16); p.y += p.vy * (dt/16); p.ph += dt*.001;
+    p.food = Math.min(p.max, p.food + dt*.0008);        // slow regrow
+    // Retire a patch that's been eaten down AND wandered far — frees a slot for a
+    // fresh destination elsewhere.
+    if (p.food < 4 && dst(P, p) > 900) { patches.splice(i, 1); continue; }
+    if (dst(P, p) > 2600) { patches.splice(i, 1); continue; }
+  }
+  // Populate patches with food up to a global cap. Each patch holds a share.
+  const cap = 240;
+  if (orgs.length < cap) {
+    for (let k = 0; k < 3 && orgs.length < cap; k++) {
+      // Pick a patch weighted toward the one nearest the colony (so the place you
+      // ARE stays fed while you harvest it).
+      const p = patches[rni(0, patches.length)];
+      if (!p || p.food < 3) continue;
+      const pick = ['mote','polyp','bloom','mote','tendril','mote'][rni(0,6)];
+      const a = Math.random()*TAU, d = Math.sqrt(Math.random()) * p.r;
+      const T = ORGS[pick], r = rng(T.minR, T.maxR);
+      orgs.push({ type:pick, x:p.x+Math.cos(a)*d, y:p.y+Math.sin(a)*d, r, br:r,
+        hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU, massMul:1, _patch:p,
+        stT:0, stunT:0, wAng:Math.random()*TAU, ph:rng(0,TAU), ambR:false, lAng:0, trail:[],
+        flT:0, hSh:rng(-10,10), finPh:rng(0,TAU), breathPh:rng(0,TAU), eyeAng:0, scatterT:0,
+        lobes: pick==='bloom' ? Array.from({length:5},()=>({a:rng(0,TAU),d:rng(.25,.4),r:rng(.45,.6),ph:rng(0,TAU)})) : null });
+    }
+  }
+}
+
 // Lightweight neighbor query for cells (they're not in the org spatial hash).
 // Small N (≤~80) so an O(n) scan per cell is fine and avoids a second grid.
 function gNearCells(c, radius) {
   const out = [];
   for (const o of cells) { if (Math.abs(o.x - c.x) < radius && Math.abs(o.y - c.y) < radius) out.push(o); }
   return out;
+}
+
+// Draw food patches as soft nutrient clouds, and a directional chevron toward
+// the nearest one with food (so the colony always has somewhere to go).
+function drawColonyPatches(ts) {
+  for (const p of patches) {
+    if (!onScr(p.x, p.y, p.r * 1.2)) continue;
+    const fill = cl(p.food / p.max, 0, 1);
+    const grd = cx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+    grd.addColorStop(0, `rgba(120,255,180,${.06 * fill + .02})`);
+    grd.addColorStop(1, 'rgba(120,255,180,0)');
+    cx.fillStyle = grd; cx.globalAlpha = .8 + .2 * Math.sin(p.ph);
+    cx.beginPath(); cx.arc(p.x, p.y, p.r, 0, TAU); cx.fill();
+    cx.globalAlpha = 1;
+  }
+  // Directional marker: chevron at the screen edge / near the colony pointing to
+  // the richest nearby patch the colony isn't already sitting in.
+  let best = null, bestScore = -1;
+  for (const p of patches) {
+    if (p.food < 6) continue;
+    const d = dst(P, p);
+    if (d < p.r * 0.8) continue;                 // already harvesting it
+    const sc = p.food / (d + 200);
+    if (sc > bestScore) { bestScore = sc; best = p; }
+  }
+  if (best) {
+    const a = ang(P, best), mr = P.r + 60;
+    const mx = P.x + Math.cos(a) * mr, my = P.y + Math.sin(a) * mr;
+    cx.save(); cx.translate(mx, my); cx.rotate(a);
+    cx.globalAlpha = .5 + .3 * Math.sin(ts * .006);
+    cx.strokeStyle = '#7CFFB4'; cx.lineWidth = 2; cx.lineCap = 'round';
+    cx.beginPath(); cx.moveTo(-6, -7); cx.lineTo(6, 0); cx.lineTo(-6, 7); cx.stroke();
+    cx.restore(); cx.globalAlpha = 1;
+  }
 }
 
 // Render the swarm: soft connective haze + tissue links (reads as one organism)
@@ -3812,23 +3910,11 @@ function loop(ts) {
     }
   }
 
-  // COLONY plankton field — the swarm is small and the world is otherwise sparse
-  // at this zoom, so spawn dense, CLOSE plankton drifting just outside the cloud.
-  // This is the food that makes the colony grow (cells eat → divide). Without it
-  // the colony starves and mass freezes (the bug the player hit).
-  if (microMode === 'swarm') {
-    const cap = 260;
-    if (orgs.length < cap) {                              // every frame while below cap — keep it fed
-      const pick = ['mote','polyp','bloom','mote','tendril','mote'][rni(0,6)];
-      const a = Math.random()*TAU, d = rng(P.r + 40, P.r + 240);  // tight ring just outside the colony
-      const T = ORGS[pick], r = rng(T.minR, T.maxR);
-      orgs.push({ type:pick, x:P.x+Math.cos(a)*d, y:P.y+Math.sin(a)*d, r, br:r,
-        hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU, massMul:1,
-        stT:0, stunT:0, wAng:Math.random()*TAU, ph:rng(0,TAU), ambR:false, lAng:0, trail:[],
-        flT:0, hSh:rng(-10,10), finPh:rng(0,TAU), breathPh:rng(0,TAU), eyeAng:0, scatterT:0,
-        lobes: pick==='bloom' ? Array.from({length:5},()=>({a:rng(0,TAU),d:rng(.25,.4),r:rng(.45,.6),ph:rng(0,TAU)})) : null });
-    }
-  }
+  // COLONY food PATCHES — food clumps in blooms with gaps between them, so the
+  // colony has somewhere to GO and morph choice matters: dart across the void,
+  // then swarm/filament/plant to harvest. Patches drift, deplete as eaten, and
+  // new ones spawn at a distance so there's always a next destination.
+  if (microMode === 'swarm') updateColonyPatches(dt);
 
   // ── Audio choreography: threat layer swells when a real predator is close ──
   {
@@ -3890,6 +3976,7 @@ function loop(ts) {
 
   // Micro branch: the swarm replaces the single-body render once mitosis fires.
   if (microMode === 'swarm') {
+    try { drawColonyPatches(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
     try { drawSwarm(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   } else {
     try { drawBreakPressure(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
