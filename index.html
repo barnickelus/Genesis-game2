@@ -78,6 +78,18 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
   -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
 #morphBtn:active{transform:translateX(-50%) scale(.94);background:rgba(156,240,255,.2)}
 #morphBtn.on{display:block}
+/* Bud-hive button — only in swarm mode; spends mass to spawn a satellite forager. */
+#budBtn{position:fixed;bottom:14px;left:calc(50% + 130px);transform:translateX(-50%);z-index:16;display:none;
+  font-family:'Cinzel',serif;font-size:11px;letter-spacing:3px;
+  padding:11px 18px;background:rgba(30,24,8,.62);
+  border:1px solid rgba(255,216,96,.30);border-left:3px solid #FFD860;border-radius:2px;
+  color:rgba(255,216,96,.85);text-shadow:0 0 8px rgba(255,216,96,.5);
+  cursor:pointer;pointer-events:auto;
+  transition:transform .08s,background .12s,opacity .2s;
+  -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+#budBtn:active{transform:translateX(-50%) scale(.94);background:rgba(255,216,96,.2)}
+#budBtn.on{display:block}
+#budBtn.disabled{opacity:.35}
 #pMenu{position:fixed;inset:0;z-index:30;background:rgba(0,5,14,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:11px;backdrop-filter:blur(18px)}
 #pMenu h2{font-family:'Cinzel',serif;font-size:18px;letter-spacing:10px;color:rgba(255,255,255,.35);margin-bottom:14px}
 #pMenu button{width:138px;padding:10px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:14px;color:rgba(255,255,255,.38);background:transparent;border:1px solid rgba(255,255,255,.07);cursor:pointer;letter-spacing:2px;transition:all .3s}
@@ -162,6 +174,7 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 <button id="pBtn">⏸</button>
 <button id="cheatBtn" title="+100 mass (dev)">+100</button>
 <button id="morphBtn" title="Cycle colony shape">◇ MORPH</button>
+<button id="budBtn" title="Bud a satellite hive">⬡ BUD HIVE</button>
 <div id="pMenu">
   <h2>PAUSED</h2>
   <button id="resumeB">Resume</button>
@@ -355,7 +368,7 @@ function init() {
   anoms = []; anomCd = 5000;  // first anomaly appears ~5s after start
   titanPhase = 0; titanEchoT = 0; titanColossusShown = false; viewR = 2200;
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false;
-  patches = [];
+  patches = []; hives = [];
 
   spawn('bloom',10); spawn('mote',45); spawn('polyp',22); spawn('tendril',8);
   spawn('hunter',4); spawn('lurker',2); spawn('levia',2); spawn('phantom',2); spawn('behemoth',1);
@@ -807,6 +820,10 @@ document.getElementById('cheatBtn').onclick = () => {
 document.getElementById('morphBtn').onclick = () => {
   if (paused || introActive) return;
   cycleColony();
+};
+document.getElementById('budBtn').onclick = () => {
+  if (paused || introActive) return;
+  if (!budHive()) { fTxt(P.x, P.y - 36, 'need ' + BUD_THRESHOLD + ' mass', 'rgba(255,216,96,.6)'); }
 };
 
 // Compatibility shim — older code paths may still call snd('id'); route to procedural
@@ -1704,6 +1721,15 @@ const CELL_MAX   = 160;  // hard cap on cell count (perf)
 let patches = [];
 const PATCH_MAX = 5;
 
+// ── HIVES — autonomous satellite colonies you bud off ("grow → break off → start
+// a new hive"). A budded hive drifts to the nearest rich patch, harvests it on its
+// own, and periodically sends a tribute of mass back to you. More hives = more
+// passive territory control & income, at the cost of the mass spent to spawn one.
+let hives = [];
+const HIVE_MAX = 6;
+const HIVE_COST = 90;       // mass to bud a hive (also its starting size)
+const BUD_THRESHOLD = 220;  // colony mass needed before you can bud
+
 // Local-space target slot for cell i of n in the active shape. Scale grows with
 // cell count so bigger colonies sweep wider. x axis = colony facing.
 function colonySlot(i, n, scale) {
@@ -1839,13 +1865,15 @@ function updateSwarm(dt) {
   }
   if (newborns.length) for (const nb of newborns) cells.push(nb);
 
-  // PLANT passive: rooted forms photosynthesize — slow, free mass per cell that
-  // makes camping a viable strategy (the stationary use-case). Recompute total.
+  // PLANT passive: rooted forms photosynthesize a slow trickle of mass. It must
+  // NOT feed the split counter (c.fed) — doing so made plants divide off their own
+  // photosynthesis, compounding exponentially (the runaway-growth bug). It only
+  // tops up existing cells' mass, and the rate is gentle + diminishing with size.
   if (cfg.passive > 0) {
-    const gain = cfg.passive * cells.length * (dt / 16);
-    let add = gain / cells.length;
-    for (const c of cells) { c.mass += add; c.fed += add * 0.5; }
-    totalMass += gain;
+    const scale = 1 / (1 + totalMass * 0.002);     // diminishing returns as colony grows
+    const add = cfg.passive * scale * (dt / 16);
+    for (const c of cells) { c.mass += add; c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26); }
+    totalMass += add * cells.length;
   }
 
   // Mirror swarm into the player proxy so camera/HUD/world keep functioning.
@@ -1905,6 +1933,107 @@ function updateColonyPatches(dt) {
         flT:0, hSh:rng(-10,10), finPh:rng(0,TAU), breathPh:rng(0,TAU), eyeAng:0, scatterT:0,
         lobes: pick==='bloom' ? Array.from({length:5},()=>({a:rng(0,TAU),d:rng(.25,.4),r:rng(.45,.6),ph:rng(0,TAU)})) : null });
     }
+  }
+}
+
+// Bud off a satellite hive. Costs HIVE_COST mass (drained from your cells), spawns
+// an autonomous forager at the colony edge. Returns true if it budded.
+function budHive() {
+  if (microMode !== 'swarm') return false;
+  const total = cells.reduce((a, c) => a + c.mass, 0);
+  if (total < BUD_THRESHOLD || hives.length >= HIVE_MAX) return false;
+  // Drain the cost proportionally across cells.
+  const frac = HIVE_COST / total;
+  for (const c of cells) { c.mass *= (1 - frac); c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26); }
+  const a = colonyHd + PI + rng(-.6, .6);   // bud out behind the colony's heading
+  hives.push({
+    x: P.x + Math.cos(a) * (P.r + 30), y: P.y + Math.sin(a) * (P.r + 30),
+    vx: 0, vy: 0, mass: HIVE_COST, r: 14, ph: rng(0, TAU),
+    target: null, tribute: 0,
+  });
+  burst(P.x, P.y, '#FFD860', 22, 3.2); ring(P.x, P.y, '#FFD860', P.r * 1.3, 18);
+  announce('HIVE BUDDED', '#FFD860', 'A satellite forages on its own and sends mass home.', 2600);
+  try { sfxEvo(); } catch (e) {}
+  return true;
+}
+
+// Autonomous satellite hives: drift toward the richest patch, harvest it, grow,
+// and periodically send a tribute of mass back to the player colony.
+function updateHives(dt) {
+  for (let i = hives.length - 1; i >= 0; i--) {
+    const hv = hives[i];
+    hv.ph += dt * .003;
+    // Pick / refresh a target patch (richest within reason).
+    if (!hv.target || patches.indexOf(hv.target) < 0 || hv.target.food < 5) {
+      let best = null, bs = -1;
+      for (const p of patches) { if (p.food < 6) continue; const sc = p.food / (dst(hv, p) + 200); if (sc > bs) { bs = sc; best = p; } }
+      hv.target = best;
+    }
+    // Move toward target patch; once inside, home in on the nearest actual food
+    // org in the patch (food is scattered across the patch radius, not at center).
+    if (hv.target) {
+      const spd = 2.4;
+      const inPatch = dst(hv, hv.target) < hv.target.r;
+      let steerX, steerY;
+      if (inPatch) {
+        // Seek nearest patch-food org within the patch.
+        let bf = null, bd = 1e9;
+        for (const o of gNear(hv.x, hv.y, hv.target.r)) {
+          if (!o._patch) continue; const fd = dst(hv, o); if (fd < bd) { bd = fd; bf = o; }
+        }
+        const tgt = bf || hv.target;
+        const a = ang(hv, tgt);
+        steerX = Math.cos(a) * spd * 0.7; steerY = Math.sin(a) * spd * 0.7;
+      } else {
+        const a = ang(hv, hv.target);
+        steerX = Math.cos(a) * spd; steerY = Math.sin(a) * spd;
+      }
+      hv.vx = lp(hv.vx, steerX, .06); hv.vy = lp(hv.vy, steerY, .06);
+      // Harvest any food within reach (generous radius so it actually eats).
+      for (const o of gNear(hv.x, hv.y, hv.r + 24)) {
+        if (!orgs.includes(o) || !o._patch) continue;
+        if (dst(hv, o) < hv.r + o.r + 10) {
+          const T = ORGS[o.type]; hv.mass += T.mass * (o.massMul || 1) * .5;
+          o._patch.food = Math.max(0, o._patch.food - 1);
+          const oi = orgs.indexOf(o); if (oi >= 0) orgs.splice(oi, 1);
+        }
+      }
+    } else { hv.vx *= .96; hv.vy *= .96; }
+    hv.x += hv.vx * (dt / 16); hv.y += hv.vy * (dt / 16);
+    hv.r = cl(8 + Math.sqrt(hv.mass) * .7, 8, 40);
+
+    // Tribute: once fat enough, send a chunk of mass back to the colony.
+    hv.tribute += dt;
+    if (hv.mass > HIVE_COST * 1.6 && hv.tribute > 2500) {
+      hv.tribute = 0;
+      const send = hv.mass * .35; hv.mass -= send;
+      // Distribute tribute across the player's cells.
+      if (cells.length) { const per = send / cells.length; for (const c of cells) c.mass += per; }
+      // A little visual "courier" pulse from hive toward colony.
+      fTxt(hv.x, hv.y - hv.r - 6, '+' + Math.floor(send), '#FFD860');
+      if (parts.length < 240) for (let k = 0; k < 4; k++) parts.push({ x: hv.x, y: hv.y, vx: (P.x - hv.x) * .01, vy: (P.y - hv.y) * .01, r: 2, life: 700, ml: 700, c: '#FFD860', t: 'c' });
+    }
+
+    // Cull a starved or far-flung hive.
+    if (hv.mass < 20 || dst(P, hv) > 3000) hives.splice(i, 1);
+  }
+}
+
+// Draw satellite hives — small golden colonies with a faint tether to home.
+function drawHives(ts) {
+  for (const hv of hives) {
+    if (!onScr(hv.x, hv.y, hv.r * 2)) continue;
+    // Tether line back to the colony (territory link)
+    cx.strokeStyle = 'rgba(255,216,96,.10)'; cx.lineWidth = .6;
+    cx.beginPath(); cx.moveTo(hv.x, hv.y); cx.lineTo(P.x, P.y); cx.stroke();
+    bioGlow(hv.x, hv.y, hv.r * 2.4, 'rgba(255,216,96,', .4);
+    cx.fillStyle = '#FFD860'; cx.shadowBlur = 8 * zm; cx.shadowColor = '#FFD860';
+    cx.globalAlpha = .85;
+    cx.beginPath(); cx.arc(hv.x, hv.y, hv.r * (1 + .06 * Math.sin(hv.ph)), 0, TAU); cx.fill();
+    // little orbiting forager specks
+    cx.shadowBlur = 0; cx.fillStyle = '#fff'; cx.globalAlpha = .7;
+    for (let k = 0; k < 4; k++) { const a = hv.ph * 1.5 + k * PI / 2; cx.beginPath(); cx.arc(hv.x + Math.cos(a) * hv.r * 1.4, hv.y + Math.sin(a) * hv.r * 1.4, 1.6, 0, TAU); cx.fill(); }
+    cx.globalAlpha = 1; cx.shadowBlur = 0;
   }
 }
 
@@ -3702,6 +3831,14 @@ function updateHUD() {
     : (P.stg===5) ? (titanPhase ? 'TITAN · COLOSSUS' : 'TITAN · AWAKENING') : s.name;
   // Morph control is only meaningful as a swarm.
   document.getElementById('morphBtn').classList.toggle('on', microMode === 'swarm');
+  // Bud-hive button: visible as a swarm; dimmed until you can afford it.
+  const budB = document.getElementById('budBtn');
+  budB.classList.toggle('on', microMode === 'swarm');
+  if (microMode === 'swarm') {
+    const total = cells.reduce((a,c)=>a+c.mass,0);
+    budB.classList.toggle('disabled', total < BUD_THRESHOLD || hives.length >= HIVE_MAX);
+    budB.textContent = hives.length ? `⬡ BUD HIVE (${hives.length})` : '⬡ BUD HIVE';
+  }
   document.getElementById('stgName').style.color=s.c.pri;
   document.getElementById('stgName').style.textShadow=`0 0 14px ${s.c.pri}`;
   document.getElementById('massV').textContent=Math.floor(P.mass);
@@ -3914,7 +4051,7 @@ function loop(ts) {
   // colony has somewhere to GO and morph choice matters: dart across the void,
   // then swarm/filament/plant to harvest. Patches drift, deplete as eaten, and
   // new ones spawn at a distance so there's always a next destination.
-  if (microMode === 'swarm') updateColonyPatches(dt);
+  if (microMode === 'swarm') { updateColonyPatches(dt); updateHives(dt); }
 
   // ── Audio choreography: threat layer swells when a real predator is close ──
   {
@@ -3977,6 +4114,7 @@ function loop(ts) {
   // Micro branch: the swarm replaces the single-body render once mitosis fires.
   if (microMode === 'swarm') {
     try { drawColonyPatches(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+    try { drawHives(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
     try { drawSwarm(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   } else {
     try { drawBreakPressure(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
