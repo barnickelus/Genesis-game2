@@ -66,7 +66,10 @@ lineage rather than the whole identity.
    swarm density). Cheapest big win; fixes the "unthought-out" feel.
 2. ⚪ **PLANT → fork** — promote plant to a sessile multi-node coral/grass builder
    (plant a node, it persists & photosynthesizes, chain nodes into a reef).
-3. ⚪ **HIVE** — budding satellite swarms.
+3. 🟢 **HIVE** — budding satellite swarms. BUD HIVE button spends mass
+   (HIVE_COST 90, needs ≥220 colony mass) to spawn an autonomous satellite that
+   drifts to the richest patch, forages it, and sends mass tribute home (~35% when
+   fat). Up to 6 hives, tethered visually. Verified: +51 tribute/13s hands-off.
 4. ⚪ **Lone-creature forks** — spider first (webs are the most novel verb), via traits.
 5. ⚪ **FUNGUS** — mycelial network + decomposition.
 
