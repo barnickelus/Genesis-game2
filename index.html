@@ -345,6 +345,7 @@ let microMode = 'single';
 let cells = [];                 // swarm cells once mitosis fires
 let colonyShape = 'swarm';      // 'swarm' (loose) | 'filament' | 'radial' | 'sphere'
 let colonyHd = 0;               // colony facing (smoothed from movement) for shaped slots
+let plantRooted = false;        // PLANT form: true when rooted on a patch (photosynthesizing)
 let breakPressure = 0;          // 0..1 — builds while pinned at the COLOSSUS ceiling
 let microChoiceShown = false;
 let frenzyTutorialShown = false;  // persists across restarts intentionally
@@ -809,7 +810,14 @@ document.getElementById('muteB').onclick   = () => setMute(!muted);
 // Dev cheat — repeatable +100 mass to skip ahead and test later stages
 document.getElementById('cheatBtn').onclick = () => {
   if (paused || introActive) return;
-  P.mass += 100;
+  // In colony mode P.mass is recomputed from cells each frame, so adding to it
+  // does nothing — distribute the bonus across the cells instead.
+  if (microMode === 'swarm' && cells.length) {
+    const per = 100 / cells.length;
+    for (const c of cells) { c.mass += per; c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26); }
+  } else {
+    P.mass += 100;
+  }
   score += 50;
   burst(P.x, P.y, '#FFD700', 12, 2.2);
   ring(P.x, P.y, '#FFD700', P.r * 2.2, 14);
@@ -1866,16 +1874,25 @@ function updateSwarm(dt) {
   }
   if (newborns.length) for (const nb of newborns) cells.push(nb);
 
-  // PLANT passive: rooted forms photosynthesize a slow trickle of mass. It must
-  // NOT feed the split counter (c.fed) — doing so made plants divide off their own
-  // photosynthesis, compounding exponentially (the runaway-growth bug). It only
-  // tops up existing cells' mass, and the rate is gentle + diminishing with size.
+  // PLANT passive: photosynthesis ONLY happens when ROOTED on a nutrient patch —
+  // i.e. the colony is nearly stationary AND sitting in a food patch. This gives
+  // the plant form a clear purpose ("find a rich patch, root down, soak the
+  // nutrients") instead of generating mass from nothing. It never feeds the split
+  // counter (that caused the old exponential runaway).
+  plantRooted = false;
   if (cfg.passive > 0) {
-    const scale = 1 / (1 + totalMass * 0.002);     // diminishing returns as colony grows
-    const add = cfg.passive * scale * (dt / 16);
-    for (const c of cells) { c.mass += add; c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26); }
-    totalMass += add * cells.length;
+    const moving = Math.hypot(P.vx || 0, P.vy || 0) + Math.abs(P.x - (P._lx||P.x)) + Math.abs(P.y - (P._ly||P.y));
+    const onPatch = patches.some(p => p.food > 5 && dst(P, p) < p.r);
+    const still = (Math.hypot(cxg - (P._lx||cxg), cyg - (P._ly||cyg))) < 1.2;  // centroid barely moved
+    if (onPatch && still) {
+      plantRooted = true;
+      const scale = 1 / (1 + totalMass * 0.002);   // diminishing returns as colony grows
+      const add = cfg.passive * scale * (dt / 16);
+      for (const c of cells) { c.mass += add; c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26); }
+      totalMass += add * cells.length;
+    }
   }
+  P._lx = cxg; P._ly = cyg;   // remember centroid for next-frame stillness check
 
   // Mirror swarm into the player proxy so camera/HUD/world keep functioning.
   P.x = cxg; P.y = cyg; P.mass = totalMass; P.hd = colonyHd;
@@ -1950,7 +1967,7 @@ function budHive() {
   hives.push({
     x: P.x + Math.cos(a) * (P.r + 30), y: P.y + Math.sin(a) * (P.r + 30),
     vx: 0, vy: 0, mass: HIVE_COST, r: 14, ph: rng(0, TAU),
-    target: null, tribute: 0,
+    target: null, tribute: 0, workers: 0, outT: 0,
   });
   burst(P.x, P.y, '#FFD860', 22, 3.2); ring(P.x, P.y, '#FFD860', P.r * 1.3, 18);
   announce('HIVE BUDDED', '#FFD860', 'It forages patches alone; gold couriers carry mass home down the supply line.', 3200);
@@ -2003,30 +2020,50 @@ function updateHives(dt) {
     hv.x += hv.vx * (dt / 16); hv.y += hv.vy * (dt / 16);
     hv.r = cl(8 + Math.sqrt(hv.mass) * .7, 8, 40);
 
-    // Tribute: once fat enough, dispatch a COURIER orb that visibly flies home
-    // along the tether and delivers its mass on arrival (clearer than an instant
-    // grant). The tether IS the supply line — couriers travel it.
+    // Independent growth: staffed hives also grow on their own (workers tending it),
+    // scaled by how many workers the colony has sent (hv.workers). This is the
+    // "growth can happen in and from the hive independently" idea.
+    hv.workers = hv.workers || 0;
+    hv.mass += (0.02 + hv.workers * 0.015) * (dt / 16);
+
+    // ── Two-way living supply chain ──────────────────────────────────────────
+    // OUTBOUND: the colony periodically sends a worker individual to the hive
+    // (costs a little colony mass, staffs the hive → faster growth). A steady
+    // trickle so it reads as a living stream from colony → hive.
+    hv.outT = (hv.outT || 0) + dt;
+    const colonyMass = cells.reduce((a, c) => a + c.mass, 0);
+    if (hv.outT > 1100 && colonyMass > 120 && hv.workers < 12) {
+      hv.outT = 0;
+      const cost = 6; if (cells.length) { const per = cost / cells.length; for (const c of cells) c.mass = Math.max(1, c.mass - per); }
+      (hv.outbound || (hv.outbound = [])).push({ x: P.x, y: P.y, t: 0 });
+    }
+    if (hv.outbound) for (let k = hv.outbound.length - 1; k >= 0; k--) {
+      const w = hv.outbound[k];
+      w.x = lp(w.x, hv.x, .10); w.y = lp(w.y, hv.y, .10); w.t += dt / 1200;
+      if (w.t >= 1 || dst(w, hv) < hv.r + 6) { hv.workers++; hv.mass += 4; hv.outbound.splice(k, 1); }
+    }
+
+    // INBOUND: a fat hive sends a steady stream of foragers carrying mass home.
+    // More workers → more frequent couriers → a visibly heavier stream toward the colony.
     hv.tribute += dt;
-    if (hv.mass > HIVE_COST * 1.6 && hv.tribute > 2500) {
+    const interval = Math.max(700, 2200 - hv.workers * 130);
+    if (hv.mass > HIVE_COST * 1.3 && hv.tribute > interval) {
       hv.tribute = 0;
-      const send = hv.mass * .35; hv.mass -= send;
+      const send = hv.mass * .18; hv.mass -= send;
       (hv.couriers || (hv.couriers = [])).push({ x: hv.x, y: hv.y, t: 0, amt: send });
     }
-    // Advance couriers toward home; deliver on arrival.
     if (hv.couriers) for (let k = hv.couriers.length - 1; k >= 0; k--) {
       const cr = hv.couriers[k];
       cr.t = Math.min(1, cr.t + dt / 900);
       cr.x = lp(cr.x, P.x, .12); cr.y = lp(cr.y, P.y, .12);
       if (cr.t >= 1 || dst(cr, P) < P.r + 14) {
         if (cells.length) { const per = cr.amt / cells.length; for (const c of cells) c.mass += per; }
-        fTxt(P.x, P.y - P.r - 10, '+' + Math.floor(cr.amt) + ' tribute', '#FFD860');
-        ring(P.x, P.y, '#FFD860', P.r * 1.2, 14);
         hv.couriers.splice(k, 1);
       }
     }
 
     // Cull a starved or far-flung hive.
-    if (hv.mass < 20 || dst(P, hv) > 3000) hives.splice(i, 1);
+    if (hv.mass < 20 || dst(P, hv) > 3200) hives.splice(i, 1);
   }
 }
 
@@ -2062,6 +2099,24 @@ function drawHives(ts) {
       cx.fillStyle = '#FFD860'; cx.globalAlpha = .5;
       cx.beginPath(); cx.arc(cr.x, cr.y, 7, 0, TAU); cx.fill();
       cx.shadowBlur = 0; cx.globalAlpha = 1;
+    }
+
+    // OUTBOUND worker individuals (colony → hive): small cyan motes streaming out
+    // to staff the hive. Two-way living supply chain.
+    if (hv.outbound) for (const w of hv.outbound) {
+      cx.fillStyle = '#9CF0FF'; cx.shadowBlur = 5 * zm; cx.shadowColor = '#9CF0FF';
+      cx.globalAlpha = .9; cx.beginPath(); cx.arc(w.x, w.y, 2.4, 0, TAU); cx.fill();
+      cx.shadowBlur = 0; cx.globalAlpha = 1;
+    }
+
+    // Worker-count pip ring around the hive (shows it's staffed & growing).
+    if (onScr(hv.x, hv.y, hv.r * 2) && hv.workers) {
+      cx.fillStyle = '#9CF0FF'; cx.globalAlpha = .8;
+      for (let k = 0; k < hv.workers; k++) {
+        const a = -PI/2 + (k / 12) * TAU;
+        cx.beginPath(); cx.arc(hv.x + Math.cos(a) * (hv.r + 5), hv.y + Math.sin(a) * (hv.r + 5), 1.3, 0, TAU); cx.fill();
+      }
+      cx.globalAlpha = 1;
     }
   }
 }
@@ -3974,7 +4029,10 @@ function updateHUD() {
     // and the label tells the player the goal (more cells = bigger filter).
     const pct = cl(cells.length / CELL_MAX * 100, 0, 100);
     bar.style.width = pct + '%'; bar.style.background = `linear-gradient(90deg,#9CF0FF,#fff)`;
-    document.getElementById('evoNxtLbl').textContent = `${cells.length} / ${CELL_MAX} cells · feed to divide`;
+    let lbl = `${cells.length} / ${CELL_MAX} cells · feed to divide`;
+    if (colonyShape === 'plant') lbl = plantRooted ? '✿ ROOTED · photosynthesizing' : 'PLANT · rest on a patch to root';
+    if (hives.length) lbl += ` · ${hives.length} hive${hives.length>1?'s':''}`;
+    document.getElementById('evoNxtLbl').textContent = lbl;
   } else if (nx) {
     const pct=cl((P.mass-s.thr)/(nx.thr-s.thr)*100,0,100);
     bar.style.width=pct+'%'; bar.style.background=`linear-gradient(90deg,${s.c.pri},${nx.c.pri})`;
@@ -4062,6 +4120,19 @@ function drawMinimap() {
     mmCtx.globalAlpha = 1;
   }
   mmCtx.fillStyle=stg().c.pri; mmCtx.beginPath(); mmCtx.arc(40,40,2,0,TAU); mmCtx.fill();
+
+  // Hives — gold markers with a tether line to the colony, so you can always find
+  // your satellites on the minimap (the player couldn't locate them before).
+  if (hives && hives.length) {
+    for (const hv of hives) {
+      const hx = (hv.x-P.x)*sc+40, hy = (hv.y-P.y)*sc+40;
+      mmCtx.strokeStyle='rgba(255,216,96,.3)'; mmCtx.lineWidth=.4;
+      mmCtx.beginPath(); mmCtx.moveTo(40,40); mmCtx.lineTo(cl(hx,1,79),cl(hy,1,79)); mmCtx.stroke();
+      mmCtx.fillStyle='#FFD860'; mmCtx.shadowBlur=4; mmCtx.shadowColor='#FFD860';
+      mmCtx.beginPath(); mmCtx.arc(cl(hx,1,79),cl(hy,1,79),1.8,0,TAU); mmCtx.fill();
+      mmCtx.shadowBlur=0;
+    }
+  }
 
   // Anomalies — diamond markers, pulsing white
   if (anoms && anoms.length) {

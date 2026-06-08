@@ -77,3 +77,25 @@ lineage rather than the whole identity.
 - Are Tier-1 (lone) forks chosen *instead of* ever going colony, or a phase before it?
 - Is the colony lineage a one-time commit at mitosis, or can you switch?
 - How do hive satellites controls feel on touch (auto-forage vs directed)?
+
+---
+
+## Playtest round 3 — fixes + new ideas (queued)
+
+Fixed this round:
+- 🟢 +100 cheat button "deactivated" in colony — it was adding to P.mass which the
+  swarm overwrites each frame; now distributes across cells.
+- 🟢 PLANT purpose — photosynthesis now ONLY when ROOTED (idle on a nutrient
+  patch). HUD shows "✿ ROOTED · photosynthesizing" vs "rest on a patch to root".
+- 🟢 HIVE purpose + findability — two-way living supply chain: cyan WORKER motes
+  stream colony→hive (staff it → independent growth), gold COURIERS stream
+  hive→colony (heavier stream the more workers). Hives now show on the minimap
+  with a tether. Net: a hive is a mass amplifier you invest workers into.
+
+New ideas to build (player, round 3):
+- ⚪ **Illusionary prey structures**: certain prey groups arrange into shapes/
+   patterns (the rug-like "plant" cluster the player saw) — flocking presets that
+   form recognizable structures, an emergent-beauty + bait mechanic.
+- ⚪ **Environment structures (rocks/reefs)**: static terrain blobs. Creatures hide
+   in them; some prey are drawn to them; a hive can be PLANTED onto one (anchor);
+   enables a CAMOUFLAGE colony formation (hide in/near rock, ambush).
