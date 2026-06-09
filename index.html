@@ -346,6 +346,7 @@ let cells = [];                 // swarm cells once mitosis fires
 let colonyShape = 'swarm';      // 'swarm' (loose) | 'filament' | 'radial' | 'sphere'
 let colonyHd = 0;               // colony facing (smoothed from movement) for shaped slots
 let plantRooted = false;        // PLANT form: true when rooted on a patch (photosynthesizing)
+let plantRootT = 0;             // ms continuously rooted — ramps growth/complexity (bounded)
 let breakPressure = 0;          // 0..1 — builds while pinned at the COLOSSUS ceiling
 let microChoiceShown = false;
 let frenzyTutorialShown = false;  // persists across restarts intentionally
@@ -369,7 +370,7 @@ function init() {
   beacons = [{x:0,y:-1400},{x:0,y:1400},{x:1400,y:0},{x:-1400,y:0}].map(p=>({...p,r:14}));
   anoms = []; anomCd = 5000;  // first anomaly appears ~5s after start
   titanPhase = 0; titanEchoT = 0; titanColossusShown = false; viewR = 2200;
-  microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false;
+  microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false; plantRootT = 0;
   patches = []; hives = [];
 
   spawn('bloom',10); spawn('mote',45); spawn('polyp',22); spawn('tendril',8);
@@ -1723,6 +1724,8 @@ const COLONY = {
 const COLONY_ORDER = ['dart', 'swarm', 'radial', 'filament', 'plant'];  // mobile → stationary
 const CELL_SPLIT = 9;    // mass a cell must eat before it divides into a new cell
 const CELL_MAX   = 160;  // hard cap on cell count (perf)
+const PLANT_RAMP_MS  = 12000;  // time rooted to reach max photosynthesis ramp
+const PLANT_RAMP_MAX = 2.5;    // ramp cap — bounded so PLANT can't trivialize other forms
 
 // ── Food PATCHES — clumped resources with gaps between them, so morph choice
 // matters: dart across the void, then swarm/filament/plant to harvest. Each patch
@@ -1881,17 +1884,30 @@ function updateSwarm(dt) {
   // counter (that caused the old exponential runaway).
   plantRooted = false;
   if (cfg.passive > 0) {
-    const moving = Math.hypot(P.vx || 0, P.vy || 0) + Math.abs(P.x - (P._lx||P.x)) + Math.abs(P.y - (P._ly||P.y));
     const onPatch = patches.some(p => p.food > 5 && dst(P, p) < p.r);
-    const still = (Math.hypot(cxg - (P._lx||cxg), cyg - (P._ly||cyg))) < 1.2;  // centroid barely moved
+    // Smoothed stillness: track recent centroid drift so cell jitter doesn't
+    // flicker the rooted state (which kept resetting the ramp). Rooted = the colony
+    // hasn't been actively steered far recently.
+    const drift = Math.hypot(cxg - (P._lx||cxg), cyg - (P._ly||cyg));
+    P._drift = (P._drift || 0) * 0.9 + drift * 0.1;
+    const still = P._drift < 3.0;
     if (onPatch && still) {
       plantRooted = true;
-      const scale = 1 / (1 + totalMass * 0.002);   // diminishing returns as colony grows
-      const add = cfg.passive * scale * (dt / 16);
+      // RAMP: the longer you stay rooted, the more the plant "reaches a form best
+      // for this environment" — rate eases from 1× up to a 2.5× cap over ~12s.
+      // Bounded two ways so it can't break the game / make other forms useless:
+      //   (a) the ramp itself plateaus at PLANT_RAMP_MAX,
+      //   (b) mass-based diminishing returns still throttle a large colony.
+      plantRootT = Math.min(PLANT_RAMP_MS, plantRootT + dt);
+      const ramp = 1 + (PLANT_RAMP_MAX - 1) * (plantRootT / PLANT_RAMP_MS);
+      const scale = 1 / (1 + totalMass * 0.0025);  // heavier damping than before
+      const add = cfg.passive * ramp * scale * (dt / 16);
       for (const c of cells) { c.mass += add; c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26); }
       totalMass += add * cells.length;
+    } else {
+      plantRootT = Math.max(0, plantRootT - dt * 2);  // uprooting decays the ramp fast
     }
-  }
+  } else { plantRootT = 0; }
   P._lx = cxg; P._ly = cyg;   // remember centroid for next-frame stillness check
 
   // Mirror swarm into the player proxy so camera/HUD/world keep functioning.
@@ -2027,39 +2043,37 @@ function updateHives(dt) {
     hv.mass += (0.02 + hv.workers * 0.015) * (dt / 16);
 
     // ── Two-way living supply chain ──────────────────────────────────────────
-    // OUTBOUND: the colony periodically sends a worker individual to the hive
-    // (costs a little colony mass, staffs the hive → faster growth). A steady
-    // trickle so it reads as a living stream from colony → hive.
-    hv.outT = (hv.outT || 0) + dt;
+    // The mass economy is a smooth CONTINUOUS flow (no projectile-like lumps); the
+    // visible "individuals" are a separate cosmetic mini-highway of tiny motes
+    // flowing along the tether — subtle, same hue, only a faint leaving/arriving
+    // tint difference. (Player note: it looked like the hive was shooting the colony.)
     const colonyMass = cells.reduce((a, c) => a + c.mass, 0);
-    if (hv.outT > 1100 && colonyMass > 120 && hv.workers < 12) {
-      hv.outT = 0;
-      const cost = 6; if (cells.length) { const per = cost / cells.length; for (const c of cells) c.mass = Math.max(1, c.mass - per); }
-      (hv.outbound || (hv.outbound = [])).push({ x: P.x, y: P.y, t: 0 });
-    }
-    if (hv.outbound) for (let k = hv.outbound.length - 1; k >= 0; k--) {
-      const w = hv.outbound[k];
-      w.x = lp(w.x, hv.x, .10); w.y = lp(w.y, hv.y, .10); w.t += dt / 1200;
-      if (w.t >= 1 || dst(w, hv) < hv.r + 6) { hv.workers++; hv.mass += 4; hv.outbound.splice(k, 1); }
+
+    // OUTBOUND staffing: colony slowly invests workers into the hive (capped).
+    hv.outT = (hv.outT || 0) + dt;
+    if (hv.outT > 1400 && colonyMass > 120 && hv.workers < 12) {
+      hv.outT = 0; hv.workers++;
+      const cost = 5; if (cells.length) { const per = cost / cells.length; for (const c of cells) c.mass = Math.max(1, c.mass - per); }
     }
 
-    // INBOUND: a fat hive sends a steady stream of foragers carrying mass home.
-    // More workers → more frequent couriers → a visibly heavier stream toward the colony.
-    hv.tribute += dt;
-    const interval = Math.max(700, 2200 - hv.workers * 130);
-    if (hv.mass > HIVE_COST * 1.3 && hv.tribute > interval) {
-      hv.tribute = 0;
-      const send = hv.mass * .18; hv.mass -= send;
-      (hv.couriers || (hv.couriers = [])).push({ x: hv.x, y: hv.y, t: 0, amt: send });
+    // INBOUND yield: a productive hive returns mass as a smooth per-second trickle,
+    // scaled by workers. No lump couriers — continuous, so it never reads as gunfire.
+    if (hv.mass > HIVE_COST * 1.2 && colonyMass > 0) {
+      const rate = (0.04 + hv.workers * 0.05) * (dt / 16);   // mass/frame returned home
+      const give = Math.min(rate, hv.mass - HIVE_COST);
+      if (give > 0) { hv.mass -= give; const per = give / cells.length; for (const c of cells) c.mass += per; }
     }
-    if (hv.couriers) for (let k = hv.couriers.length - 1; k >= 0; k--) {
-      const cr = hv.couriers[k];
-      cr.t = Math.min(1, cr.t + dt / 900);
-      cr.x = lp(cr.x, P.x, .12); cr.y = lp(cr.y, P.y, .12);
-      if (cr.t >= 1 || dst(cr, P) < P.r + 14) {
-        if (cells.length) { const per = cr.amt / cells.length; for (const c of cells) c.mass += per; }
-        hv.couriers.splice(k, 1);
-      }
+
+    // Cosmetic traffic: maintain a small pool of motes per hive, flowing both ways.
+    // dir +1 = colony→hive (leaving), -1 = hive→colony (arriving). Density scales
+    // gently with workers so a busy hive shows a slightly fuller highway.
+    hv.traffic = hv.traffic || [];
+    const want = Math.min(10, 3 + (hv.workers / 2 | 0));
+    while (hv.traffic.length < want) hv.traffic.push({ u: Math.random(), dir: Math.random() < .5 ? 1 : -1, off: rng(-4, 4), spd: rng(.0006, .0011) });
+    for (const m of hv.traffic) {
+      m.u += m.spd * m.dir * dt;
+      if (m.u > 1) { m.u = 0; m.dir = Math.random() < .55 ? -1 : 1; m.off = rng(-4, 4); }   // slight bias toward arriving
+      else if (m.u < 0) { m.u = 1; m.dir = Math.random() < .55 ? -1 : 1; m.off = rng(-4, 4); }
     }
 
     // Cull a starved or far-flung hive.
@@ -2072,13 +2086,25 @@ function updateHives(dt) {
 // flowing dash when a courier is in transit, so its purpose reads at a glance.
 function drawHives(ts) {
   for (const hv of hives) {
-    const inTransit = hv.couriers && hv.couriers.length;
-    // Supply line back to the colony — animated dashes flow home when carrying mass.
-    cx.strokeStyle = inTransit ? 'rgba(255,216,96,.4)' : 'rgba(255,216,96,.12)';
-    cx.lineWidth = inTransit ? 1.3 : .7;
-    cx.setLineDash([5, 7]); cx.lineDashOffset = -(ts * .05);
+    // Supply line — a faint, calm thread (no bright pulsing). It's just the road.
+    cx.strokeStyle = 'rgba(255,216,96,.10)';
+    cx.lineWidth = .6;
     cx.beginPath(); cx.moveTo(hv.x, hv.y); cx.lineTo(P.x, P.y); cx.stroke();
-    cx.setLineDash([]);
+
+    // Mini-highway: many tiny same-hue motes gliding along the tether. A subtle
+    // tint tells leaving (cool gold) from arriving (warm gold). Slight perpendicular
+    // offset gives a two-lane feel without reading as projectiles.
+    if (hv.traffic) {
+      const dx = P.x - hv.x, dy = P.y - hv.y, L = Math.hypot(dx, dy) || 1;
+      const nx = -dy / L, ny = dx / L;                 // perpendicular (lane offset)
+      for (const m of hv.traffic) {
+        const px = hv.x + dx * m.u + nx * m.off;
+        const py = hv.y + dy * m.u + ny * m.off;
+        // arriving (dir -1, heading to colony) = brighter warm; leaving = dimmer cool
+        cx.fillStyle = m.dir < 0 ? 'rgba(255,228,150,.85)' : 'rgba(225,200,130,.55)';
+        cx.beginPath(); cx.arc(px, py, m.dir < 0 ? 1.5 : 1.2, 0, TAU); cx.fill();
+      }
+    }
 
     if (onScr(hv.x, hv.y, hv.r * 2)) {
       bioGlow(hv.x, hv.y, hv.r * 2.4, 'rgba(255,216,96,', .4);
@@ -2089,24 +2115,6 @@ function drawHives(ts) {
       cx.shadowBlur = 0; cx.fillStyle = '#fff'; cx.globalAlpha = .7;
       for (let k = 0; k < 4; k++) { const a = hv.ph * 1.5 + k * PI / 2; cx.beginPath(); cx.arc(hv.x + Math.cos(a) * hv.r * 1.4, hv.y + Math.sin(a) * hv.r * 1.4, 1.6, 0, TAU); cx.fill(); }
       cx.globalAlpha = 1; cx.shadowBlur = 0;
-    }
-
-    // Courier orbs traveling the supply line — bright, with a comet tail.
-    if (hv.couriers) for (const cr of hv.couriers) {
-      cx.shadowBlur = 10 * zm; cx.shadowColor = '#FFD860';
-      cx.fillStyle = '#fff'; cx.globalAlpha = .95;
-      cx.beginPath(); cx.arc(cr.x, cr.y, 4, 0, TAU); cx.fill();
-      cx.fillStyle = '#FFD860'; cx.globalAlpha = .5;
-      cx.beginPath(); cx.arc(cr.x, cr.y, 7, 0, TAU); cx.fill();
-      cx.shadowBlur = 0; cx.globalAlpha = 1;
-    }
-
-    // OUTBOUND worker individuals (colony → hive): small cyan motes streaming out
-    // to staff the hive. Two-way living supply chain.
-    if (hv.outbound) for (const w of hv.outbound) {
-      cx.fillStyle = '#9CF0FF'; cx.shadowBlur = 5 * zm; cx.shadowColor = '#9CF0FF';
-      cx.globalAlpha = .9; cx.beginPath(); cx.arc(w.x, w.y, 2.4, 0, TAU); cx.fill();
-      cx.shadowBlur = 0; cx.globalAlpha = 1;
     }
 
     // Worker-count pip ring around the hive (shows it's staffed & growing).
@@ -2183,24 +2191,38 @@ function drawColonyStructure(ts, col, n, growth, cosH, sinH) {
 
   switch (colonyShape) {
     case 'plant': {
-      // CORAL/GRASS: fronds growing from the core. Count & height rise with mass —
-      // a small plant has a few short fronds; a big one is a tall reef.
-      const fronds = Math.min(28, 5 + (n / 4 | 0));
-      const h = cl(growth * 1.4, 30, 420);
-      for (let i = 0; i < fronds; i++) {
-        const base = (i / fronds - 0.5) * coreR * 2.2;             // spread along the ground line
-        const sway = Math.sin(ts * .0016 + i * 0.7) * h * 0.10;
-        const tall = h * (0.55 + 0.45 * ((i * 37 % 13) / 13));     // varied heights
-        cx.lineWidth = cl(growth * 0.05, 1, 7) * (0.6 + 0.4 * ((i*7%5)/5));
-        cx.globalAlpha = .5;
-        cx.beginPath();
+      // CORAL/TREE: recursive branches that gain COMPLEXITY the longer you stay
+      // rooted (plantRootT ramp 0..1) — sub-branches sprout, depth increases, and
+      // the whole thing reaches taller. Reads as "growing into the ideal form for
+      // this spot." Branch count/height also scale with mass + cells.
+      const ramp = plantRootT / PLANT_RAMP_MS;                    // 0..1 maturity
+      const trunks = Math.min(20, 4 + (n / 5 | 0));
+      const h = cl(growth * (1.0 + ramp * 0.9), 30, 480);          // taller as it matures
+      const maxDepth = 1 + Math.round(ramp * 2.5);                 // 1 → up to ~3 levels
+      const baseW = cl(growth * 0.05, 1, 8);
+      // Recursive branch: draws a limb then forks into sub-limbs.
+      const branch = (bx, by, ang0, len, w, depth, seed) => {
+        const sway = Math.sin(ts * .0014 + seed) * 0.18 * (1 - depth / (maxDepth + 1));
+        const tx = bx + Math.cos(ang0 + sway) * len;
+        const ty = by + Math.sin(ang0 + sway) * len;
+        cx.lineWidth = Math.max(0.6, w); cx.globalAlpha = .5;
+        cx.beginPath(); cx.moveTo(bx, by); cx.lineTo(tx, ty); cx.stroke();
+        if (depth >= maxDepth || len < 10) {
+          cx.fillStyle = '#9CE84A'; cx.globalAlpha = .55 + .25 * Math.sin(ts*.005 + seed);
+          cx.beginPath(); cx.arc(tx, ty, cl(growth*0.03, 1.2, 5), 0, TAU); cx.fill();
+          return;
+        }
+        const spread = 0.5 + 0.25 * ramp;
+        branch(tx, ty, ang0 - spread, len * 0.72, w * 0.66, depth + 1, seed + 1.7);
+        branch(tx, ty, ang0 + spread, len * 0.72, w * 0.66, depth + 1, seed + 3.1);
+      };
+      for (let i = 0; i < trunks; i++) {
+        const base = (i / Math.max(1,trunks-1) - 0.5) * coreR * 2.2;
         const b = lift(base, coreR * 0.3);
-        const tip = lift(base + sway, coreR * 0.3 + tall);
-        const ctrl = lift(base + sway * 0.5, coreR * 0.3 + tall * 0.5);
-        cx.moveTo(b.x, b.y); cx.quadraticCurveTo(ctrl.x, ctrl.y, tip.x, tip.y); cx.stroke();
-        // bud at the tip
-        cx.fillStyle = '#9CE84A'; cx.globalAlpha = .6 + .25 * Math.sin(ts*.005 + i);
-        cx.beginPath(); cx.arc(tip.x, tip.y, cl(growth*0.03,1.5,5), 0, TAU); cx.fill();
+        // grow "up" = +y in colony-local; convert to world angle
+        const up = lift(base, coreR * 0.3 + 10);
+        const ang0 = Math.atan2(up.y - b.y, up.x - b.x);
+        branch(b.x, b.y, ang0, h * (0.45 + 0.4 * ((i*37%13)/13)), baseW, 0, i * 2.3);
       }
       break;
     }

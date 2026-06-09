@@ -92,6 +92,18 @@ Fixed this round:
   hive→colony (heavier stream the more workers). Hives now show on the minimap
   with a tether. Net: a hive is a mass amplifier you invest workers into.
 
+Round 4 (this commit):
+- 🟢 HIVE stream reworked — was big bright orbs that "looked like the hive shooting
+  the colony." Now: mass flow is a smooth continuous trickle (decoupled from
+  visuals), and the visible traffic is a subtle same-hue mini-highway of tiny
+  motes along the tether, with a faint leaving(cool)/arriving(warm) tint + a
+  two-lane offset. Calm thread, no pulsing.
+- 🟢 PLANT tree/coral ramp — rooting longer makes the plant "reach the ideal form
+  for this spot": recursive branches gain depth/complexity over ~12s (plantRootT),
+  and photosynthesis ramps 1×→2.5× (PLANT_RAMP_MAX). Bounded so it can't break
+  balance: ramp plateaus AND mass-based diminishing returns throttle large colonies
+  (verified: small +277/5s, ~10k-mass +45/5s — active harvest forms still win at scale).
+
 New ideas to build (player, round 3):
 - ⚪ **Illusionary prey structures**: certain prey groups arrange into shapes/
    patterns (the rug-like "plant" cluster the player saw) — flocking presets that
