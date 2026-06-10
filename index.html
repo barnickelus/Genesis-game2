@@ -378,6 +378,11 @@ let titanPhase, titanEchoT, titanColossusShown;
 let viewR = 2200;   // active world radius for spawn/despawn — grows as the camera pulls back
 const TITAN_COLOSSUS = 7000;   // mass where TITAN (now the 5000+ endgame) tips Awakening → Colossus
 const COLOSSUS_BREAK = 12000;  // mass where the mitosis CHOICE becomes available
+// A single body CANNOT grow past the Singularity — that is the premise of the
+// fork, and the guard that keeps radius/zoom/query costs bounded. (A 52k-mass
+// colossus had a ~4000px radius; per-frame scans over ~14k-px circles froze
+// phones. Mass clamps here; the only way onward is DIVIDE.)
+const TITAN_MASS_CAP = 13500;
 
 // ── MICRO branch state (mitosis → swarm → colony) ──
 // mode: 'single' = normal one-body game · 'choice' = breakpoint prompt up ·
@@ -1050,12 +1055,23 @@ document.getElementById('cheatBtn').onclick = () => {
   const o = objDef();
   if (o) objProg = o.n;
   if (P.stg === 4) for (const s of domSites) s.claimed = true;   // dominion sites
-  // Grant enough mass to clear the next threshold (or a big lump at apex).
   const nx = STAGES[P.stg + 1];
-  P.mass = nx ? Math.max(P.mass, nx.thr + 5) : P.mass + 1000;
+  if (nx) {
+    // Grant enough mass to clear the next threshold, then evolve.
+    P.mass = Math.max(P.mass, nx.thr + 5);
+    fTxt(P.x, P.y - 28, '▶▶ ' + nx.name, '#FFD700');
+  } else {
+    // Apex (TITAN): mass is capped at the Singularity — the only way onward is
+    // the fork. SKIP fast-charges the pressure / reopens the choice (even after
+    // ASCEND), so the dev path and a changed mind both have an exit.
+    P.mass = TITAN_MASS_CAP; titanPhase = 1;
+    breakPressure = 1;
+    microChoiceShown = true; microMode = 'choice';
+    openSingularityFork();
+    fTxt(P.x, P.y - 28, '▶▶ THE SINGULARITY', '#FFD700');
+  }
   score += 50;
   burst(P.x, P.y, '#FFD700', 18, 3); ring(P.x, P.y, '#FFD700', P.r * 2.4, 16);
-  fTxt(P.x, P.y - 28, nx ? '▶▶ ' + nx.name : '+1000', '#FFD700');
   sfxEat();
   checkEvo();
 };
@@ -1532,13 +1548,16 @@ function updateP(dt) {
   // NaN guard — if anything ever goes wrong with the math, recover gracefully.
   if (!isFinite(P.x) || !isFinite(P.y)) { P.x = 0; P.y = 0; P.vx = 0; P.vy = 0; }
 
+  // THE SINGULARITY CEILING: a single body cannot grow past the fork's threshold.
+  // Everything below (radius, zoom, intake/echo query circles) is bounded by this.
+  if (P.stg===5 && P.mass > TITAN_MASS_CAP) P.mass = TITAN_MASS_CAP;
+
   P.r=calcR(P.mass, s.bR);
   // TITAN balloons physically — calcR alone is logarithmic and tops out near r42,
   // far too small for the camera to ever pull back. This super-linear bonus makes
-  // the giant genuinely dwarf its world, which is what drives the zoom-out and lets
-  // the filter-ratio treat the old fauna as plankton. (PRIMORDIAL handles its own
-  // scale in Phase 2.)
-  if (P.stg===5) P.r += Math.max(0, P.mass - STAGES[5].thr) * 0.085;  // gentler balloon — TITAN is the relaxed endgame
+  // the giant genuinely dwarf its world. Hard-capped: an uncapped balloon at 52k
+  // mass produced a ~4000px body whose per-frame scans froze phones.
+  if (P.stg===5) P.r += Math.min(Math.max(0, P.mass - STAGES[5].thr) * 0.085, 620);
 
   const floor=STAGES[P.stg].thr*.78+3;
   P.mass=Math.max(floor, P.mass-calcDecay(P.mass,dt)*tstats.decay);
@@ -1987,7 +2006,7 @@ function useAbil() {
 // still catch larger/faster creatures and sweep them into the intake. `auto` is
 // the Colossus self-pulse (quieter, no screen shake spam).
 function stunEcho(auto) {
-  const eR = P.r * (titanPhase ? 4.6 : 3.6);
+  const eR = Math.min(P.r * (titanPhase ? 4.6 : 3.6), 2600);   // capped query circle
   for (const o of gNear(P.x, P.y, eR)) {
     const d = dst(P, o); if (d >= eR) continue;
     o.stunT = Math.max(o.stunT, auto ? 900 : 1400);
@@ -2013,7 +2032,7 @@ function stunEcho(auto) {
 // normal bite (EAT_RATIO) to bring them down.
 function filterFeed(dt) {
   if (P.stg !== 5) return;
-  const intake = P.r * (titanPhase ? 3.4 : 2.3);
+  const intake = Math.min(P.r * (titanPhase ? 3.4 : 2.3), 2000);  // capped per-frame query circle
   const ratio  = titanPhase ? 0.58 : 0.42;     // o.r below this fraction of player = plankton
   const mouth  = P.r * 0.95;
   let eaten = 0;
@@ -4201,7 +4220,7 @@ function drawRadarHalos(ts) {
 // Concentric pulses sweep INWARD toward the maw; widens in Colossus.
 function drawTitanIntake(ts) {
   if (P.stg !== 5) return;
-  const intake = P.r * (titanPhase ? 3.4 : 2.3);
+  const intake = Math.min(P.r * (titanPhase ? 3.4 : 2.3), 2000);  // capped gradient radius
   // Soft inward gradient
   const grd = cx.createRadialGradient(P.x, P.y, P.r*0.7, P.x, P.y, intake);
   grd.addColorStop(0, 'rgba(90,200,255,0.10)');
@@ -4776,7 +4795,9 @@ function loop(ts) {
   // ~1.3 screens; far ones get a cheap drift so the field still looks alive.
   const macroLOD = (microMode === 'single' && zm < 0.45);
   if (macroLOD) {
-    const aiR = (Math.max(W, H) / zm) * 0.75;
+    // Capped: at deep zoom 1/zm explodes — an uncapped radius covered the whole
+    // world and silently turned this throttle into a no-op (the phone-freeze bug).
+    const aiR = Math.min((Math.max(W, H) / zm) * 0.75, 3500);
     for (const o of orgs) {
       if (dst(P, o) < aiR) aiOrg(o, dt);
       else { o.x += o.vx * (dt/16) * .2; o.y += o.vy * (dt/16) * .2; }  // cheap drift, no AI
@@ -4806,7 +4827,9 @@ function loop(ts) {
   off.x=W/2-P.x*zm; off.y=H/2-P.y*zm;
   // Active world radius — grows with the zoomed-out view so creatures don't
   // despawn while still on-screen, and so spawns spread across the plankton field.
-  viewR = Math.max(2200, (Math.max(W, H) / zm) * 0.62);
+  // Capped: 1/zm explodes at deep zoom (uncapped this hit ~41,000px and blew up
+  // spawn spreads + cull distances — part of the phone-freeze bug).
+  viewR = cl((Math.max(W, H) / zm) * 0.62, 2200, 7000);
 
   // Ecosystem maintenance
   for (const [type,T] of Object.entries(ORGS)) {
