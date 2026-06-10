@@ -382,6 +382,7 @@ let domSites = [];          // PRIMORDIAL dominion sites {x,y,claimT,claimed}
 // ── THE LIVING ECONOMY: detritus motes (kills/decay drop these; food blooms
 //    where they settle — kill-grounds bloom, blooms attract life) ──
 let detritus = [];
+let webs = [];                 // SPIDER trait: laid web nodes that snare drifting prey
 const DETRITUS_MAX = 80;
 // ── THE EVOLVING ECOSYSTEM: per-species genome means. Individuals are born
 //    around these; player kills apply selection pressure (means drift away from
@@ -412,7 +413,7 @@ function init() {
   titanPhase = 0; titanEchoT = 0; titanColossusShown = false; viewR = 2200;
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false; plantRootT = 0;
   patches = []; hives = [];
-  objProg = 0; domSites = []; detritus = []; resetSpeciesGenes();
+  objProg = 0; domSites = []; detritus = []; webs = []; resetSpeciesGenes();
 
   spawn('bloom',10); spawn('mote',45); spawn('polyp',22); spawn('tendril',8);
   spawn('hunter',4); spawn('lurker',2); spawn('levia',2); spawn('phantom',2); spawn('behemoth',1);
@@ -1280,6 +1281,7 @@ function aiOrg(o, dt) {
   const T=ORGS[o.type], dist=dst(P,o);
   const smaller=canEat(o), bigger=isPred(o);
   if (o._grabbed) o._grabbed = Math.max(0, o._grabbed - dt*.004);   // arm-grab flag fades
+  if (o._snared)  o._snared  = Math.max(0, o._snared  - dt*.004);   // web-snare flag fades
   // Genome modulation: spd gene quickens the body; wary gene widens flight distance.
   const g = o.gen || { spd:1, size:1, wary:1 };
   const spd=T.spd*g.spd*(o.stunT>0?.15:1);
@@ -1694,7 +1696,83 @@ const TRAITS = {
       cx.restore(); cx.globalAlpha = 1; cx.shadowBlur = 0;
     },
   },
+
+  // ── ACQUISITION: spider silk. The lone-predator fork — instead of chasing, you
+  //    LAY WEBS (tap) that hang in the dark; drifting prey that wander in get
+  //    ensnared (slowed, slowly reeled to the web center for you to collect).
+  //    Stacks: bigger/stronger webs + more allowed up at once. (See LINEAGE_FORKS.)
+  web: {
+    id:'web', name:'Spider Silk', cat:'acquisition', max:3, cd:1500,
+    desc:'Lay sticky webs. Drifting prey snares — slowed and reeled to center.',
+    onTap(a) {
+      const lv = a.traitLv.web || 1;
+      const maxWebs = 2 + lv;                 // 3 / 4 / 5 webs up at once
+      if (webs.length >= maxWebs) webs.shift();   // oldest dissolves
+      const tx = ptr.on ? ptr.x : a.x + Math.cos(a.hd)*a.r*3;
+      const ty = ptr.on ? ptr.y : a.y + Math.sin(a.hd)*a.r*3;
+      webs.push({ x:tx, y:ty, r: 70 + lv*28, lv, life: 14000, ph: rng(0,TAU),
+        spokes: 7 + lv });
+      try { sfxRadarPing(); } catch(e) {}
+      ring(tx, ty, '#dfe8ff', 30, 14);
+      return true;
+    },
+  },
 };
+
+// SPIDER web system — snare prey caught in any web (slow + reel to center),
+// dissolve over time. Called each frame from the loop when the player has webs.
+function updateWebs(dt) {
+  if (!webs.length) return;
+  for (let i = webs.length - 1; i >= 0; i--) {
+    const w = webs[i];
+    w.life -= dt; w.ph += dt * .001;
+    if (w.life <= 0) { webs.splice(i, 1); continue; }
+    for (const o of gNear(w.x, w.y, w.r)) {
+      const d = dst(w, o); if (d > w.r) continue;
+      if (o.r > P.r * 1.05) continue;             // big predators tear through
+      o._snared = 2;                               // renderer + AI cue
+      const slow = 0.55 - w.lv * 0.08;             // stickier with stacks
+      o.vx *= slow; o.vy *= slow;
+      const wa = ang(o, w);                        // reel toward web center
+      const pull = (.10 + w.lv * .05) * (1 - d / w.r);
+      o.vx += Math.cos(wa) * pull; o.vy += Math.sin(wa) * pull;
+    }
+  }
+}
+
+// Draw webs — concentric radial silk, brighter where prey is snared, fading as
+// the web ages. A laid trap that reads at a glance.
+function drawWebs(ts) {
+  for (const w of webs) {
+    if (!onScr(w.x, w.y, w.r * 1.1)) continue;
+    const fade = cl(w.life / 14000, 0, 1);
+    cx.save(); cx.translate(w.x, w.y); cx.rotate(w.ph);
+    cx.strokeStyle = '#cdd8f0'; cx.lineWidth = .5;
+    cx.globalAlpha = .12 + .12 * fade;
+    cx.shadowBlur = 4 * zm; cx.shadowColor = '#cdd8f0';
+    // radial spokes
+    for (let k = 0; k < w.spokes; k++) {
+      const a = (k / w.spokes) * TAU;
+      cx.beginPath(); cx.moveTo(0, 0); cx.lineTo(Math.cos(a) * w.r, Math.sin(a) * w.r); cx.stroke();
+    }
+    // spiral rings
+    for (let ringI = 1; ringI <= 3; ringI++) {
+      const rr = w.r * ringI / 3.2;
+      cx.beginPath();
+      for (let k = 0; k <= w.spokes; k++) {
+        const a = (k / w.spokes) * TAU;
+        const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+        if (k === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+      }
+      cx.closePath(); cx.stroke();
+    }
+    cx.restore();
+    // hub glow
+    cx.globalAlpha = .25 * fade; cx.fillStyle = '#dfe8ff';
+    cx.beginPath(); cx.arc(w.x, w.y, 3, 0, TAU); cx.fill();
+    cx.globalAlpha = 1; cx.shadowBlur = 0;
+  }
+}
 
 // Fold all passive trait modifiers into a stats object. Callers read these
 // instead of hardcoding, so traits compose. Defaults = identity (no traits → no change).
@@ -4587,6 +4665,7 @@ function loop(ts) {
   filterFeed(dt);
   ecoCollide();
   updateDetritus(dt);   // the living economy
+  updateWebs(dt);       // spider silk snares
   updateDomSites(dt);   // PRIMORDIAL territory objective
 
   // Camera — zoom adapts to actual screen size so phones and tablets show
@@ -4682,6 +4761,7 @@ function loop(ts) {
   // (especially the player) from rendering. This is the structural fix for the
   // "player goes dark near anomalies" class of bug, where one draw's exception
   // was aborting the whole frame's pipeline.
+  try { drawWebs(ts); }        catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   try { drawDetritus(ts); }    catch(e) { cx.globalAlpha=1; }
   try { drawDomSites(ts); }    catch(e) { cx.globalAlpha=1; cx.setLineDash([]); }
   try { drawPickups(ts); }     catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }

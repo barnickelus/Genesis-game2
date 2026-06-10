@@ -64,9 +64,10 @@ Data-driven TRAITS registry · actor-first hooks (onTap/onTick/onKill/mod/draw) 
 per-actor cooldowns · stacking with caps · pick-1-of-3 card chooser at every
 evolution · category-varied hands · stat folding (spd/decay/dmgTaken/senseMul).
 
-### Current pool (8 traits / 5 categories) 🟢
+### Current pool (9 traits / 5 categories) 🟢
 bolt (stacks→spread shot) · gravity_well · venom_tip · arms (octopus grasping
-arms: +reach, hauls prey in) · membrane · efficient · fins · deepscan.
+arms: +reach, hauls prey in) · web (spider silk: lay webs that snare/reel
+drifting prey — first lone-predator fork) · membrane · efficient · fins · deepscan.
 
 ### Planned growth ⚪
 - Migrate legacy stage abilities (dash/sting/whip/echo) into traits — uniform system.
@@ -74,8 +75,9 @@ arms: +reach, hauls prey in) · membrane · efficient · fins · deepscan.
 - Sub-trees per archetype: PROJECTILE→spread/pierce/homing · GRAVITY→well/crush/
   singularity · CAMOUFLAGE→ambush/mimic · VENOM→paralysis/necrosis · SPEED→phase/slipstream.
 - Hybrids (gravity+venom = poison well, etc.).
-- **Lone-predator forks (Tier 1, BEFORE colony)**: SPIDER (webs) · CRAB (armor) ·
-  MANTIS (camo burst) · SAILFISH (pursuit) — signature trait + body per fork.
+- **Lone-predator forks (Tier 1, BEFORE colony)**: SPIDER (webs) 🟢 first one in
+  as the `web` trait · CRAB (armor) · MANTIS (camo burst) · SAILFISH (pursuit) ⚪ —
+  signature trait + body per fork.
 
 ---
 
