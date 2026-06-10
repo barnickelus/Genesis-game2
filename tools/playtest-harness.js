@@ -14,7 +14,9 @@ code += `
   step:(ts)=>loop(ts),
   add:(m)=>{ P.mass+=m; },
   initAudio:()=>{ try{ initAudio(); }catch(e){} },
-  evo:()=>{ for(let k=0;k<3;k++) checkEvo(); },
+  evo:()=>{ // complete the current stage objective (the spine gates evolution on it)
+    if (typeof objDef==='function'){ const o=objDef(); if(o&&objProg<o.n) objProg=o.n; }
+    for(let k=0;k<3;k++) checkEvo(); },
   tap:()=>{ ptr.on=true; ptr.x=P.x+40; ptr.y=P.y; ptr.tap=true; },
   cycle:()=>{ try{ cycleColony(); }catch(e){} },
   micro:()=>({ mode:microMode, shape:colonyShape, cells:cells.length, press:+breakPressure.toFixed(2),
@@ -52,9 +54,11 @@ function AG() {
   return new Proxy(function () {}, {
     get(t, p) {
       if (p === 'then') return undefined;
+      if (p === Symbol.toPrimitive) return () => 0;   // audio nodes used in arithmetic
       if (p === 'state') return 'running';
       if (p === 'currentTime') return clock.t / 1000;
       if (p === 'sampleRate') return 44100;
+      if (p === 'length') return 0;
       return AG();
     },
     set() { return true; }, apply() { return AG(); }, construct() { return AG(); },

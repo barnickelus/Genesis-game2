@@ -274,35 +274,13 @@ const COL = {
   primo: { pri: '#FFD700', dim: '#382a00', gl: 'rgba(255,215,0,' },
 };
 
-// ═══════════════════════════════════════════
-// THE ORGANIZATION SPINE  (docs/REBUILD_SPINE.md)
-// One fantasy: life organizing into ever-larger levels of complexity.
-// Mass is the FUEL. Each stage's OBJECTIVE is the story — evolution requires
-// the objective complete AND the mass threshold. Phases group the stages into
-// the emotional arc: fear → power → transcendence → stewardship.
-// ═══════════════════════════════════════════
-const PHASES = [
-  { name: 'PHASE I · EMERGENCE',     first: 0, c: '#52FFCA', sub: 'Life learns to survive.' },
-  { name: 'PHASE II · PREDATION',    first: 3, c: '#FF9830', sub: 'Life learns to hunt.' },
-  { name: 'PHASE III · SUPERORGANISM', first: 5, c: '#5AC8FF', sub: 'One body is no longer enough.' },
-];
-function phaseStartingAt(stgIdx) { return PHASES.find(p => p.first === stgIdx) || null; }
-
-// obj.kind drives the objective engine: 'eat' | 'explore' | 'precision' |
-// 'apex' | 'territory' | 'critical'. objN = target count.
 const STAGES = [
-  { name: 'MOTE',       thr: 0,    next: 120,  c: COL.mote,  spd: 2.8, bR: 6, desc: 'Consume the smaller.',                ab: null,       abT: '',         cd: 0,
-    obj: { kind:'eat',       n: 20, label: 'Consume 20 organisms' } },
-  { name: 'DRIFTER',    thr: 120,  next: 380,  c: COL.drift, spd: 3.2, bR: 7, desc: 'Propulsion stirs — the world declares itself.', ab: 'dash', abT: '↑ Dash',    cd: 700,
-    obj: { kind:'explore',   n: 4,  label: 'Chart the dark — visit 4 beacons' } },
-  { name: 'MEDUSA',     thr: 380,  next: 850,  c: COL.medu,  spd: 2.6, bR: 8, desc: 'Sting aura radiates. Soft seams glow.', ab: 'sting',  abT: 'Sting Aura',cd: 0,
-    obj: { kind:'precision', n: 5,  label: 'Strike 5 weak spots' } },
-  { name: 'NAGA',       thr: 850,  next: 2200, c: COL.naga,  spd: 3.4, bR: 7, desc: 'The lash awakens. Veils unravel.',     ab: 'whip',     abT: '↑ Whip',    cd: 1000,
-    obj: { kind:'apex',      n: 3,  label: 'Fell 3 true predators' } },
-  { name: 'PRIMORDIAL', thr: 2200, next: 5000, c: COL.primo, spd: 2.8, bR: 8, desc: 'The first and the last. Rend the deep.', ab: 'bolt',   abT: '↑ Bolt',    cd: 400,
-    obj: { kind:'territory', n: 3,  label: 'Claim 3 dominion sites' } },
-  { name: 'TITAN',      thr: 5000, next: 1/0,  c: COL.titan, spd: 3.0, bR: 9, desc: 'The filter-feeder wakes. Drift, and swallow the ocean.', ab: 'echo', abT: '↑ Stun Echo', cd: 900,
-    obj: { kind:'critical',  n: 1,  label: 'Reach the Singularity' } },
+  { name: 'MOTE',       thr: 0,    next: 120,  c: COL.mote,  spd: 2.8, bR: 6, desc: 'Consume the smaller.',                ab: null,       abT: '',         cd: 0    },
+  { name: 'DRIFTER',    thr: 120,  next: 380,  c: COL.drift, spd: 3.2, bR: 7, desc: 'Propulsion stirs — the world declares itself.', ab: 'dash', abT: '↑ Dash',    cd: 700  },
+  { name: 'MEDUSA',     thr: 380,  next: 850,  c: COL.medu,  spd: 2.6, bR: 8, desc: 'Sting aura radiates. Soft seams glow.', ab: 'sting',  abT: 'Sting Aura',cd: 0    },
+  { name: 'NAGA',       thr: 850,  next: 2200, c: COL.naga,  spd: 3.4, bR: 7, desc: 'The lash awakens. Veils unravel.',     ab: 'whip',     abT: '↑ Whip',    cd: 1000 },
+  { name: 'PRIMORDIAL', thr: 2200, next: 5000, c: COL.primo, spd: 2.8, bR: 8, desc: 'The first and the last. Rend the deep.', ab: 'bolt',   abT: '↑ Bolt',    cd: 400  },
+  { name: 'TITAN',      thr: 5000, next: 1/0,  c: COL.titan, spd: 3.0, bR: 9, desc: 'The filter-feeder wakes. Drift, and swallow the ocean.', ab: 'echo', abT: '↑ Stun Echo', cd: 900 },
 ];
 
 // ═══════════════════════════════════════════
@@ -376,24 +354,6 @@ let radarTutorialShown = false;
 let behMem;
 let introActive = true;
 
-// ── THE SPINE: objective engine state ──
-let objProg = 0;            // progress toward the current stage's objective
-let domSites = [];          // PRIMORDIAL dominion sites {x,y,claimT,claimed}
-// ── THE LIVING ECONOMY: detritus motes (kills/decay drop these; food blooms
-//    where they settle — kill-grounds bloom, blooms attract life) ──
-let detritus = [];
-const DETRITUS_MAX = 80;
-// ── THE EVOLVING ECOSYSTEM: per-species genome means. Individuals are born
-//    around these; player kills apply selection pressure (means drift away from
-//    each victim's phenotype — the survivors breed). Clamped + mutating.
-let speciesGenes = {};
-function resetSpeciesGenes() {
-  speciesGenes = {};
-  for (const t in ORGS) speciesGenes[t] = { spd: 1, size: 1, wary: 1 };
-}
-const GENE_MIN = 0.72, GENE_MAX = 1.42;
-function gauss(mean, sd) { return mean + (Math.random()+Math.random()+Math.random()-1.5) * sd * 2; }
-
 // ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
@@ -412,7 +372,6 @@ function init() {
   titanPhase = 0; titanEchoT = 0; titanColossusShown = false; viewR = 2200;
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false; plantRootT = 0;
   patches = []; hives = [];
-  objProg = 0; domSites = []; detritus = []; resetSpeciesGenes();
 
   spawn('bloom',10); spawn('mote',45); spawn('polyp',22); spawn('tendril',8);
   spawn('hunter',4); spawn('lurker',2); spawn('levia',2); spawn('phantom',2); spawn('behemoth',1);
@@ -438,36 +397,17 @@ function spawn(type, n) {
   const massMul = 1 + tier * 0.65;   // steep — NAGA tendril ≈ 2.95× base mass
   for (let i=0; i<n; i++) {
     if (type==='echo' && orgs.filter(o=>o.type==='echo').length >= 2) return;
-
-    // ── GENOME: born around the species' evolving means + mutation noise.
-    // spd → quicker & sleeker · size → bigger body & meal · wary → flees earlier.
-    const sg = speciesGenes[type] || { spd:1, size:1, wary:1 };
-    const gen = {
-      spd:  cl(gauss(sg.spd,  .07), GENE_MIN, GENE_MAX),
-      size: cl(gauss(sg.size, .07), GENE_MIN, GENE_MAX),
-      wary: cl(gauss(sg.wary, .09), GENE_MIN, GENE_MAX),
-    };
-    const r = rng(T.minR, T.maxR) * rScale * gen.size;
-
-    // ── PLACEMENT: life blooms where detritus settled (the nutrient cycle);
-    // otherwise spread around the player as before. TITAN keeps the wide field.
+    const r = rng(T.minR, T.maxR) * rScale, a = Math.random()*TAU;
+    // Spread spawns across the active view so a zoomed-out TITAN sees a full
+    // plankton field rather than everything clustered at arm's length. Only TITAN
+    // widens the spread; earlier stages keep their original tuned spawn spacing.
     const big = (typeof P !== 'undefined' && P && P.stg === 5);
-    let x, y;
-    const anchor = (typeof detritus !== 'undefined') ? detritusAnchor() : null;
-    if (anchor && !big) {
-      const aa = Math.random()*TAU, ad = rng(10, 90);
-      x = anchor.x + Math.cos(aa)*ad; y = anchor.y + Math.sin(aa)*ad;
-    } else {
-      const a = Math.random()*TAU;
-      const spread = big ? Math.max(1, viewR / 2200) : 1;
-      const dMax   = big ? Math.max(T.spW, viewR * 0.9) : T.spW;
-      const d = rng((type==='bloom'?60:180) * spread, dMax);
-      x = P.x + Math.cos(a)*d; y = P.y + Math.sin(a)*d;
-    }
-
+    const spread = big ? Math.max(1, viewR / 2200) : 1;
+    const dMax   = big ? Math.max(T.spW, viewR * 0.9) : T.spW;
+    const d = rng((type==='bloom'?60:180) * spread, dMax);
     orgs.push({
-      type, x, y,
-      r, br:r, hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU, massMul, gen,
+      type, x:P.x+Math.cos(a)*d, y:P.y+Math.sin(a)*d,
+      r, br:r, hp:T.hp, mhp:T.hp, vx:0, vy:0, hd:Math.random()*TAU, massMul,
       stT:0, stunT:0, wAng:Math.random()*TAU, ph:rng(0,TAU),
       ambR: type==='lurker', lAng:rng(0,TAU), trail:[],
       flT:0, hSh:rng(-10,10), finPh:rng(0,TAU),
@@ -478,122 +418,6 @@ function spawn(type, n) {
 }
 
 function stg() { return STAGES[P.stg]; }
-
-// ═══════════════════════════════════════════
-// OBJECTIVE ENGINE — each stage has a goal that gates evolution.
-// objBump(kind) is called from gameplay events; only the matching kind counts.
-// ═══════════════════════════════════════════
-function objDef()      { return stg().obj; }
-function objComplete() { const o = objDef(); return !o || objProg >= o.n; }
-function objBump(kind, amt = 1) {
-  const o = objDef();
-  if (!o || o.kind !== kind || objProg >= o.n) return;
-  objProg = Math.min(o.n, objProg + amt);
-  if (objProg >= o.n) {
-    announce('OBJECTIVE COMPLETE', stg().c.pri,
-      P.mass >= (STAGES[P.stg+1]?.thr ?? Infinity)
-        ? 'Evolution awaits.' : 'Now grow — evolution needs mass.', 2800);
-    try { sfxPrecision(); } catch(e) {}
-  } else {
-    fTxt(P.x, P.y - P.r - 16, objProg + ' / ' + o.n, 'rgba(255,255,255,.55)');
-  }
-}
-
-// PRIMORDIAL dominion sites: claim by holding near a site with no predator close.
-function spawnDomSites() {
-  domSites = [];
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * TAU + rng(-.4, .4), d = rng(700, 1200);
-    domSites.push({ x: P.x + Math.cos(a) * d, y: P.y + Math.sin(a) * d, claimT: 0, claimed: false });
-  }
-}
-function updateDomSites(dt) {
-  if (P.stg !== 4 || objComplete()) return;
-  for (const s of domSites) {
-    if (s.claimed) continue;
-    const near = dst(P, s) < 240;
-    let predNear = false;
-    if (near) for (const o of gNear(s.x, s.y, 320)) { if (isPred(o)) { predNear = true; break; } }
-    if (near && !predNear) {
-      s.claimT += dt;
-      if (s.claimT >= 4000) {
-        s.claimed = true;
-        burst(s.x, s.y, COL.primo.pri, 26, 3.5); ring(s.x, s.y, COL.primo.pri, 180, 24);
-        fTxt(s.x, s.y - 30, 'DOMINION CLAIMED', COL.primo.pri); shk(4, 240);
-        objBump('territory');
-      }
-    } else s.claimT = Math.max(0, s.claimT - dt * 2);
-  }
-}
-function drawDomSites(ts) {
-  if (P.stg !== 4) return;
-  for (const s of domSites) {
-    if (!onScr(s.x, s.y, 260)) continue;
-    const c = s.claimed ? COL.primo.pri : 'rgba(255,215,0,.5)';
-    cx.strokeStyle = c; cx.lineWidth = s.claimed ? 1.6 : 1;
-    cx.globalAlpha = s.claimed ? .5 : .3 + .15 * Math.sin(ts * .004);
-    cx.setLineDash(s.claimed ? [] : [8, 10]); cx.lineDashOffset = -ts * .02;
-    cx.beginPath(); cx.arc(s.x, s.y, 220, 0, TAU); cx.stroke();
-    cx.setLineDash([]);
-    // claim progress arc
-    if (!s.claimed && s.claimT > 0) {
-      cx.globalAlpha = .85; cx.lineWidth = 3; cx.strokeStyle = '#FFD700';
-      cx.beginPath(); cx.arc(s.x, s.y, 220, -PI/2, -PI/2 + TAU * cl(s.claimT/4000, 0, 1)); cx.stroke();
-    }
-    // central sigil
-    cx.globalAlpha = s.claimed ? .8 : .4;
-    cx.fillStyle = c;
-    cx.beginPath(); cx.arc(s.x, s.y, 7, 0, TAU); cx.fill();
-    cx.globalAlpha = 1;
-  }
-}
-
-// ═══════════════════════════════════════════
-// THE LIVING ECONOMY — detritus cycle.
-// Kills drop detritus; food blooms where detritus settles. Kill-grounds bloom,
-// blooms attract grazers, grazers attract predators: emergent migration.
-// ═══════════════════════════════════════════
-function dropDetritus(x, y, amt) {
-  if (detritus.length >= DETRITUS_MAX) detritus.shift();
-  detritus.push({ x: x + rng(-12, 12), y: y + rng(-12, 12), amt,
-    vx: rng(-.08, .08), vy: rng(-.08, .08), ph: rng(0, TAU), life: 30000 });
-}
-function updateDetritus(dt) {
-  for (let i = detritus.length - 1; i >= 0; i--) {
-    const d = detritus[i];
-    d.x += d.vx * (dt/16); d.y += d.vy * (dt/16); d.life -= dt; d.ph += dt * .002;
-    if (d.life <= 0 || dst(P, d) > viewR * 1.4) detritus.splice(i, 1);
-  }
-}
-// Preferred spawn anchor: settle new life near detritus when any exists.
-function detritusAnchor() {
-  if (!detritus.length || Math.random() < .35) return null;   // 65% bloom at detritus
-  const d = detritus[rni(0, detritus.length)];
-  d.life -= 4000;                                             // consumed by the bloom
-  return d;
-}
-function drawDetritus(ts) {
-  for (const d of detritus) {
-    if (!onScr(d.x, d.y, 8)) continue;
-    cx.globalAlpha = .14 + .08 * Math.sin(d.ph);
-    cx.fillStyle = '#9fb89a';
-    cx.beginPath(); cx.arc(d.x, d.y, 1.6 + (d.amt > 20 ? 1.2 : 0), 0, TAU); cx.fill();
-  }
-  cx.globalAlpha = 1;
-}
-
-// ═══════════════════════════════════════════
-// THE EVOLVING ECOSYSTEM — selection pressure.
-// The species' gene means drift away from each victim's phenotype: the player
-// kills the slow → survivors breed faster. Visible in offspring bodies.
-// ═══════════════════════════════════════════
-function applySelection(o) {
-  const g = speciesGenes[o.type]; if (!g || !o.gen) return;
-  const k = 0.07;   // drift strength per kill
-  g.spd  = cl(g.spd  + (g.spd  - o.gen.spd)  * k, GENE_MIN, GENE_MAX);
-  g.size = cl(g.size + (g.size - o.gen.size) * k, GENE_MIN, GENE_MAX);
-  g.wary = cl(g.wary + (g.wary - o.gen.wary) * k, GENE_MIN, GENE_MAX);
-}
 
 // ═══════════════════════════════════════════
 // INPUT
@@ -1269,9 +1093,7 @@ function findOrgPrey(o) {
 function aiOrg(o, dt) {
   const T=ORGS[o.type], dist=dst(P,o);
   const smaller=canEat(o), bigger=isPred(o);
-  // Genome modulation: spd gene quickens the body; wary gene widens flight distance.
-  const g = o.gen || { spd:1, size:1, wary:1 };
-  const spd=T.spd*g.spd*(o.stunT>0?.15:1);
+  const spd=T.spd*(o.stunT>0?.15:1);
   o.stT-=dt; o.stunT=Math.max(0,o.stunT-dt); o.flT=Math.max(0,o.flT-dt);
   o.ph+=dt*.003; o.finPh+=dt*.006; o.breathPh+=dt*.004; o.scatterT=Math.max(0,o.scatterT-dt);
   const te=ang(o,P), ed=Math.atan2(Math.sin(te-o.eyeAng),Math.cos(te-o.eyeAng));
@@ -1284,17 +1106,36 @@ function aiOrg(o, dt) {
   }
 
   let tx=o.x, ty=o.y;
-  const fleeR=smaller ? (100+P.r*2.5)*g.wary : 0;   // wary genes flee earlier
+  const fleeR=smaller ? 100+P.r*2.5 : 0;
   const huntR=bigger  ? 180+o.r*3   : 0;
 
-  // ═══ UTILITY AI (rebuilt) ═══════════════════════════════════════════════
-  // Four signature species keep their authored identity as hooks; everyone
-  // else scores its drives each frame — flee / hunt / forage / wander — and
-  // steers toward the winner. Genome modulates the scores, so selection
-  // pressure (speciesGenes drifting) changes behavior, not just bodies.
-  let handled = true;
   switch (T.beh) {
-    case 'ambush':   // lurker: dead-still lure, explosive burst
+    case 'bloom':
+      o.wAng+=(Math.random()-.5)*.008*dt;
+      tx=o.x+Math.cos(o.wAng)*spd; ty=o.y+Math.sin(o.wAng)*spd; break;
+
+    case 'drift':
+      o.wAng+=(Math.random()-.5)*.03*dt;
+      tx=o.x+Math.cos(o.wAng)*spd; ty=o.y+Math.sin(o.wAng)*spd;
+      if (smaller&&dist<fleeR) { const fa=ang(P,o),u=1-dist/fleeR; tx=o.x+Math.cos(fa)*spd*(2+u*4); ty=o.y+Math.sin(fa)*spd*(2+u*4); } break;
+
+    case 'swarm':
+      o.wAng+=(Math.random()-.5)*.04*dt;
+      tx=o.x+Math.cos(o.wAng)*spd*.5; ty=o.y+Math.sin(o.wAng)*spd*.5;
+      if (smaller&&dist<fleeR) { const fa=ang(P,o),u=1-dist/fleeR; tx=o.x+Math.cos(fa)*spd*(3+u*4); ty=o.y+Math.sin(fa)*spd*(3+u*4); } break;
+
+    case 'pulse': {
+      const ps=Math.sin(o.breathPh*2)*spd*2;
+      tx=o.x+Math.cos(o.hd)*ps; ty=o.y+Math.sin(o.hd)*ps;
+      if (o.stT<=0) { o.hd+=(Math.random()-.5)*1.5; o.stT=rng(1000,2500); }
+      if (smaller&&dist<fleeR) { const fa=ang(P,o); tx=o.x+Math.cos(fa)*spd*3; ty=o.y+Math.sin(fa)*spd*3; } break; }
+
+    case 'chase':
+      if (bigger&&dist<huntR) { const ha=ang(o,P); tx=o.x+Math.cos(ha)*spd*(dist<100?1.8:1.2); ty=o.y+Math.sin(ha)*spd*(dist<100?1.8:1.2); }
+      else if (smaller&&dist<fleeR) { const fa=ang(P,o),zz=Math.sin(gt*.005)*.6; tx=o.x+Math.cos(fa+zz)*spd*2.8; ty=o.y+Math.sin(fa+zz)*spd*2.8; }
+      else { o.wAng+=(Math.random()-.5)*.03*dt; tx=o.x+Math.cos(o.wAng)*spd*.5; ty=o.y+Math.sin(o.wAng)*spd*.5; } break;
+
+    case 'ambush':
       if (smaller&&dist<fleeR) { const fa=ang(P,o); tx=o.x+Math.cos(fa)*spd*3; ty=o.y+Math.sin(fa)*spd*3; o.ambR=false; o.stT=2000; }
       else if (o.ambR) {
         o.lAng+=dt*.003;
@@ -1303,7 +1144,20 @@ function aiOrg(o, dt) {
         o.wAng+=(Math.random()-.5)*.02*dt; tx=o.x+Math.cos(o.wAng)*spd; ty=o.y+Math.sin(o.wAng)*spd;
         if (o.stT<=0) o.ambR=true;
       } break;
-    case 'lure':     // phantom: false food trail, then the veil closes
+
+    case 'passive':
+      o.wAng+=(Math.random()-.5)*.006*dt; tx=o.x+Math.cos(o.wAng)*spd; ty=o.y+Math.sin(o.wAng)*spd;
+      if (smaller&&dist<fleeR*.7) { const fa=ang(P,o); tx=o.x+Math.cos(fa)*spd*2; ty=o.y+Math.sin(fa)*spd*2; }
+      if (o.flT>0&&bigger&&dist<250) { const ha=ang(o,P); tx=o.x+Math.cos(ha)*spd*2.5; ty=o.y+Math.sin(ha)*spd*2.5; } break;
+
+    case 'graze':
+      // Serene drifter. Meanders gently and only ambles away when the player gets
+      // close enough to eat it — slow enough (spd .45) to be run down, so it reads
+      // as a reliable big meal rather than a frustrating chase.
+      o.wAng+=(Math.random()-.5)*.004*dt; tx=o.x+Math.cos(o.wAng)*spd; ty=o.y+Math.sin(o.wAng)*spd;
+      if (smaller&&dist<fleeR*.85) { const fa=ang(P,o),u=1-dist/(fleeR*.85); tx=o.x+Math.cos(fa)*spd*(1.4+u*1.2); ty=o.y+Math.sin(fa)*spd*(1.4+u*1.2); } break;
+
+    case 'lure':
       if (smaller&&dist<fleeR) { const fa=ang(P,o); tx=o.x+Math.cos(fa)*spd*2.5; ty=o.y+Math.sin(fa)*spd*2.5; }
       else if (bigger) {
         if (dist>250) {
@@ -1311,57 +1165,22 @@ function aiOrg(o, dt) {
           const ha=ang(o,P); tx=o.x+Math.cos(ha)*spd*.4; ty=o.y+Math.sin(ha)*spd*.4;
         } else { const ha=ang(o,P); tx=o.x+Math.cos(ha)*spd*2; ty=o.y+Math.sin(ha)*spd*2; }
       } else { o.wAng+=(Math.random()-.5)*.03*dt; tx=o.x+Math.cos(o.wAng)*spd; ty=o.y+Math.sin(o.wAng)*spd; } break;
-    case 'apex':     // behemoth: predictive charge
+
+    case 'apex':
       if (smaller&&dist<fleeR) { const fa=ang(P,o); tx=o.x+Math.cos(fa)*spd*3; ty=o.y+Math.sin(fa)*spd*3; }
       else if (bigger&&dist<huntR) {
         const px=P.x+P.vx*30, py=P.y+P.vy*30, ha=Math.atan2(py-o.y,px-o.x);
         tx=o.x+Math.cos(ha)*spd*1.6; ty=o.y+Math.sin(ha)*spd*1.6;
         if (dist<150&&o.stT<=0) { o.vx=Math.cos(ha)*5; o.vy=Math.sin(ha)*5; o.stT=1800; burst(o.x,o.y,T.col,8,3); shk(3,80); }
       } else { const oa=ang(o,P)+PI/3; tx=o.x+Math.cos(oa)*spd; ty=o.y+Math.sin(oa)*spd; } break;
-    case 'mirror':   // echo: replays your own past movement against you
+
+    case 'mirror':
       if (smaller&&dist<fleeR) { const fa=ang(P,o); tx=o.x+Math.cos(fa)*spd*2.5; ty=o.y+Math.sin(fa)*spd*2.5; }
       else if (behMem.length>=10) {
         const s=behMem[rni(0,behMem.length)], ch=Math.sin(gt*.002)*.7;
         tx=o.x+s.vx*-1+Math.sin(gt*.003+o.x)*ch; ty=o.y+s.vy*-1+Math.cos(gt*.003+o.y)*ch;
         if (Math.random()<.012) { const ha=ang(o,P); o.vx+=Math.cos(ha)*4; o.vy+=Math.sin(ha)*4; }
       } break;
-    default: handled = false;
-  }
-
-  if (!handled) {
-    // ── Score the drives ──
-    const sFlee = (smaller && dist < fleeR) ? (1 - dist/fleeR) * 1.6 * g.wary : 0;
-    const sHunt = (bigger  && dist < huntR) ? (1 - dist/huntR) * 1.25 / g.wary : 0;
-    // Forage: nearest detritus draws life in — this is what makes kill-grounds
-    // bloom into gathering places (the living economy made visible).
-    let fd = null, fdd = 170;
-    if (sFlee < .4 && detritus.length) {
-      for (const dd0 of detritus) {
-        const ddd = dst(o, dd0); if (ddd < fdd) { fdd = ddd; fd = dd0; }
-      }
-    }
-    const sForage = fd ? (1 - fdd/170) * .55 : 0;
-    const sWander = .25;
-
-    const top = Math.max(sFlee, sHunt, sForage, sWander);
-    if (top === sFlee) {
-      const u = 1 - dist/fleeR, fa = ang(P,o);
-      const zz = (T.beh==='chase') ? Math.sin(gt*.005)*.6 : 0;      // hunters jink as they flee
-      tx = o.x + Math.cos(fa+zz)*spd*(2+u*4); ty = o.y + Math.sin(fa+zz)*spd*(2+u*4);
-    } else if (top === sHunt) {
-      const m = dist<100 ? 1.8 : 1.2, ha = ang(o,P);
-      tx = o.x + Math.cos(ha)*spd*m; ty = o.y + Math.sin(ha)*spd*m;
-    } else if (top === sForage) {
-      const fa = ang(o, fd);
-      tx = o.x + Math.cos(fa)*spd*.8; ty = o.y + Math.sin(fa)*spd*.8;
-    } else {
-      // Wander, flavored per species: pulse species kick rhythmically, grazers amble.
-      const wj = T.beh==='bloom'?.008 : T.beh==='graze'?.004 : T.beh==='passive'?.006 : .03;
-      o.wAng += (Math.random()-.5)*wj*dt;
-      let wm = T.beh==='swarm'||T.beh==='chase' ? .5 : 1;
-      if (T.beh==='pulse') { wm = Math.abs(Math.sin(o.breathPh*2))*2; if (o.stT<=0){ o.wAng+=(Math.random()-.5)*1.5; o.stT=rng(1000,2500);} }
-      tx = o.x + Math.cos(o.wAng)*spd*wm; ty = o.y + Math.sin(o.wAng)*spd*wm;
-    }
   }
 
   // Ecosystem hunting
@@ -1406,33 +1225,28 @@ function aiOrg(o, dt) {
 // ═══════════════════════════════════════════
 // PLAYER UPDATE
 // ═══════════════════════════════════════════
-// ═══════════════════════════════════════════
-// MASS EQUATIONS — rebuilt (docs/REBUILD_SPINE.md).
-// One smooth power law for decay, one centralized reward function. The old
-// piecewise decay hid two catastrophic coefficient typos over its life; a
-// single curve can't have seams to get wrong.
-// ═══════════════════════════════════════════
 function calcR(mass, bR)   { return bR + Math.log2(Math.max(1,mass)) * 2.8; }
-
-// Decay per ms: 0.0005 · (m/100)^0.75 — smooth from microbe to titan:
-//   m=100 → 0.5/s · m=400 → 1.4/s · m=850 → 2.5/s · m=1500 → 3.8/s · m=2500 → 5.6/s
-function calcDecay(m, dt) {
-  return .0005 * Math.pow(Math.max(1, m) / 100, .75) * dt;
-}
-
-// Legacy gain shape (hyperbolic damping by player mass); kept because several
-// call sites use it directly. Prefer killReward() for kills.
 function calcGain(bm, pm)  { return bm * (1 / (1 + pm * .0014)); }
-
-// THE one reward function for killing/eating a creature. preyMass is its base
-// mass (× elder multiplier at call sites), mhp its max HP (toughness = effort).
-// Tough prey both multiplies the reward AND resists the player-mass damping, so
-// apex hunts stay worth it at any size — the fix the flat formulas kept needing.
-function killReward(preyMass, mhp, pm) {
-  const effort = cl((mhp || 1) / 50, 0, 1);          // 0 fodder → 1 behemoth-tier
-  const mult   = 1 + effort * 4;                     // ×1 → ×5
-  const damp   = 1 + pm * .0014 * (1 - effort * .6); // apex resists lategame damping
-  return preyMass * mult / damp;
+function calcDecay(m, dt) {
+  // Decay smoothed across all stages. Total decay/sec at key marks:
+  //   m=100:  0.0005/ms → 0.5/sec    (Mote — minimal)
+  //   m=400:  0.0011/ms → 1.1/sec    (Drifter top)
+  //   m=560:  0.0014/ms → 1.4/sec    (Medusa)
+  //   m=850:  0.0019/ms → 1.9/sec    (Naga floor — was 2.4)
+  //   m=1500: 0.0040/ms → 4.0/sec    (Naga top — was 5.1)
+  //   m=2500: 0.0080/ms → 8.0/sec    (Titan)
+  if (m<80)   return .0005 * dt;
+  if (m<400)  return (.0008 + (m-80) * .0000038) * dt;
+  // BUGFIX: this coefficient was .000027 — a 10× typo that made NAGA-band decay
+  // peak near ~31/sec just below 1500 and then *crash* to 4/sec at 1500 (decay
+  // running backwards). That single error is what made NAGA mass nearly impossible
+  // to hold. The correct value rejoins the documented curve (1.5 → 4.0/sec) and is
+  // continuous with the m≥1500 branch below.
+  if (m<1500) return (.0011 + (m-400) * .0000027) * dt;
+  // BUGFIX: coefficient was .00015 — a ~37× typo that made TITAN-era decay
+  // catastrophic (~109/sec at 2200, ~530/sec at 5000), so TITAN was effectively
+  // unreachable/unplayable. .000004 matches the documented curve (8.0/sec at 2500).
+  return (.0040 + (m-1500) * .000004) * dt;
 }
 
 function updateP(dt) {
@@ -1479,9 +1293,6 @@ function updateP(dt) {
 
   const floor=STAGES[P.stg].thr*.78+3;
   P.mass=Math.max(floor, P.mass-calcDecay(P.mass,dt)*tstats.decay);
-  // The cycle closes: a sliver of what you shed settles behind you as detritus,
-  // seeding blooms along your wake. Life follows where you've been.
-  if (Math.random() < dt * .0006 && P.mass > 60) dropDetritus(P.x - P.vx*8, P.y - P.vy*8, 6);
   P.tail.unshift({x:P.x, y:P.y});
   while (P.tail.length > Math.floor(16+Math.log2(Math.max(1,P.mass))*8)) P.tail.pop();
 
@@ -1832,7 +1643,6 @@ function updateBreakPressure(dt) {
     if (breakPressure >= 1 && !microChoiceShown) {
       microChoiceShown = true;
       microMode = 'choice';
-      objBump('critical');     // TITAN's objective: you have reached the Singularity
       openSingularityFork();   // a real branch choice, not a single tap
     }
   } else {
@@ -2533,12 +2343,8 @@ function drawBreakPressure(ts) {
 }
 
 function checkEvo() {
-  // THE SPINE: evolution needs the objective complete AND the mass threshold.
-  // Mass alone is fuel; the objective is the story beat that earns the next form.
-  if (P.stg < STAGES.length-1 && P.mass >= STAGES[P.stg+1].thr && objComplete()) {
+  if (P.stg < STAGES.length-1 && P.mass >= STAGES[P.stg+1].thr) {
     P.stg++;
-    objProg = 0;         // the new stage's objective begins fresh
-    if (P.stg === 4) spawnDomSites();   // PRIMORDIAL: dominion sites appear
     syncSeedTraits(P);   // grant this stage's default-path traits (e.g. bolt at PRIMORDIAL)
     const s=stg();
     const fl=document.getElementById('flash');
@@ -2548,9 +2354,6 @@ function checkEvo() {
     document.getElementById('evoS').textContent=s.desc;
     const ea=document.getElementById('evoAnn'); ea.style.opacity='1'; setTimeout(()=>ea.style.opacity='0',2400);
     burst(P.x,P.y,s.c.pri,45,5); ring(P.x,P.y,'#fff',P.r*2,18); shk(8,400); sfxEvo();
-    // Phase boundary? Give it a bigger beat shortly after the stage announce.
-    const ph = phaseStartingAt(P.stg);
-    if (ph) setTimeout(() => announce(ph.name, ph.c, ph.sub, 4200), 2800);
     setStageAudio(P.stg);
     if(P.stg>=2) spawn('hunter',3);
     if(P.stg>=3){spawn('phantom',2);spawn('grazer',5);if(Math.random()<.5)spawn('echo',1);}
@@ -2617,16 +2420,15 @@ function collide(dt) {
     const frenzyEdible = frenzy && (o.r < P.r * frenzyEatRatio());
     if ((canEat(o) || canEatAngle(o) || frenzyEdible)&&d<P.r*eatReachMul) {
       const T=ORGS[o.type], angleKill = !canEat(o) && !frenzyEdible && canEatAngle(o);
-      let gain=killReward(T.mass*(o.massMul||1), o.mhp, P.mass);   // one reward function
+      let gain=calcGain(T.mass*(o.massMul||1),P.mass);  // elder prey carry a per-instance mass bonus
+      // Apex feast: tough, high-HP prey (hunter/lurker/levia/behemoth) are a real
+      // hunt — their payout shouldn't be crushed by player-mass damping. Scale the
+      // gain up with the creature's max HP so swallowing the big red apex matters.
+      const apexFeast = 1 + cl(o.mhp/50, 0, 1) * 4.0;     // ×1 (fry) → ×5 (behemoth)
+      gain *= apexFeast;
       if (angleKill) gain *= 1.6;                              // precision bonus
       if (frenzy) gain *= frenzyGainMul();  // stage-scaled combo multiplier (up to ~4.7× at NAGA)
       P.mass+=gain; score+=Math.floor(gain*8); streak++; streakT = frenzy ? 1500 : 2500;
-      // The Spine: feed the objective engine + the living world.
-      objBump('eat');
-      if (angleKill) objBump('precision');
-      if (o.mhp >= 8) objBump('apex');                 // hunter-class or tougher
-      applySelection(o);                               // survivors breed
-      dropDetritus(o.x, o.y, T.mass * .3);             // kills feed the nutrient cycle
       burst(o.x,o.y,T.col,angleKill?14:8,angleKill?2.6:1.8);
       if (angleKill) { ring(o.x,o.y,'#ffd860',o.r*1.4,14); fTxt(o.x,o.y-24,'PRECISION','#ffd860'); }
       fTxt(o.x,o.y-10,'+'+Math.floor(gain),T.col);
@@ -2657,22 +2459,18 @@ function collide(dt) {
       const dmgMul = (frenzy ? 1.5 : 1) * traitStats(P).dmgTaken;
       P.mass=Math.max(5,P.mass-ORGS[o.type].mass*.08*dmgMul*(dt/16)); P.blink=250;
       shk(2.5,80); burst(P.x,P.y,'#ff2244',4,1.2); sfxHurt();
-      if (P.stg>0&&P.mass<STAGES[P.stg].thr*.55) {
-        P.stg=Math.max(0,P.stg-1);
-        // A stage you've already earned stays earned — its objective is marked
-        // complete so de-evolution can't soft-lock (e.g. beacons already charted).
-        objProg = objDef() ? objDef().n : 0;
-        fTxt(P.x,P.y-28,'DE-EVOLVED','#ff4444'); shk(6,300); setStageAudio(P.stg); audioBend(-4,1.2);
-      }
+      if (P.stg>0&&P.mass<STAGES[P.stg].thr*.55) { P.stg=Math.max(0,P.stg-1); fTxt(P.x,P.y-28,'DE-EVOLVED','#ff4444'); shk(6,300); setStageAudio(P.stg); audioBend(-4,1.2); }
     }
     if (o.hp<=0) {
       const T=ORGS[o.type];
-      const gain = killReward(T.mass*(o.massMul||1), o.mhp, P.mass) * 1.2;  // damage-kill bounty
+      // Effort-scaled payout: tough creatures (high max HP) are a real hunt, so a
+      // kill-by-damage pays far more than the old flat 40%. The bonus ramps with
+      // mhp, so the big red apex (hunter/lurker/behemoth) finally pays off big.
+      const effort = cl(o.mhp/50, 0, 1);           // 0 (fodder) → 1 (behemoth-tier)
+      const killMul = 0.6 + effort * 5.4;          // .6 (fry) → 6 (apex) — a real bounty
+      // Reduce the player-mass damping for apex kills so the bounty survives lategame.
+      const gain=calcGain(T.mass*killMul*(o.massMul||1), P.mass*(1-effort*0.6));
       P.mass+=gain; score+=Math.floor(gain*5);
-      // The Spine: objectives + the living world.
-      if (o.mhp >= 8) objBump('apex');
-      applySelection(o);
-      dropDetritus(o.x, o.y, T.mass * .4);
       const apex = o.mhp >= 30;                     // levia/behemoth-class takedown
       burst(o.x,o.y,T.col, apex?34:12, apex?4:2.5);
       fTxt(o.x,o.y-10,'+'+Math.floor(gain),T.col);
@@ -2779,17 +2577,7 @@ function collide(dt) {
   if (!shld.on&&!shOn) { shld.cd+=dt; if(shld.cd>25000+rng(0,10000)){shld={x:P.x+rng(-600,600),y:P.y+rng(-600,600),r:9,on:true,cd:0};} }
 
   // Beacons
-  // Beacons — the DRIFTER explore objective: each beacon is visited once and
-  // marks itself; the set stays up (dim) as a record of the charted dark.
-  for (const b of beacons) {
-    if (!b.hit && dst(P,b) < P.r + b.r + 8) {
-      b.hit = true;
-      burst(b.x,b.y,'#fff',14,2.4); ring(b.x,b.y,'#9CF0FF',60,16); shk(2,80);
-      fTxt(b.x, b.y-22, 'BEACON CHARTED', '#9CF0FF');
-      objBump('explore');
-      try { sfxRadarPing(); } catch(e) {}
-    }
-  }
+  for (let i=beacons.length-1; i>=0; i--) { if(dst(P,beacons[i])<P.r+beacons[i].r){beacons.length=0;burst(P.x,P.y,'#fff',12,2);shk(2,60);break;} }
 
   // ═════════════════════════════════════════════════════════════
   // ANOMALIES — high-mass nutrient pods that orbit large predators.
@@ -2898,7 +2686,6 @@ function ecoCollide() {
       if (dst(a,b)<a.r+b.r*.3) {
         a.r=Math.min(a.r*1.02,ORGS[a.type].maxR*1.1);
         burst(b.x,b.y,ORGS[b.type].col,5,1.2);
-        dropDetritus(b.x, b.y, ORGS[b.type].mass * .2);   // nature feeds the cycle too
         const idx=orgs.indexOf(b); if(idx>=0)orgs.splice(idx,1); if(idx<i)i--;
         const cnt=orgs.filter(q=>q.type===b.type).length;
         if (cnt<ORGS[b.type].mx) setTimeout(()=>spawn(b.type,1),rng(2000,5000));
@@ -3166,13 +2953,6 @@ function drawCreature(o, ts) {
   cx.save();
   cx.translate(o.x, o.y);
   cx.rotate(o.hd);
-  // EVOLUTION MADE VISIBLE: fast genes read as sleek — the body stretches along
-  // its heading and slims across it. After a few generations of selection you can
-  // SEE that this population has gotten quicker (or lazier).
-  if (o.gen && Math.abs(o.gen.spd - 1) > .04) {
-    const sleek = cl((o.gen.spd - 1) * .55, -.18, .25);
-    cx.scale(1 + sleek, 1 - sleek * .5);
-  }
   cx.shadowBlur=5*zm; cx.shadowColor=dim;
 
   switch (o.type) {
@@ -4189,22 +3969,9 @@ function drawPickups(ts) {
     cx.shadowBlur=0; cx.globalAlpha=1;
   }
   beacons.forEach(b=>{
-    if (!onScr(b.x,b.y,b.r*3)) return;
-    if (b.hit) {  // charted: a quiet marked star
-      cx.strokeStyle='rgba(156,240,255,.35)'; cx.lineWidth=1; cx.globalAlpha=.4;
-      cx.beginPath(); cx.arc(b.x,b.y,b.r,0,TAU); cx.stroke();
-      cx.fillStyle='rgba(156,240,255,.5)';
-      cx.beginPath(); cx.arc(b.x,b.y,3,0,TAU); cx.fill(); cx.globalAlpha=1;
-    } else {      // uncharted: pulsing summons (bright during the explore objective)
-      const want = P.stg===1 && !objComplete();
-      cx.fillStyle='rgba(200,218,255,.28)'; cx.globalAlpha=(want?.55:.32)+.14*Math.sin(ts*.003);
-      cx.beginPath(); cx.arc(b.x,b.y,b.r,0,TAU); cx.fill();
-      if (want) {
-        cx.strokeStyle='#9CF0FF'; cx.lineWidth=1; cx.globalAlpha=.25+.2*Math.sin(ts*.005);
-        cx.beginPath(); cx.arc(b.x,b.y,b.r*2.2,0,TAU); cx.stroke();
-      }
-      cx.globalAlpha=1;
-    }
+    if (!onScr(b.x,b.y,b.r*2)) return;
+    cx.fillStyle='rgba(200,218,255,.28)'; cx.globalAlpha=.32+.1*Math.sin(ts*.003);
+    cx.beginPath(); cx.arc(b.x,b.y,b.r,0,TAU); cx.fill(); cx.globalAlpha=1;
   });
 }
 
@@ -4339,21 +4106,8 @@ function updateHUD() {
   } else if (nx) {
     const pct=cl((P.mass-s.thr)/(nx.thr-s.thr)*100,0,100);
     bar.style.width=pct+'%'; bar.style.background=`linear-gradient(90deg,${s.c.pri},${nx.c.pri})`;
-    // THE SPINE: the label is the stage OBJECTIVE, not just a mass quota.
-    const o = objDef();
-    if (o && objProg < o.n) {
-      document.getElementById('evoNxtLbl').textContent = `◈ ${o.label} · ${objProg}/${o.n}`;
-    } else if (P.mass < nx.thr) {
-      document.getElementById('evoNxtLbl').textContent = `✓ objective · grow to ${nx.thr} → ${nx.name}`;
-    } else {
-      document.getElementById('evoNxtLbl').textContent = `${nx.name} · ${nx.thr}`;
-    }
-  } else {
-    const o = objDef();
-    bar.style.width='100%'; bar.style.background=s.c.pri;
-    document.getElementById('evoNxtLbl').textContent =
-      (o && objProg < o.n) ? `◈ ${o.label}` : 'apex';
-  }
+    document.getElementById('evoNxtLbl').textContent=`${nx.name} · ${nx.thr}`;
+  } else { bar.style.width='100%'; bar.style.background=s.c.pri; document.getElementById('evoNxtLbl').textContent='apex'; }
   // CD ring
   cdCtx.clearRect(0,0,26,26);
   if (s.cd>0) {
@@ -4518,8 +4272,6 @@ function loop(ts) {
   collide(dt);
   filterFeed(dt);
   ecoCollide();
-  updateDetritus(dt);   // the living economy
-  updateDomSites(dt);   // PRIMORDIAL territory objective
 
   // Camera — zoom adapts to actual screen size so phones and tablets show
   // comparable amounts of world. The zoom cap scales DOWN on small screens
@@ -4614,8 +4366,6 @@ function loop(ts) {
   // (especially the player) from rendering. This is the structural fix for the
   // "player goes dark near anomalies" class of bug, where one draw's exception
   // was aborting the whole frame's pipeline.
-  try { drawDetritus(ts); }    catch(e) { cx.globalAlpha=1; }
-  try { drawDomSites(ts); }    catch(e) { cx.globalAlpha=1; cx.setLineDash([]); }
   try { drawPickups(ts); }     catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   try { drawAnomalies(ts); }   catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
   try { drawFrenzyOrbs(ts); }  catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; cx.setLineDash([]); }
