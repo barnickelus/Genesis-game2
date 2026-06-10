@@ -64,7 +64,7 @@ Data-driven TRAITS registry · actor-first hooks (onTap/onTick/onKill/mod/draw) 
 per-actor cooldowns · stacking with caps · pick-1-of-3 card chooser at every
 evolution · category-varied hands · stat folding (spd/decay/dmgTaken/senseMul).
 
-### Current pool (7 traits / 5 categories) 🟢
+### Current pool (8 traits / 5 categories) 🟢
 bolt (stacks→spread shot) · gravity_well · venom_tip · membrane · efficient ·
 fins · deepscan.
 
