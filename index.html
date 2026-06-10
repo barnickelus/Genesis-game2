@@ -2711,9 +2711,12 @@ function bioGlow(x, y, r, gl, a) {
   if (typeof gl !== 'string' || gl.indexOf('rgba(') !== 0 || gl.charAt(gl.length-1) !== ',') return;
   try {
     cx.globalAlpha = a;
+    // Richer falloff: a brighter hot core that fades through a wide soft skirt,
+    // giving creatures a luminous, lensed presence instead of a flat haze.
     const g = cx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0,   gl + '.1)');
-    g.addColorStop(.55, gl + '.03)');
+    g.addColorStop(0,   gl + '.16)');
+    g.addColorStop(.28, gl + '.08)');
+    g.addColorStop(.62, gl + '.025)');
     g.addColorStop(1,   gl + '0)');
     cx.fillStyle = g;
     cx.beginPath(); cx.arc(x, y, r, 0, TAU); cx.fill();
@@ -2764,25 +2767,51 @@ const nebCanvas=document.createElement('canvas'); nebCanvas.width=nebCanvas.heig
 (()=>{
   const nc=nebCanvas.getContext('2d');
   nc.fillStyle='#00050e'; nc.fillRect(0,0,1024,1024);
+  // Layer 1 — broad faint colored clouds (the bed). Richer palette + multi-stop
+  // gradients give the deep-space backdrop real depth instead of flat tint.
   [
-    {x:120,y:90,r:260,c:'rgba(0,35,70,.055)'},{x:800,y:160,r:220,c:'rgba(45,0,60,.04)'},
-    {x:300,y:600,r:330,c:'rgba(0,28,55,.065)'},{x:70,y:800,r:190,c:'rgba(35,22,0,.04)'},
-    {x:750,y:750,r:220,c:'rgba(0,44,40,.04)'},{x:500,y:300,r:180,c:'rgba(10,0,40,.03)'},
+    {x:120,y:90, r:340,c:'rgba(0,42,82,.075)', c2:'rgba(0,20,48,.03)'},
+    {x:800,y:160,r:300,c:'rgba(58,0,76,.055)', c2:'rgba(28,0,44,.025)'},
+    {x:300,y:600,r:400,c:'rgba(0,36,68,.08)',  c2:'rgba(0,18,40,.03)'},
+    {x:70, y:800,r:240,c:'rgba(46,30,0,.05)',  c2:'rgba(24,14,0,.02)'},
+    {x:750,y:750,r:300,c:'rgba(0,56,50,.05)',  c2:'rgba(0,28,26,.02)'},
+    {x:500,y:300,r:230,c:'rgba(18,0,52,.04)',  c2:'rgba(8,0,28,.02)'},
+    {x:560,y:880,r:200,c:'rgba(52,0,40,.04)',  c2:'transparent'},
   ].forEach(b=>{
-    const g=nc.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r); g.addColorStop(0,b.c); g.addColorStop(1,'transparent');
+    const g=nc.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
+    g.addColorStop(0,b.c); g.addColorStop(.5,b.c2||'transparent'); g.addColorStop(1,'transparent');
     nc.fillStyle=g; nc.fillRect(0,0,1024,1024);
   });
+  // Layer 2 — small dense "cores" with a hot center, like distant nebula knots.
+  nc.globalCompositeOperation='lighter';
+  [
+    {x:300,y:600,r:90, c:'rgba(40,120,200,.10)'},
+    {x:800,y:160,r:70, c:'rgba(150,70,200,.08)'},
+    {x:120,y:90, r:64, c:'rgba(40,150,170,.07)'},
+    {x:750,y:760,r:60, c:'rgba(40,200,160,.06)'},
+  ].forEach(b=>{
+    const g=nc.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
+    g.addColorStop(0,b.c); g.addColorStop(1,'transparent');
+    nc.fillStyle=g; nc.fillRect(0,0,1024,1024);
+  });
+  nc.globalCompositeOperation='source-over';
+  // Fine grain so gradient banding dissolves.
   const id=nc.getImageData(0,0,1024,1024);
-  for (let i=0; i<id.data.length; i+=4) { const n=(Math.random()-.5)*3; id.data[i]+=n; id.data[i+1]+=n; id.data[i+2]+=n; }
+  for (let i=0; i<id.data.length; i+=4) { const n=(Math.random()-.5)*4; id.data[i]+=n; id.data[i+1]+=n; id.data[i+2]+=n; }
   nc.putImageData(id,0,0);
 })();
 
 const stars=[];
-for (let i=0; i<160; i++) stars.push({
-  x:rng(-4500,4500), y:rng(-4500,4500), s:rng(.18,1.4),
-  dp:rng(.03,.12), tw:rng(.3,2.2), ph:rng(0,TAU),
-  c:['#c8d8f0','#f0dcc0','#e0c4dc','#c0e8e0','#fff'][rni(0,5)]
-});
+for (let i=0; i<210; i++) {
+  // ~1 in 9 is a "hero" star — larger, with the cross-flare treatment in drawBg.
+  const hero = (i % 9 === 0);
+  stars.push({
+    x:rng(-4500,4500), y:rng(-4500,4500),
+    s: hero ? rng(1.2,2.0) : rng(.16,1.0),
+    dp:rng(.03,.14), tw:rng(.3,2.2), ph:rng(0,TAU),
+    c:['#c8d8f0','#f0dcc0','#e0c4dc','#c0e8e0','#fff','#a8c8ff','#ffe6c0'][rni(0,7)]
+  });
+}
 
 const LANDMARKS=[];
 for (let i=0; i<22; i++) {
@@ -2804,15 +2833,22 @@ function drawBg(ts) {
       cx.drawImage(nebCanvas, ox+nx*tl, oy+ny*tl, tl, tl);
   cx.globalAlpha=1;
 
-  // Parallax stars
+  // Parallax stars — twinkle, with cross-flares + soft halo on the brightest.
   for (const s of stars) {
     const sx=(s.x-P.x*s.dp)*zm+off.x+shx, sy=(s.y-P.y*s.dp)*zm+off.y+shy;
-    if (sx<-4||sx>W+4||sy<-4||sy>H+4) continue;
+    if (sx<-8||sx>W+8||sy<-8||sy>H+8) continue;
     const twinkle=.18+.82*(.5+.5*Math.sin(ts*s.tw*.001+s.ph));
-    cx.globalAlpha=twinkle*.5;
     cx.fillStyle=s.c;
-    if (s.s>1.05) { cx.fillRect(sx-s.s,sy-.18,s.s*2,.36); cx.fillRect(sx-.18,sy-s.s,.36,s.s*2); }
-    cx.fillRect(sx,sy,s.s*.6,s.s*.6);
+    if (s.s>1.05) {
+      // bright star: soft glow halo + diffraction spikes that breathe with twinkle
+      const fl=s.s*(2.0+twinkle*1.6);
+      cx.globalAlpha=twinkle*.30;
+      cx.fillRect(sx-fl,sy-.22,fl*2,.44); cx.fillRect(sx-.22,sy-fl,.44,fl*2);
+      cx.globalAlpha=twinkle*.10;
+      cx.beginPath(); cx.arc(sx,sy,s.s*1.6,0,TAU); cx.fill();
+    }
+    cx.globalAlpha=twinkle*.55;
+    cx.fillRect(sx,sy,s.s*.7,s.s*.7);
   }
   cx.globalAlpha=1;
 }
@@ -2856,13 +2892,20 @@ function drawGrid() {
 // DRAW DUST
 // ═══════════════════════════════════════════
 function drawDust(ts) {
-  while (dust.length<55) dust.push({x:P.x+rng(-W/zm,W/zm),y:P.y+rng(-H/zm,H/zm),s:rng(.15,.8),vx:rng(-.03,.03),vy:rng(-.03,.03),a:rng(.009,.04),ph:rng(0,TAU)});
+  while (dust.length<55) dust.push({x:P.x+rng(-W/zm,W/zm),y:P.y+rng(-H/zm,H/zm),s:rng(.15,.9),vx:rng(-.03,.03),vy:rng(-.03,.03),a:rng(.009,.045),ph:rng(0,TAU),h:rng(0,1)});
+  const sc=stg().c.pri;
+  cx.globalCompositeOperation='lighter';
   for (const d of dust) {
     d.x+=d.vx; d.y+=d.vy;
     if (!onScr(d.x,d.y,5)) { d.x=P.x+rng(-W/zm,W/zm); d.y=P.y+rng(-H/zm,H/zm); }
-    cx.fillStyle=`rgba(155,196,238,${d.a*(.5+.5*Math.sin(ts*.001+d.ph))})`;
+    const tw=d.a*(.4+.6*Math.sin(ts*.001+d.ph));
+    // Most motes are cool blue-white; a fraction pick up the current stage hue,
+    // tying the ambient drift to the player's evolution. Additive = soft float.
+    cx.fillStyle = d.h<.78 ? `rgba(168,204,242,${tw})` : sc;
+    cx.globalAlpha = d.h<.78 ? 1 : tw*1.4;
     cx.beginPath(); cx.arc(d.x,d.y,d.s,0,TAU); cx.fill();
   }
+  cx.globalCompositeOperation='source-over'; cx.globalAlpha=1;
 }
 
 // ═══════════════════════════════════════════
@@ -4004,14 +4047,19 @@ function drawAnomalies(ts) {
 function drawVig() {
   cx.setTransform(1,0,0,1,0,0);
   const c=stg().c;
-  // Edge darkening — slightly deeper, with a softer mid-rolloff
-  const g=cx.createRadialGradient(W/2,H/2,W*.14,W/2,H/2,W*.66);
-  g.addColorStop(0,'transparent'); g.addColorStop(.7,'rgba(0,5,14,.16)'); g.addColorStop(1,'rgba(0,5,14,.58)');
+  // Edge darkening — cinematic radial falloff, deeper at the very corners.
+  const g=cx.createRadialGradient(W/2,H*.46,W*.14,W/2,H/2,W*.72);
+  g.addColorStop(0,'transparent'); g.addColorStop(.62,'rgba(0,5,14,.14)');
+  g.addColorStop(.85,'rgba(0,4,12,.40)'); g.addColorStop(1,'rgba(0,3,10,.66)');
   cx.fillStyle=g; cx.fillRect(0,0,W,H);
-  // Faint stage-colored atmosphere bleeding in from the edges — shifts hue as you evolve
+  // Gentle top-to-bottom depth shade — gives the void a sense of vertical space.
+  const gd=cx.createLinearGradient(0,0,0,H);
+  gd.addColorStop(0,'rgba(0,6,16,.10)'); gd.addColorStop(.5,'transparent'); gd.addColorStop(1,'rgba(0,2,8,.12)');
+  cx.fillStyle=gd; cx.fillRect(0,0,W,H);
+  // Stage-colored atmosphere bleeding in from the edges — shifts hue as you evolve.
   cx.globalCompositeOperation='lighter';
-  const g2=cx.createRadialGradient(W/2,H/2,W*.30,W/2,H/2,W*.7);
-  g2.addColorStop(0,'transparent'); g2.addColorStop(1,c.gl+'.04)');
+  const g2=cx.createRadialGradient(W/2,H/2,W*.28,W/2,H/2,W*.72);
+  g2.addColorStop(0,'transparent'); g2.addColorStop(.8,c.gl+'.018)'); g2.addColorStop(1,c.gl+'.05)');
   cx.fillStyle=g2; cx.fillRect(0,0,W,H);
   cx.globalCompositeOperation='source-over';
 }
