@@ -118,6 +118,20 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 /* Always-visible panel above minimap. Shows radar status, range, and live target
  * counts (edible / precision / threat). Becomes prominent once unlocked at DRIFTER,
  * fully featured at MEDUSA. Hidden entirely at MOTE (no radar yet). */
+/* ── OBJECTIVE PANEL — the stage's mission, permanently labeled on screen. ── */
+#objHud{position:fixed;top:max(14px,env(safe-area-inset-top,0px) + 6px);left:50%;transform:translateX(-50%);
+  z-index:11;pointer-events:none;font-family:'Cinzel',serif;
+  min-width:230px;max-width:min(420px,72vw);padding:8px 16px 9px;text-align:center;
+  background:rgba(8,16,28,.66);border:1px solid rgba(255,255,255,.10);
+  border-top:2px solid #9CF0FF;box-shadow:0 0 18px rgba(156,240,255,.12);
+  border-radius:2px;opacity:0;transition:opacity .55s}
+#objHud.on{opacity:1}
+#objHead{font-size:10px;letter-spacing:5px;color:#9CF0FF;text-shadow:0 0 10px #9CF0FF;margin-bottom:4px}
+#objText{font-family:'Cormorant Garamond',serif;font-size:15px;letter-spacing:1px;color:rgba(255,255,255,.88);line-height:1.25}
+#objText b{font-style:normal;color:#FFD860;font-weight:600}
+#objHud.done{border-top-color:#52FFCA;box-shadow:0 0 18px rgba(82,255,202,.16)}
+#objHud.done #objHead{color:#52FFCA;text-shadow:0 0 10px #52FFCA}
+
 #radarHud{position:fixed;bottom:108px;left:14px;z-index:10;pointer-events:none;
   font-family:'Cinzel',serif;width:138px;padding:10px 13px 11px;
   background:rgba(8,16,28,.62);border:1px solid rgba(255,255,255,.08);
@@ -191,6 +205,12 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 </div>
 
 <div id="mmap"><canvas id="mmC" width="80" height="80"></canvas></div>
+
+<!-- Objective panel — the stage's mission, always labeled and on screen -->
+<div id="objHud">
+  <div id="objHead">◈ OBJECTIVE</div>
+  <div id="objText">—</div>
+</div>
 
 <!-- Radar HUD — unlocks at DRIFTER, becomes informative at MEDUSA -->
 <div id="radarHud">
@@ -4566,20 +4586,42 @@ function updateHUD() {
   } else if (nx) {
     const pct=cl((P.mass-s.thr)/(nx.thr-s.thr)*100,0,100);
     bar.style.width=pct+'%'; bar.style.background=`linear-gradient(90deg,${s.c.pri},${nx.c.pri})`;
-    // THE SPINE: the label is the stage OBJECTIVE, not just a mass quota.
-    const o = objDef();
-    if (o && objProg < o.n) {
-      document.getElementById('evoNxtLbl').textContent = `◈ ${o.label} · ${objProg}/${o.n}`;
-    } else if (P.mass < nx.thr) {
-      document.getElementById('evoNxtLbl').textContent = `✓ objective · grow to ${nx.thr} → ${nx.name}`;
-    } else {
-      document.getElementById('evoNxtLbl').textContent = `${nx.name} · ${nx.thr}`;
-    }
+    document.getElementById('evoNxtLbl').textContent = `${nx.name} · ${nx.thr} mass`;
   } else {
-    const o = objDef();
     bar.style.width='100%'; bar.style.background=s.c.pri;
-    document.getElementById('evoNxtLbl').textContent =
-      (o && objProg < o.n) ? `◈ ${o.label}` : 'apex';
+    document.getElementById('evoNxtLbl').textContent = 'apex';
+  }
+
+  // ── OBJECTIVE PANEL — the permanently-labeled mission card (top-center). ──
+  {
+    const panel = document.getElementById('objHud');
+    const txt = document.getElementById('objText');
+    const head = document.getElementById('objHead');
+    if (introActive) { panel.classList.remove('on'); }
+    else if (microMode === 'swarm') {
+      panel.classList.add('on');
+      if (colonyTier === 0)      { panel.classList.remove('done'); head.textContent='◈ OBJECTIVE'; txt.innerHTML = `Grow the colony — <b>${cells.length} / 60</b> cells`; }
+      else if (colonyTier === 1) { panel.classList.remove('done'); head.textContent='◈ OBJECTIVE'; txt.innerHTML = `Establish hives — <b>${hives.length} / 3</b>`; }
+      else                       { panel.classList.add('done');    head.textContent='✓ PHASE V NEARS'; txt.innerHTML = 'The colonies signal one another…'; }
+    } else {
+      const o = objDef();
+      panel.classList.add('on');
+      if (o && objProg < o.n) {
+        panel.classList.remove('done');
+        head.textContent = '◈ OBJECTIVE';
+        txt.innerHTML = `${o.label} — <b>${objProg} / ${o.n}</b>`;
+      } else if (nx) {
+        panel.classList.add('done');
+        head.textContent = '✓ OBJECTIVE COMPLETE';
+        txt.innerHTML = P.mass < nx.thr
+          ? `Grow to <b>${nx.thr}</b> mass → evolve to ${nx.name}`
+          : `Evolution imminent — ${nx.name}`;
+      } else {
+        panel.classList.add('done');
+        head.textContent = '✓ APEX';
+        txt.innerHTML = 'Reach the Singularity';
+      }
+    }
   }
   // CD ring
   cdCtx.clearRect(0,0,26,26);
