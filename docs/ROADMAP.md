@@ -65,8 +65,8 @@ per-actor cooldowns · stacking with caps · pick-1-of-3 card chooser at every
 evolution · category-varied hands · stat folding (spd/decay/dmgTaken/senseMul).
 
 ### Current pool (8 traits / 5 categories) 🟢
-bolt (stacks→spread shot) · gravity_well · venom_tip · membrane · efficient ·
-fins · deepscan.
+bolt (stacks→spread shot) · gravity_well · venom_tip · arms (octopus grasping
+arms: +reach, hauls prey in) · membrane · efficient · fins · deepscan.
 
 ### Planned growth ⚪
 - Migrate legacy stage abilities (dash/sting/whip/echo) into traits — uniform system.
