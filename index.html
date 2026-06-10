@@ -13,6 +13,7 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 /* ── HUD ── */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
 #hudTL{position:absolute;top:18px;left:20px;display:flex;flex-direction:column;gap:5px}
+#phaseLbl{font-family:'Cinzel',serif;font-size:9px;letter-spacing:3.5px;color:rgba(255,255,255,.34);text-transform:uppercase;margin-bottom:2px}
 #stgName{font-family:'Cinzel',serif;font-size:14px;letter-spacing:7px;color:#fff;opacity:.88;text-transform:uppercase;text-shadow:0 0 20px currentColor}
 #massTxt{font-family:'Cormorant Garamond',serif;font-size:12px;letter-spacing:2px;color:rgba(255,255,255,.28);font-style:italic}
 #massTxt b{font-style:normal;font-weight:400;font-size:15px;color:rgba(255,255,255,.62)}
@@ -161,6 +162,7 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 
 <div id="hud">
   <div id="hudTL">
+    <div id="phaseLbl">PHASE I · EMERGENCE</div>
     <div id="stgName">MOTE</div>
     <div id="massTxt"><b id="massV">10</b>&thinsp;mass</div>
     <div id="evoBarWrap"><div id="evoBar"></div></div>
@@ -307,6 +309,12 @@ const PHASES = [
   { name: 'PHASE III · SUPERORGANISM', first: 5, c: '#5AC8FF', sub: 'One body is no longer enough.' },
 ];
 function phaseStartingAt(stgIdx) { return PHASES.find(p => p.first === stgIdx) || null; }
+// The phase the player is currently inside (the last phase whose first ≤ stg).
+function phaseOf(stgIdx) {
+  let cur = PHASES[0];
+  for (const p of PHASES) if (p.first <= stgIdx) cur = p;
+  return cur;
+}
 
 // obj.kind drives the objective engine: 'eat' | 'explore' | 'precision' |
 // 'apex' | 'territory' | 'critical'. objN = target count.
@@ -437,6 +445,8 @@ function init() {
   beacons = [{x:0,y:-1400},{x:0,y:1400},{x:1400,y:0},{x:-1400,y:0}].map(p=>({...p,r:14}));
   anoms = []; anomCd = 5000;  // first anomaly appears ~5s after start
   titanPhase = 0; titanEchoT = 0; titanColossusShown = false; viewR = 2200;
+  annQ = []; annCur = null; annT = 0; annHold = 0;
+  try { document.getElementById('evoAnn').style.opacity = '0'; } catch(e) {}
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false; plantRootT = 0;
   patches = []; hives = [];
   objProg = 0; domSites = []; detritus = []; webs = []; resetSpeciesGenes();
@@ -1136,9 +1146,11 @@ function beginGame() {
   if (fl) { fl.style.transition='opacity 0s'; fl.style.background='#fff'; fl.style.opacity='.42';
     setTimeout(() => { fl.style.transition='opacity 1.2s'; fl.style.opacity='0'; }, 40); }
 
-  // Open the spine immediately: name the phase, then the first objective.
-  setTimeout(() => announce('PHASE I · EMERGENCE', '#52FFCA', 'Life learns to survive.', 3600), 2200);
-  setTimeout(announceObjective, 6200);
+  // Open the spine: the story begins in order — emergence flash, then the phase
+  // card, then the first mission. The beat queue spaces them automatically.
+  annHold = 2400;   // let the white emergence flash land first
+  announce('PHASE I · EMERGENCE', '#52FFCA', 'Life learns to survive.', 3600);
+  announceObjective();
 
   // Emergence burst — staggered shockwaves so it feels like genesis, not a click.
   // Shake reduced from 6/360 to 4/220 to keep player visually anchored.
@@ -1178,12 +1190,32 @@ function ring(x, y, c, rad, n=12) {
   }
 }
 function fTxt(x, y, t, c) { if (txts.length<30) txts.push({x,y,t,c,life:900,ml:900}); }
-// Centre-screen announcement banner — reuses the evolution announce box for any
-// titled callout (stage phases, system unlocks, etc.).
+// ═══════════════════════════════════════════
+// NARRATIVE BEAT QUEUE — the story arrives in ORDER, never as collisions.
+// Every titled callout (stage name, phase card, tutorials, objective) goes
+// through one queue: beats play one at a time with a breath between them, and
+// the queue HOLDS while the adaptation-card overlay covers the screen, so the
+// evolution ceremony reads: stage name → phase card → choose adaptation →
+// objective. (Previously these were racing setTimeouts overwriting one banner.)
+// ═══════════════════════════════════════════
+let annQ = [], annCur = null, annT = 0, annHold = 0;
 function announce(title, color, sub, dur=2600) {
-  const eT=document.getElementById('evoT'), eS=document.getElementById('evoS'), eA=document.getElementById('evoAnn');
-  eT.textContent=title; eT.style.color=color; eS.textContent=sub||'';
-  eA.style.opacity='1'; setTimeout(()=>{eA.style.opacity='0';}, dur);
+  if (annQ.length >= 5) annQ.shift();          // never build an unpayable backlog
+  annQ.push({ title, color, sub: sub || '', dur });
+}
+function processAnnounce(dt) {
+  const eA = document.getElementById('evoAnn');
+  if (annCur) {
+    annT -= dt;
+    if (annT <= 0) { eA.style.opacity='0'; annCur=null; annHold=550; }  // breath between beats
+    return;
+  }
+  if (annHold > 0) { annHold -= dt; return; }
+  if (adaptOpen || !annQ.length) return;       // hold the story while a choice is up
+  annCur = annQ.shift(); annT = annCur.dur;
+  const eT=document.getElementById('evoT'), eS=document.getElementById('evoS');
+  eT.textContent=annCur.title; eT.style.color=annCur.color; eS.textContent=annCur.sub;
+  eA.style.opacity='1';
 }
 function shk(i, d) {
   // Hard-cap shake intensity at 5px so the player never appears to leap out of
@@ -2129,7 +2161,8 @@ function doMitosis() {
   ring(P.x, P.y, '#9CF0FF', P.r * 2.2, 30);
   shk(9, 600);
   try { sfxEvo(); audioBend(5, 1.6); } catch (e) {}
-  announce('MITOSIS', '#9CF0FF', 'You are a swarm now. Steer the cloud; graze the deep.', 4200);
+  announce('MITOSIS', '#9CF0FF', 'One becomes many.', 2600);
+  announce('PHASE IV · COLONY', '#FFD860', 'Steer the cloud. Grow by division. Spread by hive.', 4200);
 }
 
 // ── Colony shapes (Step 3: shape = ability) ──────────────────────────────────
@@ -2799,13 +2832,14 @@ function checkEvo() {
     const fl=document.getElementById('flash');
     fl.style.background=`radial-gradient(circle,${s.c.pri}40 0%,transparent 68%)`;
     fl.style.opacity='1'; setTimeout(()=>fl.style.opacity='0',500);
-    document.getElementById('evoT').textContent=s.name; document.getElementById('evoT').style.color=s.c.pri;
-    document.getElementById('evoS').textContent=s.desc;
-    const ea=document.getElementById('evoAnn'); ea.style.opacity='1'; setTimeout(()=>ea.style.opacity='0',2400);
-    burst(P.x,P.y,s.c.pri,45,5); ring(P.x,P.y,'#fff',P.r*2,18); shk(8,400); sfxEvo();
-    // Phase boundary? Give it a bigger beat shortly after the stage announce.
+    // ── THE EVOLUTION CEREMONY, in deliberate order via the beat queue:
+    //    1. the new NAME  →  2. the PHASE card (at boundaries)  →
+    //    3. the adaptation CHOICE (cards open after the banners breathe)  →
+    //    4. the new OBJECTIVE (announced after the card is picked).
+    announce(s.name, s.c.pri, s.desc, 2400);
     const ph = phaseStartingAt(P.stg);
-    if (ph) setTimeout(() => announce(ph.name, ph.c, ph.sub, 4200), 2800);
+    if (ph) announce(ph.name, ph.c, ph.sub, 4000);
+    burst(P.x,P.y,s.c.pri,45,5); ring(P.x,P.y,'#fff',P.r*2,18); shk(8,400); sfxEvo();
     setStageAudio(P.stg);
     if(P.stg>=2) spawn('hunter',3);
     if(P.stg>=3){spawn('phantom',2);spawn('grazer',5);if(Math.random()<.5)spawn('echo',1);}
@@ -2815,26 +2849,17 @@ function checkEvo() {
     if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);spawn('grazer',3);}
     if(P.stg>=5) spawn('behemoth',2);
 
-    // ── Adaptation choice: a beat after the evolution lands, offer a hand of
-    //    trait cards. Skipped in the micro/swarm branch (it has its own systems). ──
+    // ── 3. Adaptation choice — cards open after the banners have breathed:
+    //    stage beat (2400+550) plus the phase card (4000+550) at boundaries.
     if (P.stg >= 1 && microMode === 'single') {
-      setTimeout(() => { if (!paused && !introActive && microMode === 'single') openAdapt(P); }, 1200);
+      const cardDelay = ph ? 7600 : 3100;
+      setTimeout(() => { if (!paused && !introActive && microMode === 'single') openAdapt(P); }, cardDelay);
     }
 
-    // ── Radar unlocks at Drifter (stg=1). Show a second tutorial panel 2.6s
-    //    after the stage announcement fades, explaining what just appeared. ──
+    // ── Radar unlocks at Drifter — queued, so it follows the ceremony in order.
     if (P.stg === 1 && !radarTutorialShown) {
       radarTutorialShown = true;
-      setTimeout(() => {
-        const eT = document.getElementById('evoT');
-        const eS = document.getElementById('evoS');
-        const eAnn = document.getElementById('evoAnn');
-        eT.textContent = 'RADAR ONLINE';
-        eT.style.color = '#14D0FF';
-        eS.textContent = 'Antennae sense prey, predators, and precision strikes.';
-        eAnn.style.opacity = '1';
-        setTimeout(() => { eAnn.style.opacity = '0'; }, 3200);
-      }, 2700);
+      announce('RADAR ONLINE', '#14D0FF', 'Antennae sense prey, predators, and precision strikes.', 3000);
     }
   }
 }
@@ -2979,12 +3004,7 @@ function collide(dt) {
     // First-time tutorial
     if (!frenzyTutorialShown) {
       frenzyTutorialShown = true;
-      document.getElementById('evoT').textContent = 'FEEDING FRENZY';
-      document.getElementById('evoT').style.color = '#40c8f0';
-      document.getElementById('evoS').textContent = 'Food spirals toward you. Eat fast. Each kill extends the frenzy.';
-      const ea = document.getElementById('evoAnn');
-      ea.style.opacity = '1';
-      setTimeout(() => { ea.style.opacity = '0'; }, 3200);
+      announce('FEEDING FRENZY', '#40c8f0', 'Food spirals toward you. Eat fast. Each kill extends the frenzy.', 3000);
     }
   }
   if (frenzy) {
@@ -4567,6 +4587,11 @@ function updateHUD() {
   document.getElementById('stgName').textContent =
     microMode === 'swarm' ? ('COLONY · ' + (COLONY[colonyShape]||COLONY.swarm).label)
     : (P.stg===5) ? (titanPhase ? 'TITAN · COLOSSUS' : 'TITAN · AWAKENING') : s.name;
+  // Persistent place-in-the-journey: which PHASE of the arc you're living.
+  document.getElementById('phaseLbl').textContent =
+    microMode === 'swarm'
+      ? (colonyTier >= 2 ? 'PHASE V · CIVILIZATION' : 'PHASE IV · COLONY')
+      : phaseOf(P.stg).name;
   // Morph control is only meaningful as a swarm.
   document.getElementById('morphBtn').classList.toggle('on', microMode === 'swarm');
   // Bud-hive button: visible as a swarm; dimmed until you can afford it.
@@ -4810,6 +4835,7 @@ function loop(ts) {
   ecoCollide();
   updateDetritus(dt);   // the living economy
   updateWebs(dt);       // spider silk snares
+  processAnnounce(dt);  // narrative beats play in order, one at a time
   updateDomSites(dt);   // PRIMORDIAL territory objective
 
   // Camera — zoom adapts to actual screen size so phones and tablets show
