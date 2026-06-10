@@ -173,7 +173,7 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 </div>
 
 <button id="pBtn">⏸</button>
-<button id="cheatBtn" title="+100 mass (dev)">+100</button>
+<button id="cheatBtn" title="dev: complete objective + advance a stage">▶▶ SKIP</button>
 <button id="morphBtn" title="Cycle colony shape">◇ MORPH</button>
 <button id="budBtn" title="Bud a satellite hive">⬡ BUD HIVE</button>
 <div id="pMenu">
@@ -985,20 +985,30 @@ document.getElementById('restartB').onclick= () => { paused=false; document.getE
 document.getElementById('muteB').onclick   = () => setMute(!muted);
 
 // Dev cheat — repeatable +100 mass to skip ahead and test later stages
+// DEV: advance a whole stage in one tap so adaptations can be reviewed. Evolution
+// now gates on objective AND mass, so the old +100 button couldn't cross stages.
+// This completes the current objective, grants enough mass to clear the next
+// threshold, then evolves. In colony mode (no stages) it pumps cells instead.
 document.getElementById('cheatBtn').onclick = () => {
   if (paused || introActive) return;
-  // In colony mode P.mass is recomputed from cells each frame, so adding to it
-  // does nothing — distribute the bonus across the cells instead.
-  if (microMode === 'swarm' && cells.length) {
-    const per = 100 / cells.length;
-    for (const c of cells) { c.mass += per; c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26); }
-  } else {
-    P.mass += 100;
+
+  if (microMode === 'swarm') {
+    // Colony: no stage ladder — feed the cells generously and bud-enable.
+    if (cells.length) { const per = 600 / cells.length; for (const c of cells) { c.mass += per; c.r = cl(3.4 + Math.sqrt(c.mass) * .5, 3.4, 26); } }
+    burst(P.x, P.y, '#FFD700', 16, 2.6); fTxt(P.x, P.y - 28, '+600 colony', '#FFD700'); sfxEat();
+    return;
   }
+
+  // Complete whatever objective the current stage asks for.
+  const o = objDef();
+  if (o) objProg = o.n;
+  if (P.stg === 4) for (const s of domSites) s.claimed = true;   // dominion sites
+  // Grant enough mass to clear the next threshold (or a big lump at apex).
+  const nx = STAGES[P.stg + 1];
+  P.mass = nx ? Math.max(P.mass, nx.thr + 5) : P.mass + 1000;
   score += 50;
-  burst(P.x, P.y, '#FFD700', 12, 2.2);
-  ring(P.x, P.y, '#FFD700', P.r * 2.2, 14);
-  fTxt(P.x, P.y - 28, '+100', '#FFD700');
+  burst(P.x, P.y, '#FFD700', 18, 3); ring(P.x, P.y, '#FFD700', P.r * 2.4, 16);
+  fTxt(P.x, P.y - 28, nx ? '▶▶ ' + nx.name : '+1000', '#FFD700');
   sfxEat();
   checkEvo();
 };
@@ -1269,6 +1279,7 @@ function findOrgPrey(o) {
 function aiOrg(o, dt) {
   const T=ORGS[o.type], dist=dst(P,o);
   const smaller=canEat(o), bigger=isPred(o);
+  if (o._grabbed) o._grabbed = Math.max(0, o._grabbed - dt*.004);   // arm-grab flag fades
   // Genome modulation: spd gene quickens the body; wary gene widens flight distance.
   const g = o.gen || { spd:1, size:1, wary:1 };
   const spd=T.spd*g.spd*(o.stunT>0?.15:1);
@@ -1628,12 +1639,67 @@ const TRAITS = {
     desc:'Sharper senses. Radar range extends.',
     mod(a, st) { st.senseMul *= (1 + .25 * (a.traitLv.deepscan || 1)); },
   },
+
+  // ── ACQUISITION: octopus arms. Grows grasping tentacles that extend your eat
+  //    reach AND haul nearby edible prey toward your maw. Each stack = +2 arms,
+  //    more reach, stronger pull. The classic octopus "arms grab more" fantasy.
+  arms: {
+    id:'arms', name:'Grasping Arms', cat:'acquisition', max:3,
+    desc:'Octopus arms. Longer reach; they haul prey into your grasp.',
+    mod(a, st) { st.reach *= (1 + .35 * (a.traitLv.arms || 1)); },   // +35% eat reach per stack
+    onTick(a, dt) {
+      const lv = a.traitLv.arms || 1;
+      const grip = a.r * (1.8 + lv * 0.9);      // reach of the arms
+      for (const o of gNear(a.x, a.y, grip)) {
+        const dd = dst(a, o); if (dd < a.r || dd > grip) continue;
+        if (o.r >= a.r * 0.95) continue;        // can only grab things you could eat
+        const pull = (.12 + lv * .06) * (1 - dd/grip);
+        const ga = ang(o, a);
+        o.vx += Math.cos(ga) * pull; o.vy += Math.sin(ga) * pull;
+        o._grabbed = 2;                          // renderer draws an arm to it
+      }
+    },
+    draw(a, ts) {
+      const lv = a.traitLv.arms || 1;
+      const nArms = 2 + lv * 2;                  // 4 / 6 / 8 arms
+      const reach = a.r * (1.8 + lv * 0.9);
+      cx.save(); cx.lineCap = 'round';
+      const colr = stg().c.pri;
+      // Idle arms fan out behind/around the body, undulating like an octopus.
+      for (let i = 0; i < nArms; i++) {
+        const base = a.hd + PI + (i - (nArms-1)/2) * (0.55);   // splay behind heading
+        // Does this arm reach for a grabbed target? Find one in its arc.
+        let tgt = null, td = reach;
+        for (const o of gNear(a.x, a.y, reach)) {
+          if (!o._grabbed) continue;
+          const oa = ang(a, o), df = Math.abs(Math.atan2(Math.sin(oa-base), Math.cos(oa-base)));
+          if (df < 0.9) { const dd = dst(a,o); if (dd < td) { td = dd; tgt = o; } }
+        }
+        const len = tgt ? td : reach * (.45 + .12*Math.sin(ts*.004 + i));
+        const ang0 = tgt ? ang(a, tgt) : base + Math.sin(ts*.003 + i*1.3) * 0.25;
+        // Three-segment curl
+        const x0 = a.x + Math.cos(a.hd)* -a.r*.2, y0 = a.y + Math.sin(a.hd)* -a.r*.2;
+        const mx = x0 + Math.cos(ang0)*len*.5 + Math.cos(ang0+PI/2)*Math.sin(ts*.005+i)*len*.12;
+        const my = y0 + Math.sin(ang0)*len*.5 + Math.sin(ang0+PI/2)*Math.sin(ts*.005+i)*len*.12;
+        const ex = x0 + Math.cos(ang0)*len, ey = y0 + Math.sin(ang0)*len;
+        cx.strokeStyle = colr;
+        cx.globalAlpha = tgt ? .6 : .35;
+        cx.lineWidth = Math.max(1.2, a.r*.16) * (tgt ? 1.2 : 1);
+        cx.shadowBlur = 6*zm; cx.shadowColor = colr;
+        cx.beginPath(); cx.moveTo(x0, y0); cx.quadraticCurveTo(mx, my, ex, ey); cx.stroke();
+        // suction tip
+        cx.fillStyle = tgt ? '#fff' : colr; cx.globalAlpha = tgt ? .8 : .5;
+        cx.beginPath(); cx.arc(ex, ey, Math.max(1.4, a.r*.09), 0, TAU); cx.fill();
+      }
+      cx.restore(); cx.globalAlpha = 1; cx.shadowBlur = 0;
+    },
+  },
 };
 
 // Fold all passive trait modifiers into a stats object. Callers read these
 // instead of hardcoding, so traits compose. Defaults = identity (no traits → no change).
 function traitStats(a) {
-  const st = { spd: 1, decay: 1, dmgTaken: 1, senseMul: 1, eatRatio: 1 };
+  const st = { spd: 1, decay: 1, dmgTaken: 1, senseMul: 1, eatRatio: 1, reach: 1 };
   for (const id of a.traits) { const t = TRAITS[id]; if (t && t.mod) t.mod(a, st); }
   return st;
 }
@@ -2606,9 +2672,11 @@ function frenzyCap()       { return P.stg >= 3 ? 16000 : 12000; }  // max extend
 // COLLISIONS
 // ═══════════════════════════════════════════
 function collide(dt) {
-  const nearP=gNear(P.x,P.y,Math.max(P.r*2,80));
+  // Grasping Arms extend your effective eat reach via traitStats.reach.
+  const reachStat = traitStats(P).reach;
+  const nearP=gNear(P.x,P.y,Math.max(P.r*2*reachStat,80));
   // Frenzy expands eat range AND relaxes the threshold so you can punch up
-  const eatReachMul = frenzy ? 1.3 : 1.05;
+  const eatReachMul = (frenzy ? 1.3 : 1.05) * reachStat;
   for (let i=nearP.length-1; i>=0; i--) {
     const o=nearP[i]; if(!orgs.includes(o))continue;
     const d=dst(P,o);
