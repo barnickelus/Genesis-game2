@@ -50,7 +50,13 @@
   which triggers the arc's closing beat ("A CIVILIZATION ENDURES / GENESIS").
 - Same loops one level up: couriers → trade routes · hives → settlements ·
   mass → CP. Verified 6/6 (ignite, promote, routes, CP, found, win).
-- ⚪ still deeper: rival civilizations, resource fields, migration, culture.
+- 🟢 RIVAL CIVILIZATION: an opposing red lineage rises across the deep, grows +
+  trades + founds its own settlements and EXPANDS toward you. Where the two meet,
+  settlements CONTEST (bigger population suppresses/shrinks the smaller; crowded
+  towns get abandoned). It's a RACE — first to 30 citizens wins the era; if the
+  rival wins you're "ECLIPSED". HUD shows You/Rival score; minimap tracks red
+  settlements. This is ChatGPT's "ecosystem vs ecosystem" made real. Verified 6/6.
+- ⚪ still deeper: resource fields, migration, culture, diplomacy.
 
 ### PHASE VI — PLANETARY 💭
 - Multiple civilizations compete; climate shifts; species specialize;
