@@ -448,7 +448,7 @@ function init() {
   annQ = []; annCur = null; annT = 0; annHold = 0;
   try { document.getElementById('evoAnn').style.opacity = '0'; } catch(e) {}
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false; plantRootT = 0;
-  patches = []; hives = [];
+  patches = []; hives = []; civ = null;
   objProg = 0; domSites = []; detritus = []; webs = []; resetSpeciesGenes();
   discoveryIdx = 0; colonyTier = 0;
 
@@ -1092,6 +1092,9 @@ document.getElementById('morphBtn').onclick = () => {
 };
 document.getElementById('budBtn').onclick = () => {
   if (paused || introActive) return;
+  // In Phase V the same button FOUNDS a settlement (spends CP); before that it
+  // buds a hive (spends mass). One verb, elevated one level of organization.
+  if (civ) { foundSettlement(); return; }
   if (!budHive()) { fTxt(P.x, P.y - 36, 'need ' + BUD_THRESHOLD + ' mass', 'rgba(255,216,96,.6)'); }
 };
 
@@ -2205,6 +2208,28 @@ const HIVE_MAX = 6;
 const HIVE_COST = 90;       // mass to bud a hive (also its starting size)
 const BUD_THRESHOLD = 220;  // colony mass needed before you can bud
 
+// ═══════════════════════════════════════════
+// PHASE V — CIVILIZATION
+// When the colony summit fires (3 hives), the game ELEVATES one level of
+// organization: hives become SETTLEMENTS that grow population, trade routes link
+// them and yield Civilization-points (CP), and you spend CP to found settlements
+// and seed new life. Same loops — couriers→trade, hives→towns, patches→fields —
+// one level up. The final objective (a thriving network) closes the arc's
+// "ecosystem vs ecosystem → civilization" beat.  (docs/REBUILD_SPINE.md Phase V)
+// ═══════════════════════════════════════════
+let civ = null;   // null until Phase V ignites; then { cp, routes, foundCd, advances, … }
+const CIV_TARGET_POP = 30;        // total settlement population to "thrive" (win the arc)
+const CIV_FOUND_COST = 40;        // CP to found a new settlement at the cursor
+function igniteCivilization() {
+  if (civ) return;
+  civ = { cp: 0, foundCd: 0, pop: 0, peakPop: 0, won: false, t: 0 };
+  // Promote existing hives into settlements (population seeds the new layer).
+  for (const hv of hives) { hv.settlement = true; hv.pop = 3; hv.popT = 0; }
+  announce('PHASE V · CIVILIZATION', '#ffffff',
+    'Your hives are settlements now. Link them into trade. Seed new life.', 5200);
+  announce('◈ OBJECTIVE', '#FFD860', 'Grow a thriving network — 30 citizens across your settlements.', 4600);
+}
+
 // Local-space target slot for cell i of n in the active shape. Scale grows with
 // cell count so bigger colonies sweep wider. x axis = colony facing.
 function colonySlot(i, n, scale) {
@@ -2385,10 +2410,9 @@ function updateSwarm(dt) {
     try { sfxEvo(); } catch(e) {}
   } else if (colonyTier === 1 && hives.length >= 3) {
     colonyTier = 2;
-    announce('PHASE V · CIVILIZATION', '#ffffff',
-      'The colonies begin to signal one another… (the next era — in development)', 6000);
     burst(P.x, P.y, '#fff', 40, 5); ring(P.x, P.y, '#FFD860', P.r * 2.5, 30); shk(6, 400);
     try { sfxEvo(); audioBend(7, 2); } catch(e) {}
+    igniteCivilization();   // Phase V is a real era now — not a teaser
   }
   // Player radius for camera = spread of the cloud
   let spread = 0; for (const c of cells) spread = Math.max(spread, dst({x:cxg,y:cyg}, c));
@@ -2604,6 +2628,105 @@ function drawHives(ts) {
       }
       cx.globalAlpha = 1;
     }
+  }
+}
+
+// ── PHASE V SIM: settlements grow population, trade routes between near
+// settlements yield Civilization-points, you spend CP to found more. ──
+const CIV_ROUTE_RANGE = 760;      // settlements within this distance auto-trade
+function updateCivilization(dt) {
+  if (!civ) return;
+  civ.t += dt; civ.foundCd = Math.max(0, civ.foundCd - dt);
+
+  const settlements = hives.filter(h => h.settlement);
+
+  // 1) Population growth: each settlement grows toward a cap, faster if it's a
+  //    well-fed hub. (Reuses hive mass as "prosperity".)
+  let pop = 0;
+  for (const s of settlements) {
+    s.pop = s.pop || 1; s.popT = (s.popT || 0) + dt;
+    const cap = 4 + Math.floor(s.mass / 60);
+    const interval = 6500 - Math.min(3000, s.tradeLinks ? s.tradeLinks * 700 : 0);  // trade speeds growth
+    if (s.pop < cap && s.popT > interval) { s.popT = 0; s.pop++; burst(s.x, s.y, '#FFE6A0', 6, 1.4); }
+    pop += s.pop;
+  }
+  civ.pop = pop; civ.peakPop = Math.max(civ.peakPop, pop);
+
+  // 2) Trade routes: count links + accrue CP from each active route. Recomputed
+  //    each frame (settlement count is small). Trade also feeds growth above.
+  civ.routes = [];
+  for (const s of settlements) s.tradeLinks = 0;
+  for (let i = 0; i < settlements.length; i++) {
+    for (let j = i + 1; j < settlements.length; j++) {
+      const a = settlements[i], b = settlements[j];
+      const d = dst(a, b);
+      if (d < CIV_ROUTE_RANGE) {
+        civ.routes.push({ a, b, d });
+        a.tradeLinks++; b.tradeLinks++;
+        // CP yield scales with the two settlements' population (commerce).
+        civ.cp += (a.pop + b.pop) * 0.0009 * (dt / 16);
+      }
+    }
+  }
+
+  // 3) Win: a thriving network.
+  if (!civ.won && civ.pop >= CIV_TARGET_POP) {
+    civ.won = true;
+    announce('A CIVILIZATION ENDURES', '#fff', 'Life has organized itself across the deep. The arc is complete.', 7000);
+    announce('GENESIS', '#9CF0FF', 'cell · organism · colony · civilization — and onward, someday, to the stars.', 6000);
+    burst(P.x, P.y, '#fff', 70, 6); ring(P.x, P.y, '#FFD860', 600, 40); shk(8, 700);
+    try { sfxEvo(); audioBend(12, 3); } catch(e) {}
+  }
+}
+
+// Found a new settlement at the cursor for CP (Phase V build verb).
+function foundSettlement() {
+  if (!civ || civ.foundCd > 0) return false;
+  if (civ.cp < CIV_FOUND_COST || hives.length >= HIVE_MAX + 4) {
+    fTxt(P.x, P.y - 40, civ.cp < CIV_FOUND_COST ? 'need ' + CIV_FOUND_COST + ' CP' : 'network is full',
+         'rgba(255,216,96,.7)');
+    return false;
+  }
+  civ.cp -= CIV_FOUND_COST; civ.foundCd = 1200;
+  const tx = ptr.on ? ptr.x : P.x + rng(-300, 300), ty = ptr.on ? ptr.y : P.y + rng(-300, 300);
+  hives.push({ x: tx, y: ty, vx: 0, vy: 0, mass: 120, r: 16, ph: rng(0, TAU),
+    target: null, tribute: 0, workers: 0, outT: 0, settlement: true, pop: 2, popT: 0 });
+  burst(tx, ty, '#FFD860', 22, 3); ring(tx, ty, '#FFD860', 60, 16);
+  fTxt(tx, ty - 24, 'SETTLEMENT FOUNDED', '#FFD860');
+  try { sfxEvo(); } catch(e) {}
+  return true;
+}
+
+// ── PHASE V DRAW: trade-route roads between settlements, with traffic motes;
+// settlement population pips; a top banner with CP + population progress. ──
+function drawCivilization(ts) {
+  if (!civ) return;
+  // Trade routes — warm roads with drifting commerce motes both directions.
+  for (const r of civ.routes) {
+    if (!onScr((r.a.x + r.b.x) / 2, (r.a.y + r.b.y) / 2, r.d)) continue;
+    cx.strokeStyle = 'rgba(255,224,150,.16)'; cx.lineWidth = .9;
+    cx.beginPath(); cx.moveTo(r.a.x, r.a.y); cx.lineTo(r.b.x, r.b.y); cx.stroke();
+    // commerce traffic — small motes sliding along the route
+    const n = 3;
+    for (let k = 0; k < n; k++) {
+      const ph = ((ts * .00018) + k / n) % 1;
+      const x = lp(r.a.x, r.b.x, ph), y = lp(r.a.y, r.b.y, ph);
+      const x2 = lp(r.b.x, r.a.x, ph), y2 = lp(r.b.y, r.a.y, ph);
+      cx.fillStyle = 'rgba(255,236,180,.6)';
+      cx.beginPath(); cx.arc(x, y, 1.3, 0, TAU); cx.fill();
+      cx.beginPath(); cx.arc(x2, y2, 1.3, 0, TAU); cx.fill();
+    }
+  }
+  // Settlement population — a ring of pips around each settlement.
+  for (const s of hives) {
+    if (!s.settlement || !onScr(s.x, s.y, s.r * 2.4)) continue;
+    cx.fillStyle = '#FFE6A0'; cx.globalAlpha = .9;
+    const pop = s.pop || 0;
+    for (let k = 0; k < pop; k++) {
+      const a = -PI / 2 + (k / Math.max(8, pop)) * TAU;
+      cx.beginPath(); cx.arc(s.x + Math.cos(a) * (s.r + 8), s.y + Math.sin(a) * (s.r + 8), 1.6, 0, TAU); cx.fill();
+    }
+    cx.globalAlpha = 1;
   }
 }
 
@@ -4598,9 +4721,15 @@ function updateHUD() {
   const budB = document.getElementById('budBtn');
   budB.classList.toggle('on', microMode === 'swarm');
   if (microMode === 'swarm') {
-    const total = cells.reduce((a,c)=>a+c.mass,0);
-    budB.classList.toggle('disabled', total < BUD_THRESHOLD || hives.length >= HIVE_MAX);
-    budB.textContent = hives.length ? `⬡ BUD HIVE (${hives.length})` : '⬡ BUD HIVE';
+    if (civ) {
+      // Phase V: the button founds settlements with CP.
+      budB.classList.toggle('disabled', civ.cp < CIV_FOUND_COST);
+      budB.textContent = `⬡ FOUND · ${Math.floor(civ.cp)}/${CIV_FOUND_COST} CP`;
+    } else {
+      const total = cells.reduce((a,c)=>a+c.mass,0);
+      budB.classList.toggle('disabled', total < BUD_THRESHOLD || hives.length >= HIVE_MAX);
+      budB.textContent = hives.length ? `⬡ BUD HIVE (${hives.length})` : '⬡ BUD HIVE';
+    }
   }
   document.getElementById('stgName').style.color=s.c.pri;
   document.getElementById('stgName').style.textShadow=`0 0 14px ${s.c.pri}`;
@@ -4646,6 +4775,8 @@ function updateHUD() {
       panel.classList.add('on');
       if (colonyTier === 0)      { panel.classList.remove('done'); head.textContent='◈ OBJECTIVE'; txt.innerHTML = `Grow the colony — <b>${cells.length} / 60</b> cells`; }
       else if (colonyTier === 1) { panel.classList.remove('done'); head.textContent='◈ OBJECTIVE'; txt.innerHTML = `Establish hives — <b>${hives.length} / 3</b>`; }
+      else if (civ && civ.won)   { panel.classList.add('done');    head.textContent='✓ CIVILIZATION ENDURES'; txt.innerHTML = `A thriving network — <b>${civ.pop}</b> citizens`; }
+      else if (civ)              { panel.classList.remove('done'); head.textContent='◈ PHASE V · CIVILIZATION'; txt.innerHTML = `Grow a thriving network — <b>${civ.pop} / ${CIV_TARGET_POP}</b> citizens · ${Math.floor(civ.cp)} CP · ${civ.routes?civ.routes.length:0} routes`; }
       else                       { panel.classList.add('done');    head.textContent='✓ PHASE V NEARS'; txt.innerHTML = 'The colonies signal one another…'; }
     } else {
       const o = objDef();
@@ -4882,7 +5013,7 @@ function loop(ts) {
   // colony has somewhere to GO and morph choice matters: dart across the void,
   // then swarm/filament/plant to harvest. Patches drift, deplete as eaten, and
   // new ones spawn at a distance so there's always a next destination.
-  if (microMode === 'swarm') { updateColonyPatches(dt); updateHives(dt); }
+  if (microMode === 'swarm') { updateColonyPatches(dt); updateHives(dt); updateCivilization(dt); }
 
   // ── Audio choreography: threat layer swells when a real predator is close ──
   {
@@ -4949,6 +5080,7 @@ function loop(ts) {
   // Micro branch: the swarm replaces the single-body render once mitosis fires.
   if (microMode === 'swarm') {
     try { drawColonyPatches(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
+    try { drawCivilization(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
     try { drawHives(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
     try { drawSwarm(ts); } catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   } else {

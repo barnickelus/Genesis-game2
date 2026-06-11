@@ -41,12 +41,16 @@
 | Rocks/reefs terrain | ⚪ | hide-in cover, prey attractor, hive anchor, camouflage formation |
 | Illusionary prey structures | ⚪ | prey flocks forming rug-like shapes — beauty + bait |
 
-### PHASE V — CIVILIZATION (legacy) ⚪ ← the next major build
-- Colonies become intelligent **settlements**; the food loops become resource
-  loops, migration routes, territory.
-- "Colonies begin to signal one another…" — same systems, one level up:
-  couriers → trade routes · hives → towns · patches → resource fields.
-- Per ChatGPT feedback + user's year-long vision: this is the missing phase.
+### PHASE V — CIVILIZATION (legacy) 🟢 BUILT
+- Ignites at the colony summit (3 hives): hives become **SETTLEMENTS** with
+  growing population; settlements within range auto-form **trade routes** that
+  yield Civilization-points (CP); the BUD button becomes **FOUND** (spend CP to
+  plant a new settlement at the cursor). Trade also speeds population growth.
+- Objective: grow a thriving network — **30 citizens** across your settlements —
+  which triggers the arc's closing beat ("A CIVILIZATION ENDURES / GENESIS").
+- Same loops one level up: couriers → trade routes · hives → settlements ·
+  mass → CP. Verified 6/6 (ignite, promote, routes, CP, found, win).
+- ⚪ still deeper: rival civilizations, resource fields, migration, culture.
 
 ### PHASE VI — PLANETARY 💭
 - Multiple civilizations compete; climate shifts; species specialize;
