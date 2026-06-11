@@ -448,7 +448,7 @@ function init() {
   annQ = []; annCur = null; annT = 0; annHold = 0;
   try { document.getElementById('evoAnn').style.opacity = '0'; } catch(e) {}
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false; plantRootT = 0;
-  patches = []; hives = []; civ = null;
+  patches = []; hives = []; civ = null; rival = null;
   objProg = 0; domSites = []; detritus = []; webs = []; resetSpeciesGenes();
   discoveryIdx = 0; colonyTier = 0;
 
@@ -2218,16 +2218,28 @@ const BUD_THRESHOLD = 220;  // colony mass needed before you can bud
 // "ecosystem vs ecosystem → civilization" beat.  (docs/REBUILD_SPINE.md Phase V)
 // ═══════════════════════════════════════════
 let civ = null;   // null until Phase V ignites; then { cp, routes, foundCd, advances, … }
+let rival = null; // rival civilization — the opposition that makes Phase V a contest
 const CIV_TARGET_POP = 30;        // total settlement population to "thrive" (win the arc)
 const CIV_FOUND_COST = 40;        // CP to found a new settlement at the cursor
+const RIVAL_COLOR = '#FF5A78';
 function igniteCivilization() {
   if (civ) return;
-  civ = { cp: 0, foundCd: 0, pop: 0, peakPop: 0, won: false, t: 0 };
+  civ = { cp: 0, foundCd: 0, pop: 0, peakPop: 0, won: false, lost: false, t: 0 };
   // Promote existing hives into settlements (population seeds the new layer).
   for (const hv of hives) { hv.settlement = true; hv.pop = 3; hv.popT = 0; }
+  // ── A RIVAL CIVILIZATION rises across the deep: it founds settlements, builds
+  //    its own trade network, expands toward you, and races you to the goal. ──
+  rival = { settlements: [], cp: 0, pop: 0, foundCd: 8000, routes: [], won: false };
+  const ra = rng(0, TAU), rd = 2200;
+  const ox = P.x + Math.cos(ra) * rd, oy = P.y + Math.sin(ra) * rd;   // homeland away from you
+  for (let i = 0; i < 2; i++) {
+    rival.settlements.push({ x: ox + rng(-220, 220), y: oy + rng(-220, 220),
+      pop: 3, popT: 0, r: 16, ph: rng(0, TAU), tradeLinks: 0 });
+  }
   announce('PHASE V · CIVILIZATION', '#ffffff',
     'Your hives are settlements now. Link them into trade. Seed new life.', 5200);
-  announce('◈ OBJECTIVE', '#FFD860', 'Grow a thriving network — 30 citizens across your settlements.', 4600);
+  announce('A RIVAL STIRS', RIVAL_COLOR, 'Another lineage builds across the deep. Outgrow it — or be eclipsed.', 4400);
+  announce('◈ OBJECTIVE', '#FFD860', 'Reach 30 citizens before the rival does.', 4600);
 }
 
 // Local-space target slot for cell i of n in the active shape. Scale grows with
@@ -2669,13 +2681,73 @@ function updateCivilization(dt) {
     }
   }
 
-  // 3) Win: a thriving network.
-  if (!civ.won && civ.pop >= CIV_TARGET_POP) {
+  // 3) Win: a thriving network — but the rival is racing for the same prize.
+  if (!civ.won && !civ.lost && civ.pop >= CIV_TARGET_POP) {
     civ.won = true;
-    announce('A CIVILIZATION ENDURES', '#fff', 'Life has organized itself across the deep. The arc is complete.', 7000);
+    announce('A CIVILIZATION ENDURES', '#fff', 'You outgrew the rival. Life has organized itself across the deep.', 7000);
     announce('GENESIS', '#9CF0FF', 'cell · organism · colony · civilization — and onward, someday, to the stars.', 6000);
     burst(P.x, P.y, '#fff', 70, 6); ring(P.x, P.y, '#FFD860', 600, 40); shk(8, 700);
     try { sfxEvo(); audioBend(12, 3); } catch(e) {}
+  }
+
+  updateRival(dt, settlements);
+}
+
+// ── THE RIVAL CIVILIZATION ──────────────────────────────────────────────────
+// An opposing lineage with the same loops: its settlements grow + trade, it
+// founds new ones, and it EXPANDS toward you. Where the two civilizations'
+// settlements overlap, they CONTEST — the larger population pressures the smaller
+// (slows its growth, can shrink it). First to CIV_TARGET_POP wins the era.
+const RIVAL_FOUND_INTERVAL = 11000;
+const CONTEST_RANGE = 280;
+function updateRival(dt, mySettlements) {
+  if (!rival || civ.won || civ.lost) return;
+  const R = rival.settlements;
+
+  // Growth + internal trade (cheap; small N).
+  rival.routes = [];
+  for (const s of R) s.tradeLinks = 0;
+  for (let i = 0; i < R.length; i++) for (let j = i+1; j < R.length; j++) {
+    if (dst(R[i], R[j]) < CIV_ROUTE_RANGE) { rival.routes.push({a:R[i], b:R[j]}); R[i].tradeLinks++; R[j].tradeLinks++; rival.cp += (R[i].pop+R[j].pop)*0.0009*(dt/16); }
+  }
+  let rpop = 0;
+  for (const s of R) {
+    s.popT = (s.popT||0) + dt; s.ph += dt*.002;
+    const interval = 6500 - Math.min(3000, s.tradeLinks*700);
+    // Contest: a bigger nearby ENEMY (your) settlement suppresses this one.
+    let pressure = 0;
+    for (const m of mySettlements) { if (dst(s, m) < CONTEST_RANGE) pressure += (m.pop - s.pop); }
+    if (s.pop < (4 + 6) && s.popT > interval && pressure <= 0) { s.popT = 0; s.pop++; }
+    else if (pressure > 2 && s.popT > interval) { s.popT = 0; s.pop = Math.max(1, s.pop - 1); }   // pushed back
+    rpop += s.pop;
+  }
+  rival.pop = rpop;
+
+  // Expansion: periodically found a new settlement, biased toward the contested
+  // frontier (between rival's centroid and yours) so it pushes into your space.
+  rival.foundCd -= dt;
+  if (rival.foundCd <= 0 && rival.cp >= CIV_FOUND_COST && R.length < 8) {
+    rival.foundCd = RIVAL_FOUND_INTERVAL; rival.cp -= CIV_FOUND_COST;
+    let cx0=0, cy0=0; for (const s of R) { cx0+=s.x; cy0+=s.y; } cx0/=R.length; cy0/=R.length;
+    const toYou = ang({x:cx0,y:cy0}, P), reach = rng(380, 700);
+    R.push({ x: cx0 + Math.cos(toYou)*reach + rng(-160,160), y: cy0 + Math.sin(toYou)*reach + rng(-160,160),
+      pop: 2, popT: 0, r: 16, ph: rng(0,TAU), tradeLinks: 0 });
+  }
+
+  // Your settlements also push back: contest can shrink a rival town you crowd
+  // (handled above via pressure) — and a rival town with 0 reach to allies and
+  // heavy pressure is abandoned.
+  for (let i = R.length-1; i>=0; i--) {
+    let pressure = 0; for (const m of mySettlements) if (dst(R[i], m) < CONTEST_RANGE) pressure += (m.pop - R[i].pop);
+    if (R[i].pop <= 1 && pressure > 4) { burst(R[i].x, R[i].y, RIVAL_COLOR, 14, 2); R.splice(i,1); }
+  }
+
+  // Rival victory — they thrived first.
+  if (!rival.won && rival.pop >= CIV_TARGET_POP) {
+    rival.won = true; civ.lost = true;
+    announce('THE RIVAL PREVAILS', RIVAL_COLOR, 'Another lineage filled the deep first. Your network endures, but in their shadow.', 7000);
+    announce('GENESIS', '#9CF0FF', 'The arc turns again — there is always another beginning.', 5500);
+    shk(7, 600); try { sfxHurt(); audioBend(-6, 2.5); } catch(e) {}
   }
 }
 
@@ -2727,6 +2799,43 @@ function drawCivilization(ts) {
       cx.beginPath(); cx.arc(s.x + Math.cos(a) * (s.r + 8), s.y + Math.sin(a) * (s.r + 8), 1.6, 0, TAU); cx.fill();
     }
     cx.globalAlpha = 1;
+  }
+
+  // ── THE RIVAL — red settlements, red routes, a red frontier toward you. ──
+  if (rival) {
+    for (const r of rival.routes || []) {
+      cx.strokeStyle = 'rgba(255,90,120,.16)'; cx.lineWidth = .9;
+      cx.beginPath(); cx.moveTo(r.a.x, r.a.y); cx.lineTo(r.b.x, r.b.y); cx.stroke();
+    }
+    for (const s of rival.settlements) {
+      if (!onScr(s.x, s.y, s.r * 2.6)) continue;
+      bioGlow(s.x, s.y, s.r * 2.2, 'rgba(255,90,120,', .4);
+      cx.fillStyle = RIVAL_COLOR; cx.shadowBlur = 7 * zm; cx.shadowColor = RIVAL_COLOR;
+      cx.globalAlpha = .82;
+      cx.beginPath(); cx.arc(s.x, s.y, s.r * (1 + .06 * Math.sin(s.ph)), 0, TAU); cx.fill();
+      cx.shadowBlur = 0;
+      cx.fillStyle = '#ffd0d8'; cx.globalAlpha = .9;
+      const pop = s.pop || 0;
+      for (let k = 0; k < pop; k++) {
+        const a = -PI / 2 + (k / Math.max(8, pop)) * TAU;
+        cx.beginPath(); cx.arc(s.x + Math.cos(a) * (s.r + 8), s.y + Math.sin(a) * (s.r + 8), 1.6, 0, TAU); cx.fill();
+      }
+      cx.globalAlpha = 1;
+    }
+    // Contested zones: where your settlement meets a rival one, a tension ring.
+    for (const m of hives) {
+      if (!m.settlement) continue;
+      for (const s of rival.settlements) {
+        if (dst(m, s) < CONTEST_RANGE && onScr((m.x+s.x)/2,(m.y+s.y)/2, 200)) {
+          const mx=(m.x+s.x)/2, my=(m.y+s.y)/2;
+          cx.strokeStyle = (m.pop >= s.pop) ? 'rgba(255,216,96,.4)' : 'rgba(255,90,120,.4)';
+          cx.lineWidth = 1; cx.globalAlpha = .4 + .25*Math.sin(ts*.006);
+          cx.setLineDash([4,6]); cx.lineDashOffset = -ts*.02;
+          cx.beginPath(); cx.arc(mx, my, 70, 0, TAU); cx.stroke(); cx.setLineDash([]);
+          cx.globalAlpha = 1;
+        }
+      }
+    }
   }
 }
 
@@ -4775,8 +4884,10 @@ function updateHUD() {
       panel.classList.add('on');
       if (colonyTier === 0)      { panel.classList.remove('done'); head.textContent='◈ OBJECTIVE'; txt.innerHTML = `Grow the colony — <b>${cells.length} / 60</b> cells`; }
       else if (colonyTier === 1) { panel.classList.remove('done'); head.textContent='◈ OBJECTIVE'; txt.innerHTML = `Establish hives — <b>${hives.length} / 3</b>`; }
-      else if (civ && civ.won)   { panel.classList.add('done');    head.textContent='✓ CIVILIZATION ENDURES'; txt.innerHTML = `A thriving network — <b>${civ.pop}</b> citizens`; }
-      else if (civ)              { panel.classList.remove('done'); head.textContent='◈ PHASE V · CIVILIZATION'; txt.innerHTML = `Grow a thriving network — <b>${civ.pop} / ${CIV_TARGET_POP}</b> citizens · ${Math.floor(civ.cp)} CP · ${civ.routes?civ.routes.length:0} routes`; }
+      else if (civ && civ.won)   { panel.classList.add('done');    head.textContent='✓ CIVILIZATION ENDURES'; txt.innerHTML = `You prevailed — <b>${civ.pop}</b> citizens`; }
+      else if (civ && civ.lost)  { panel.classList.add('done');    head.textContent='✕ ECLIPSED'; txt.innerHTML = `The rival reached <b>${CIV_TARGET_POP}</b> first.`; }
+      else if (civ)              { panel.classList.remove('done'); head.textContent='◈ PHASE V · RACE THE RIVAL';
+        txt.innerHTML = `You <b style="color:#FFD860">${civ.pop}</b> · Rival <b style="color:#FF5A78">${rival?rival.pop:0}</b> &nbsp;→&nbsp; ${CIV_TARGET_POP} citizens · ${Math.floor(civ.cp)} CP`; }
       else                       { panel.classList.add('done');    head.textContent='✓ PHASE V NEARS'; txt.innerHTML = 'The colonies signal one another…'; }
     } else {
       const o = objDef();
@@ -4890,6 +5001,15 @@ function drawMinimap() {
       mmCtx.beginPath(); mmCtx.moveTo(40,40); mmCtx.lineTo(cl(hx,1,79),cl(hy,1,79)); mmCtx.stroke();
       mmCtx.fillStyle='#FFD860'; mmCtx.shadowBlur=4; mmCtx.shadowColor='#FFD860';
       mmCtx.beginPath(); mmCtx.arc(cl(hx,1,79),cl(hy,1,79),1.8,0,TAU); mmCtx.fill();
+      mmCtx.shadowBlur=0;
+    }
+  }
+  // Rival settlements — red blips, so the frontier is always trackable.
+  if (rival && rival.settlements.length) {
+    for (const s of rival.settlements) {
+      const rx=(s.x-P.x)*sc+40, ry=(s.y-P.y)*sc+40;
+      mmCtx.fillStyle=RIVAL_COLOR; mmCtx.shadowBlur=4; mmCtx.shadowColor=RIVAL_COLOR;
+      mmCtx.beginPath(); mmCtx.arc(cl(rx,1,79),cl(ry,1,79),1.8,0,TAU); mmCtx.fill();
       mmCtx.shadowBlur=0;
     }
   }
