@@ -52,11 +52,19 @@
   mass → CP. Verified 6/6 (ignite, promote, routes, CP, found, win).
 - 🟢 RIVAL CIVILIZATION: an opposing red lineage rises across the deep, grows +
   trades + founds its own settlements and EXPANDS toward you. Where the two meet,
-  settlements CONTEST (bigger population suppresses/shrinks the smaller; crowded
-  towns get abandoned). It's a RACE — first to 30 citizens wins the era; if the
-  rival wins you're "ECLIPSED". HUD shows You/Rival score; minimap tracks red
-  settlements. This is ChatGPT's "ecosystem vs ecosystem" made real. Verified 6/6.
-- ⚪ still deeper: resource fields, migration, culture, diplomacy.
+  settlements CONTEST. It's a RACE to 30 citizens; lose it and you're "ECLIPSED".
+- 🟢 DIRECT CONFLICT + RESOURCE FIELDS:
+  · 5 resource FIELDS scattered between the homelands; the nearest settlement
+    controls one (faster growth + CP dividend). Contested territory worth holding.
+  · SIEGE: lead your swarm cloud onto a rival town — nearby cells drain its
+    population (faster with more cells) until it's RAZED. Razing every rival town
+    is a win.
+  · RAIDS: the rival counters by launching raider parties (red comets) at your
+    weakest settlement, draining a citizen on arrival; an emptied town falls.
+  · HUD shows You/Rival score + fields held + "siege to raze"; world draws field
+    discs (owner-tinted), siege rings, raider comets; minimap tracks red towns.
+  Verified: fields (claim + CP), siege (drain + raze), raids (launch+travel+hit).
+- ⚪ still deeper: migration, culture, diplomacy, multiple rivals.
 
 ### PHASE VI — PLANETARY 💭
 - Multiple civilizations compete; climate shifts; species specialize;

@@ -448,7 +448,7 @@ function init() {
   annQ = []; annCur = null; annT = 0; annHold = 0;
   try { document.getElementById('evoAnn').style.opacity = '0'; } catch(e) {}
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false; plantRootT = 0;
-  patches = []; hives = []; civ = null; rival = null;
+  patches = []; hives = []; civ = null; rival = null; fields = [];
   objProg = 0; domSites = []; detritus = []; webs = []; resetSpeciesGenes();
   discoveryIdx = 0; colonyTier = 0;
 
@@ -2219,9 +2219,12 @@ const BUD_THRESHOLD = 220;  // colony mass needed before you can bud
 // ═══════════════════════════════════════════
 let civ = null;   // null until Phase V ignites; then { cp, routes, foundCd, advances, … }
 let rival = null; // rival civilization — the opposition that makes Phase V a contest
+let fields = [];  // resource fields — controlled territory that boosts growth/CP
 const CIV_TARGET_POP = 30;        // total settlement population to "thrive" (win the arc)
 const CIV_FOUND_COST = 40;        // CP to found a new settlement at the cursor
 const RIVAL_COLOR = '#FF5A78';
+const FIELD_RANGE = 360;          // a settlement within this controls the field
+const SIEGE_RANGE = 240;          // your colony cloud within this drains a rival town
 function igniteCivilization() {
   if (civ) return;
   civ = { cp: 0, foundCd: 0, pop: 0, peakPop: 0, won: false, lost: false, t: 0 };
@@ -2229,16 +2232,24 @@ function igniteCivilization() {
   for (const hv of hives) { hv.settlement = true; hv.pop = 3; hv.popT = 0; }
   // ── A RIVAL CIVILIZATION rises across the deep: it founds settlements, builds
   //    its own trade network, expands toward you, and races you to the goal. ──
-  rival = { settlements: [], cp: 0, pop: 0, foundCd: 8000, routes: [], won: false };
+  rival = { settlements: [], cp: 0, pop: 0, foundCd: 8000, routes: [], won: false, raidCd: 14000, raiders: [] };
   const ra = rng(0, TAU), rd = 2200;
   const ox = P.x + Math.cos(ra) * rd, oy = P.y + Math.sin(ra) * rd;   // homeland away from you
   for (let i = 0; i < 2; i++) {
     rival.settlements.push({ x: ox + rng(-220, 220), y: oy + rng(-220, 220),
       pop: 3, popT: 0, r: 16, ph: rng(0, TAU), tradeLinks: 0 });
   }
+  // ── RESOURCE FIELDS scattered between the two homelands — territory worth
+  //    holding. A settlement within FIELD_RANGE controls it (faster growth + CP). ──
+  fields = [];
+  for (let i = 0; i < 5; i++) {
+    const fa = rng(0, TAU), fd = rng(500, 1900);
+    fields.push({ x: P.x + Math.cos(fa) * fd, y: P.y + Math.sin(fa) * fd,
+      r: rng(120, 190), owner: 0, ph: rng(0, TAU) });   // owner: 0 none · 1 you · 2 rival
+  }
   announce('PHASE V · CIVILIZATION', '#ffffff',
-    'Your hives are settlements now. Link them into trade. Seed new life.', 5200);
-  announce('A RIVAL STIRS', RIVAL_COLOR, 'Another lineage builds across the deep. Outgrow it — or be eclipsed.', 4400);
+    'Settlements, trade, resource fields. Lead your swarm to siege the rival.', 5200);
+  announce('A RIVAL STIRS', RIVAL_COLOR, 'Another lineage builds across the deep. Hold the fields. Raze their towns.', 4400);
   announce('◈ OBJECTIVE', '#FFD860', 'Reach 30 citizens before the rival does.', 4600);
 }
 
@@ -2652,13 +2663,18 @@ function updateCivilization(dt) {
 
   const settlements = hives.filter(h => h.settlement);
 
+  // 0) Resource-field control: whichever side has the nearest settlement within
+  //    FIELD_RANGE owns the field. Owned fields grant their controllers a bonus.
+  updateFields(dt, settlements);
+
   // 1) Population growth: each settlement grows toward a cap, faster if it's a
-  //    well-fed hub. (Reuses hive mass as "prosperity".)
+  //    well-fed hub AND if it controls a resource field nearby.
   let pop = 0;
   for (const s of settlements) {
     s.pop = s.pop || 1; s.popT = (s.popT || 0) + dt;
-    const cap = 4 + Math.floor(s.mass / 60);
-    const interval = 6500 - Math.min(3000, s.tradeLinks ? s.tradeLinks * 700 : 0);  // trade speeds growth
+    const cap = 4 + Math.floor(s.mass / 60) + (s.field ? 3 : 0);
+    let interval = 6500 - Math.min(3000, s.tradeLinks ? s.tradeLinks * 700 : 0);  // trade speeds growth
+    if (s.field) interval *= 0.6;                                                  // field territory speeds it more
     if (s.pop < cap && s.popT > interval) { s.popT = 0; s.pop++; burst(s.x, s.y, '#FFE6A0', 6, 1.4); }
     pop += s.pop;
   }
@@ -2681,6 +2697,33 @@ function updateCivilization(dt) {
     }
   }
 
+  // 2b) Resource fields you control pay a CP dividend.
+  for (const f of fields) if (f.owner === 1) civ.cp += 0.004 * (dt / 16);
+
+  // 2c) SIEGE — lead your swarm cloud onto a rival settlement to drain it. The
+  //    closer/denser your cells, the faster its population falls. This is the
+  //    direct-conflict verb: you don't just outgrow them, you can raze them.
+  if (rival) {
+    for (let i = rival.settlements.length - 1; i >= 0; i--) {
+      const rs = rival.settlements[i];
+      if (dst(P, rs) > SIEGE_RANGE) continue;
+      rs.siegeT = (rs.siegeT || 0) + dt;
+      // count cells actually on the town
+      let near = 0; for (const c of cells) if (dst(c, rs) < SIEGE_RANGE) near++;
+      const drainEvery = Math.max(900, 2600 - near * 18);
+      if (rs.siegeT > drainEvery) {
+        rs.siegeT = 0; rs.pop = Math.max(0, rs.pop - 1);
+        burst(rs.x, rs.y, RIVAL_COLOR, 8, 1.8); shk(1.2, 60);
+        if (rs.pop <= 0) {
+          fTxt(rs.x, rs.y - 24, 'SETTLEMENT RAZED', '#FFD860');
+          burst(rs.x, rs.y, '#fff', 22, 3); ring(rs.x, rs.y, RIVAL_COLOR, 80, 18);
+          rival.settlements.splice(i, 1);
+          try { sfxAnomalyGrab(); } catch(e) {}
+        }
+      }
+    }
+  }
+
   // 3) Win: a thriving network — but the rival is racing for the same prize.
   if (!civ.won && !civ.lost && civ.pop >= CIV_TARGET_POP) {
     civ.won = true;
@@ -2689,8 +2732,31 @@ function updateCivilization(dt) {
     burst(P.x, P.y, '#fff', 70, 6); ring(P.x, P.y, '#FFD860', 600, 40); shk(8, 700);
     try { sfxEvo(); audioBend(12, 3); } catch(e) {}
   }
+  // Total rival collapse is also a win.
+  if (!civ.won && !civ.lost && rival && rival.settlements.length === 0) {
+    civ.won = true;
+    announce('THE RIVAL IS UNMADE', '#fff', 'You razed their every settlement. The deep is yours.', 7000);
+    announce('GENESIS', '#9CF0FF', 'cell · organism · colony · civilization — and onward, someday, to the stars.', 6000);
+    burst(P.x, P.y, '#fff', 70, 6); ring(P.x, P.y, '#FFD860', 600, 40); shk(8, 700);
+    try { sfxEvo(); audioBend(12, 3); } catch(e) {}
+  }
 
   updateRival(dt, settlements);
+}
+
+// Resource-field ownership: nearest settlement within FIELD_RANGE claims it.
+function updateFields(dt, mySettlements) {
+  for (const f of fields) {
+    f.ph += dt * .0015;
+    let myD = 1e9, rvD = 1e9;
+    for (const s of mySettlements) myD = Math.min(myD, dst(f, s));
+    if (rival) for (const s of rival.settlements) rvD = Math.min(rvD, dst(f, s));
+    const prev = f.owner;
+    if (myD < FIELD_RANGE && myD <= rvD) f.owner = 1;
+    else if (rvD < FIELD_RANGE && rvD < myD) f.owner = 2;
+    else f.owner = 0;
+    if (f.owner !== prev && f.owner === 1) { fTxt(f.x, f.y - f.r - 6, 'FIELD CLAIMED', '#FFD860'); ring(f.x, f.y, '#FFD860', f.r, 16); }
+  }
 }
 
 // ── THE RIVAL CIVILIZATION ──────────────────────────────────────────────────
@@ -2734,12 +2800,42 @@ function updateRival(dt, mySettlements) {
       pop: 2, popT: 0, r: 16, ph: rng(0,TAU), tradeLinks: 0 });
   }
 
+  // Resource fields the rival controls boost its growth too (handled by ownership
+  // in updateFields; here we let owned fields lift the rival's effective pop cap).
+  for (const f of fields) if (f.owner === 2) rival.cp += 0.003 * (dt/16);
+
   // Your settlements also push back: contest can shrink a rival town you crowd
   // (handled above via pressure) — and a rival town with 0 reach to allies and
   // heavy pressure is abandoned.
   for (let i = R.length-1; i>=0; i--) {
     let pressure = 0; for (const m of mySettlements) if (dst(R[i], m) < CONTEST_RANGE) pressure += (m.pop - R[i].pop);
     if (R[i].pop <= 1 && pressure > 4) { burst(R[i].x, R[i].y, RIVAL_COLOR, 14, 2); R.splice(i,1); }
+  }
+
+  // ── RAIDS — the rival's direct-conflict verb, the counter to your siege. A
+  //    raider party launches from the rival's nearest town toward your weakest
+  //    settlement; on arrival it drains a citizen and disperses. ──
+  rival.raidCd -= dt;
+  rival.raiders = rival.raiders || [];
+  if (rival.raidCd <= 0 && R.length && mySettlements.length && rival.pop >= 6) {
+    rival.raidCd = 12000 + rng(0, 6000);
+    // weakest target, nearest launcher
+    let tgt=null, tb=1e9; for (const m of mySettlements) if (m.pop < tb) { tb=m.pop; tgt=m; }
+    let src=null, sb=1e9; for (const s of R) { const d=dst(s,tgt); if (d<sb){sb=d;src=s;} }
+    if (tgt && src) rival.raiders.push({ x:src.x, y:src.y, tx:tgt.x, ty:tgt.y, tgt, t:0 });
+  }
+  for (let i = rival.raiders.length-1; i>=0; i--) {
+    const r = rival.raiders[i];
+    r.t += dt; r.x = lp(r.x, r.tx, .04); r.y = lp(r.y, r.ty, .04);
+    if (dst(r, {x:r.tx,y:r.ty}) < 30 || r.t > 9000) {
+      if (r.tgt && hives.includes(r.tgt) && r.tgt.settlement) {
+        r.tgt.pop = Math.max(0, r.tgt.pop - 1);
+        burst(r.tgt.x, r.tgt.y, RIVAL_COLOR, 12, 2.2); shk(2, 90);
+        fTxt(r.tgt.x, r.tgt.y - 22, 'RAIDED', RIVAL_COLOR);
+        if (r.tgt.pop <= 0 && hives.length > 1) { const idx=hives.indexOf(r.tgt); if(idx>=0) hives.splice(idx,1); }
+      }
+      rival.raiders.splice(i, 1);
+    }
   }
 
   // Rival victory — they thrived first.
@@ -2773,6 +2869,22 @@ function foundSettlement() {
 // settlement population pips; a top banner with CP + population progress. ──
 function drawCivilization(ts) {
   if (!civ) return;
+  // Resource fields — soft territory discs, tinted by who controls them.
+  for (const f of fields) {
+    if (!onScr(f.x, f.y, f.r * 1.2)) continue;
+    const col = f.owner === 1 ? '255,216,96' : f.owner === 2 ? '255,90,120' : '150,180,170';
+    const g = cx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
+    g.addColorStop(0, `rgba(${col},${.07 + (f.owner?.05:0)})`); g.addColorStop(1, `rgba(${col},0)`);
+    cx.fillStyle = g; cx.globalAlpha = .85 + .15*Math.sin(f.ph);
+    cx.beginPath(); cx.arc(f.x, f.y, f.r, 0, TAU); cx.fill();
+    // boundary ring + a small ⬡ resource glyph at center
+    cx.globalAlpha = f.owner ? .4 : .2; cx.strokeStyle = `rgb(${col})`; cx.lineWidth = .8;
+    cx.setLineDash([5,8]); cx.lineDashOffset = -ts*.012;
+    cx.beginPath(); cx.arc(f.x, f.y, f.r, 0, TAU); cx.stroke(); cx.setLineDash([]);
+    cx.globalAlpha = .5; cx.fillStyle = `rgb(${col})`;
+    cx.beginPath(); for (let k=0;k<6;k++){ const a=k/6*TAU+ts*.0006; const x=f.x+Math.cos(a)*6, y=f.y+Math.sin(a)*6; k?cx.lineTo(x,y):cx.moveTo(x,y);} cx.closePath(); cx.fill();
+    cx.globalAlpha = 1;
+  }
   // Trade routes — warm roads with drifting commerce motes both directions.
   for (const r of civ.routes) {
     if (!onScr((r.a.x + r.b.x) / 2, (r.a.y + r.b.y) / 2, r.d)) continue;
@@ -2834,6 +2946,23 @@ function drawCivilization(ts) {
           cx.beginPath(); cx.arc(mx, my, 70, 0, TAU); cx.stroke(); cx.setLineDash([]);
           cx.globalAlpha = 1;
         }
+      }
+    }
+    // Raider parties streaking toward your towns — red comets.
+    for (const r of rival.raiders || []) {
+      cx.fillStyle = '#fff'; cx.shadowBlur = 8*zm; cx.shadowColor = RIVAL_COLOR;
+      cx.globalAlpha = .95; cx.beginPath(); cx.arc(r.x, r.y, 3.4, 0, TAU); cx.fill();
+      cx.fillStyle = RIVAL_COLOR; cx.globalAlpha = .5;
+      cx.beginPath(); cx.arc(r.x, r.y, 6, 0, TAU); cx.fill();
+      cx.shadowBlur = 0; cx.globalAlpha = 1;
+    }
+    // Siege indicator — when your cloud is on a rival town, a draining ring.
+    for (const s of rival.settlements) {
+      if (dst(P, s) < SIEGE_RANGE && onScr(s.x, s.y, SIEGE_RANGE)) {
+        cx.strokeStyle = '#FFD860'; cx.lineWidth = 1.4; cx.globalAlpha = .35 + .3*Math.sin(ts*.01);
+        cx.setLineDash([3,5]); cx.lineDashOffset = ts*.04;
+        cx.beginPath(); cx.arc(s.x, s.y, s.r + 14, 0, TAU); cx.stroke(); cx.setLineDash([]);
+        cx.globalAlpha = 1;
       }
     }
   }
@@ -4887,7 +5016,8 @@ function updateHUD() {
       else if (civ && civ.won)   { panel.classList.add('done');    head.textContent='✓ CIVILIZATION ENDURES'; txt.innerHTML = `You prevailed — <b>${civ.pop}</b> citizens`; }
       else if (civ && civ.lost)  { panel.classList.add('done');    head.textContent='✕ ECLIPSED'; txt.innerHTML = `The rival reached <b>${CIV_TARGET_POP}</b> first.`; }
       else if (civ)              { panel.classList.remove('done'); head.textContent='◈ PHASE V · RACE THE RIVAL';
-        txt.innerHTML = `You <b style="color:#FFD860">${civ.pop}</b> · Rival <b style="color:#FF5A78">${rival?rival.pop:0}</b> &nbsp;→&nbsp; ${CIV_TARGET_POP} citizens · ${Math.floor(civ.cp)} CP`; }
+        const myFields = fields.filter(f=>f.owner===1).length;
+        txt.innerHTML = `You <b style="color:#FFD860">${civ.pop}</b> · Rival <b style="color:#FF5A78">${rival?rival.pop:0}</b> &nbsp;→&nbsp; ${CIV_TARGET_POP} &nbsp;·&nbsp; ${Math.floor(civ.cp)} CP · ${myFields}/${fields.length} fields · siege to raze`; }
       else                       { panel.classList.add('done');    head.textContent='✓ PHASE V NEARS'; txt.innerHTML = 'The colonies signal one another…'; }
     } else {
       const o = objDef();
