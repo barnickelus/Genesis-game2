@@ -55,7 +55,19 @@ prey track your size and killed the sense of growth. Replaced:
 - `transitionBeat(ph, col)` + `converge(x,y,c,n,rad,sp)` helpers; verified clean
   across 6000 frames.
 
-## Future layers (Rebuild II.4+)  ⚪
-- Larger apex fauna for late ORGANISM so there's always something bigger.
+## Rebuild II.4 — larger apex fauna (the ABYSSAL)  🟢
+- **ABYSSAL** — a new late-ORGANISM apex predator, bigger and tougher than the
+  behemoth (mass 300, r 58–92, hp 100, tier 3). A dark deep-sea body with a dorsal
+  spine ridge, a jagged white MAW along its leading edge, a luminous lure on a
+  forward stalk, and a cold eye. It hunts everything up to behemoth/grazer (its
+  `PREY_OF`), patrols a 320px hunt radius, and carries the narrowest weak-spot arc
+  in the game (rear, w 0.55) — the hardest strike, so it stays fearsome until you
+  truly outscale it.
+- Seeded at PRIMORDIAL (stg≥4) and TITAN (stg≥5) via the evolution burst, and held
+  at ~1 by the maintenance loop once you reach its tier — a rare ceiling threat,
+  not a farmable meal. Wired into ORGS / PREY_OF / ECO_HUNT_R / ORG_TIER /
+  COLOR_FAMILY(red) / VULN. Verified clean across 6000 frames.
+
+## Future layers (Rebuild II.5+)  ⚪
 - Continue the character rework upward (polyp, tendril, the apex animals).
 - SAILFISH (pursuit/speed-burst) — last of the lone-predator forks.

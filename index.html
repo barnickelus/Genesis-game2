@@ -355,6 +355,11 @@ const ORGS = {
   // safe meal the mid-game was missing; it is never a threat (low radius ⇒ never a
   // predator) and only ever appears from stage 3 onward (gated in the maintenance loop).
   grazer:   { col:'#7CE8B4', dim:'#1c4636', minR:19,  maxR:26,  spd:.45,  hp:8,  mass:150, beh:'graze',   spW:1600, mx:6              },
+  // ABYSSAL — the late-ORGANISM apex ceiling. Bigger and tougher than the behemoth,
+  // it is the predator that proves you have NOT yet outgrown the deep: a dark hunter
+  // with a luminous lure and a jagged maw. Appears from PRIMORDIAL onward, so there
+  // is always something larger to fear and, once you grow, to conquer. (docs/REBUILD_II.md)
+  abyssal:  { col:'#C81E5A', dim:'#2a041a', minR:58,  maxR:92,  spd:.9,   hp:100, mass:300, beh:'apex',    spW:2400, mx:1              },
 };
 
 const PREY_OF = {
@@ -362,11 +367,12 @@ const PREY_OF = {
   lurker:   ['mote','polyp','tendril','ciliate'],
   phantom:  ['mote','polyp','tendril'],
   behemoth: ['mote','polyp','tendril','hunter','lurker','phantom'],
+  abyssal:  ['polyp','tendril','hunter','lurker','phantom','behemoth','grazer','echo'],
   levia:    ['bloom','mote','diatom','ciliate'],
   tendril:  ['mote','bloom','diatom','ciliate'],
   echo:     ['mote','polyp'],
 };
-const ECO_HUNT_R = { hunter:180, lurker:100, phantom:150, behemoth:250, levia:120, tendril:80, echo:140 };
+const ECO_HUNT_R = { hunter:180, lurker:100, phantom:150, behemoth:250, abyssal:320, levia:120, tendril:80, echo:140 };
 
 // ═══════════════════════════════════════════
 // GAME STATE
@@ -481,7 +487,7 @@ const ORG_TIER = {
   bloom:0, mote:0, polyp:0,                  // microbial drifters
   tendril:1, hunter:1, lurker:1, echo:1,    // small animals
   phantom:2, levia:2, grazer:2,             // large animals
-  behemoth:3,                               // apex
+  behemoth:3, abyssal:3,                     // apex
 };
 // The player's organism tier by stage (CELL→ORGANISM→SUPERORGANISM).
 function playerTier() { return P.stg <= 2 ? 0 : P.stg <= 4 ? 1 : 2; }
@@ -1305,7 +1311,7 @@ const COLOR_FAMILY = {
   bloom:'green', mote:'green',
   polyp:'yellow', lurker:'yellow',
   tendril:'pink', phantom:'pink',
-  hunter:'red', behemoth:'red',
+  hunter:'red', behemoth:'red', abyssal:'red',
   levia:'blue',
   echo:'white',
   grazer:'green',
@@ -1327,6 +1333,7 @@ const VULN = {
   echo:     { ang:PI,   w:0.9  }, // narrow rear seam
   levia:    { ang:PI,   w:1.2  }, // tail flukes
   behemoth: { ang:PI,   w:0.7  }, // tiny apex weakspot
+  abyssal:  { ang:PI,   w:0.55 }, // even narrower — the deep apex, hardest to strike
   grazer:   { ang:0,    w:TAU  }, // omni-edible — it's meant to be a free meal
 };
 
@@ -3317,8 +3324,8 @@ function checkEvo() {
     // NAGA adaptation: hand the player the upgraded frenzy immediately by dropping
     // a pill right beside them, so the new wall-breaking frenzy is felt at once.
     if(P.stg===3 && !frenzy){ pill={x:P.x+rng(-260,260),y:P.y+rng(-260,260),r:9,on:true,cd:0}; }
-    if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);spawn('grazer',3);}
-    if(P.stg>=5) spawn('behemoth',2);
+    if(P.stg>=4){spawn('levia',2);spawn('behemoth',1);spawn('echo',1);spawn('grazer',3);spawn('abyssal',1);}
+    if(P.stg>=5){spawn('behemoth',2);spawn('abyssal',1);}
 
     // ── 3. Adaptation choice — cards open after the banners have breathed:
     //    stage beat (2400+550) plus the phase card (4000+550) at boundaries.
@@ -4114,6 +4121,37 @@ function drawCreature(o, ts) {
       // Trailing feeding fronds
       cx.strokeStyle=col; cx.lineWidth=.6; cx.lineCap='round'; cx.globalAlpha=.16;
       for (let t=0;t<4;t++) { const bx=-r*.2+t*r*.12; let fx=bx,fy=r*.5; cx.beginPath(); cx.moveTo(bx,r*.5); for (let seg=0;seg<4;seg++){ fx+=Math.sin(o.finPh+t+seg*.8)*r*.07; fy+=r*.2; cx.lineTo(fx,fy); } cx.stroke(); }
+      break; }
+
+    case 'abyssal': {
+      // Late-ORGANISM apex — a vast dark body, a luminous lure on a stalk, and a
+      // jagged maw. Reads as something you should fear until you've outgrown it.
+      cx.fillStyle=dim; cx.globalAlpha=.5;
+      cx.beginPath();
+      cx.moveTo(r*1.12,0);
+      cx.quadraticCurveTo(r*.6,-r*.74, -r*.2,-r*.66);
+      cx.quadraticCurveTo(-r*.86,-r*.5, -r*1.0,-r*.14);
+      cx.quadraticCurveTo(-r*1.14,0, -r*1.0,r*.14);
+      cx.quadraticCurveTo(-r*.86,r*.5, -r*.2,r*.66);
+      cx.quadraticCurveTo(r*.6,r*.74, r*1.12,0);
+      cx.fill();
+      // Dorsal ridge of spines
+      cx.fillStyle=col; cx.globalAlpha=.32;
+      for (let i=0;i<5;i++){ const bx=-r*.5+i*r*.3, h=r*(.5-i*.06); cx.beginPath(); cx.moveTo(bx-r*.07,-r*.5); cx.lineTo(bx,-r*.5-h); cx.lineTo(bx+r*.07,-r*.5); cx.fill(); }
+      // The MAW — jagged teeth along the leading edge
+      cx.fillStyle='rgba(255,255,255,.5)'; cx.globalAlpha=.5;
+      const gape=r*.16+Math.sin(o.breathPh)*r*.05;
+      for (let i=0;i<7;i++){ const ty=-r*.32+i*r*.1; cx.beginPath(); cx.moveTo(r*.78,ty); cx.lineTo(r*1.02,ty+r*.03); cx.lineTo(r*.78,ty+gape*.5); cx.fill(); }
+      // Luminous lure on a forward stalk
+      const lx=r*1.0+Math.sin(ts*.002)*r*.12, ly=-r*.5+Math.cos(ts*.0015)*r*.1;
+      cx.strokeStyle=col; cx.lineWidth=.8; cx.globalAlpha=.3;
+      cx.beginPath(); cx.moveTo(r*.4,-r*.4); cx.quadraticCurveTo(r*.9,-r*.6,lx,ly); cx.stroke();
+      cx.fillStyle='#fff'; cx.globalAlpha=.6+.3*Math.sin(ts*.006);
+      cx.beginPath(); cx.arc(lx,ly,r*.09,0,TAU); cx.fill();
+      cx.fillStyle=col; cx.globalAlpha=.3;
+      cx.beginPath(); cx.arc(lx,ly,r*.2,0,TAU); cx.fill();
+      // Cold eye
+      if (r*zm>6){ cx.fillStyle='#fff'; cx.globalAlpha=.7; cx.beginPath(); cx.arc(r*.5,-r*.06,r*.08,0,TAU); cx.fill(); cx.fillStyle='#400018'; cx.globalAlpha=1; cx.beginPath(); cx.ellipse(r*.51,-r*.06,r*.025,r*.06,0,0,TAU); cx.fill(); }
       break; }
 
     default: {
