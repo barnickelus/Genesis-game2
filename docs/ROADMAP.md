@@ -61,6 +61,7 @@
     is a win.
   · RAIDS: the rival counters by launching raider parties (red comets) at your
     weakest settlement, draining a citizen on arrival; an emptied town falls.
+    INTERCEPT: lead your swarm cloud into a raider's path to destroy it first.
   · HUD shows You/Rival score + fields held + "siege to raze"; world draws field
     discs (owner-tinted), siege rings, raider comets; minimap tracks red towns.
   Verified: fields (claim + CP), siege (drain + raze), raids (launch+travel+hit).
@@ -93,9 +94,10 @@ drifting prey — first lone-predator fork) · membrane · efficient · fins · 
 - Sub-trees per archetype: PROJECTILE→spread/pierce/homing · GRAVITY→well/crush/
   singularity · CAMOUFLAGE→ambush/mimic · VENOM→paralysis/necrosis · SPEED→phase/slipstream.
 - Hybrids (gravity+venom = poison well, etc.).
-- **Lone-predator forks (Tier 1, BEFORE colony)**: SPIDER (webs) 🟢 first one in
-  as the `web` trait · CRAB (armor) · MANTIS (camo burst) · SAILFISH (pursuit) ⚪ —
-  signature trait + body per fork.
+- **Lone-predator forks (Tier 1, BEFORE colony)**: SPIDER (webs) 🟢 · MANTIS
+  (camo/ambush) 🟢 `camo` — go still to vanish, strike from hiding for +bonus ·
+  CRAB (armor/crush) 🟢 `carapace` — −damage + eat bigger prey, but slower ·
+  SAILFISH (pursuit) ⚪. Now 11 traits.
 
 ---
 
