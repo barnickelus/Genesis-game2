@@ -1213,6 +1213,31 @@ function ring(x, y, c, rad, n=12) {
   }
 }
 function fTxt(x, y, t, c) { if (txts.length<30) txts.push({x,y,t,c,life:900,ml:900}); }
+// CONVERGE — particles fly INWARD from a ring toward (x,y): an implosion. Used for
+// the cell→organism "knit into a body" transition: scattered cells drawn into one.
+function converge(x, y, c, n=24, rad=140, sp=3) {
+  for (let i=0; i<n && parts.length<240; i++) {
+    const a=(i/n)*TAU + rng(-.12,.12), d=rad*rng(.7,1.15);
+    parts.push({x:x+Math.cos(a)*d, y:y+Math.sin(a)*d,
+                vx:-Math.cos(a)*sp*rng(.7,1.2), vy:-Math.sin(a)*sp*rng(.7,1.2),
+                r:rng(1.5,3.4), life:rng(420,720), ml:720, c, t:'c'});
+  }
+}
+// THE TRANSITION BEAT — bigger than a stage-up, second only to the Singularity.
+// Fires at a PHASE boundary (LEVEL I→II: you knit into a body; II→III handled by
+// the Singularity fork). A staged implosion+bloom that visibly reforms the body.
+function transitionBeat(ph, col) {
+  // 1. the implosion: three waves of cells drawn inward, knitting a single body.
+  converge(P.x, P.y, col, 26, P.r*5+120, 3.2);
+  setTimeout(()=>{ if(!paused) converge(P.x,P.y,col,22,P.r*4+90,2.6); }, 220);
+  setTimeout(()=>{ if(!paused) converge(P.x,P.y,'#fff',18,P.r*3+60,2.0); }, 440);
+  // 2. the bloom: once knit, the new body pulses outward.
+  setTimeout(()=>{ if(!paused){ burst(P.x,P.y,col,52,5.5); ring(P.x,P.y,'#fff',P.r*2.4,22);
+    ring(P.x,P.y,col,P.r*3.6,26); shk(5,520); sfxEvo(); } }, 660);
+  const fl=document.getElementById('flash');
+  if(fl){ fl.style.background=`radial-gradient(circle,${col}55 0%,transparent 72%)`;
+    fl.style.opacity='1'; setTimeout(()=>fl.style.opacity='0',760); }
+}
 // ═══════════════════════════════════════════
 // NARRATIVE BEAT QUEUE — the story arrives in ORDER, never as collisions.
 // Every titled callout (stage name, phase card, tutorials, objective) goes
@@ -3271,10 +3296,21 @@ function checkEvo() {
     //    1. the new NAME  →  2. the PHASE card (at boundaries)  →
     //    3. the adaptation CHOICE (cards open after the banners breathe)  →
     //    4. the new OBJECTIVE (announced after the card is picked).
-    announce(s.name, s.c.pri, s.desc, 2400);
     const ph = phaseStartingAt(P.stg);
-    if (ph) announce(ph.name, ph.c, ph.sub, 4000);
-    burst(P.x,P.y,s.c.pri,45,5); ring(P.x,P.y,'#fff',P.r*2,18); shk(8,400); sfxEvo();
+    // ── LEVEL I→II: the cell→organism TRANSITION. You stop being a single cell and
+    //    KNIT INTO A BODY. A dedicated beat (implosion→bloom) precedes the cards,
+    //    so the most important threshold in the game reads as a true metamorphosis.
+    const isOrganismBirth = (P.stg === 3 && ph);
+    if (isOrganismBirth) {
+      announce('YOU KNIT INTO A BODY', ph.c, 'Scattered cells bind into one. You are no longer a cell — you are an organism.', 3400);
+      announce(s.name, s.c.pri, s.desc, 2400);
+      announce(ph.name, ph.c, ph.sub, 4000);
+      transitionBeat(ph, s.c.pri);
+    } else {
+      announce(s.name, s.c.pri, s.desc, 2400);
+      if (ph) announce(ph.name, ph.c, ph.sub, 4000);
+      burst(P.x,P.y,s.c.pri,45,5); ring(P.x,P.y,'#fff',P.r*2,18); shk(8,400); sfxEvo();
+    }
     setStageAudio(P.stg);
     if(P.stg>=2) spawn('hunter',3);
     if(P.stg>=3){spawn('phantom',2);spawn('grazer',5);if(Math.random()<.5)spawn('echo',1);}
@@ -3287,7 +3323,7 @@ function checkEvo() {
     // ── 3. Adaptation choice — cards open after the banners have breathed:
     //    stage beat (2400+550) plus the phase card (4000+550) at boundaries.
     if (P.stg >= 1 && microMode === 'single') {
-      const cardDelay = ph ? 7600 : 3100;
+      const cardDelay = isOrganismBirth ? 11500 : ph ? 7600 : 3100;
       setTimeout(() => { if (!paused && !introActive && microMode === 'single') openAdapt(P); }, cardDelay);
     }
 

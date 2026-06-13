@@ -44,7 +44,18 @@ prey track your size and killed the sense of growth. Replaced:
   drifting organelles, whipping tail).
 - All render without error; outscale-origins shrinks them as you climb.
 
-## Future layers (Rebuild II.3+)  ⚪
-- A real cell→organism transition beat at the LEVEL I→II boundary (you knit into a body).
+## Rebuild II.3 — the cell→organism transition beat  🟢
+- The LEVEL I→II boundary (entering NAGA) is now a true metamorphosis, not a normal
+  stage-up. A dedicated beat fires: **"YOU KNIT INTO A BODY"** — scattered cells are
+  drawn INWARD (three converging implosion waves via `converge()`), then the new body
+  blooms outward (burst + double ring + shake + evo chord). It is second in weight
+  only to the Singularity, and reads as the moment you stop being a single cell.
+- Sequenced through the beat queue: knit beat → stage name → phase card → adaptation
+  cards (delayed to 11.5s so the ceremony breathes fully before the choice).
+- `transitionBeat(ph, col)` + `converge(x,y,c,n,rad,sp)` helpers; verified clean
+  across 6000 frames.
+
+## Future layers (Rebuild II.4+)  ⚪
 - Larger apex fauna for late ORGANISM so there's always something bigger.
 - Continue the character rework upward (polyp, tendril, the apex animals).
+- SAILFISH (pursuit/speed-burst) — last of the lone-predator forks.
