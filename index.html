@@ -1239,7 +1239,7 @@ function shk(i, d) {
 //   TITAN:        0.88× — bite threshold for sizeable prey; small prey are filter-fed
 //   PRIMORDIAL:   0.90× — apex predator
 const EAT_RATIO = [0.80, 0.80, 0.85, 0.85, 0.90, 0.88];  // idx4 PRIMORDIAL (apex) · idx5 TITAN (filter-feeder)
-function canEat(o) { return o.r < P.r * (EAT_RATIO[P.stg] || 0.80); }
+function canEat(o) { return o.r < P.r * ((EAT_RATIO[P.stg] || 0.80) + (P._crush || 0)); }
 function isPred(o) { return o.r > P.r * 1.2; }
 
 // ═══════════════════════════════════════════
@@ -1398,7 +1398,10 @@ function aiOrg(o, dt) {
   }
 
   let tx=o.x, ty=o.y;
-  const fleeR=smaller ? (100+P.r*2.5)*g.wary : 0;   // wary genes flee earlier
+  // CAMO (mantis): a hidden player is noticed later — prey's flight radius shrinks
+  // toward you the deeper your stealth (P._camo set by the camo trait's onTick).
+  const camoMul = 1 - (P._camo || 0);
+  const fleeR=smaller ? (100+P.r*2.5)*g.wary*camoMul : 0;   // wary genes flee earlier; camo shrinks it
   const huntR=bigger  ? 180+o.r*3   : 0;
 
   // ═══ UTILITY AI (rebuilt) ═══════════════════════════════════════════════
@@ -1565,6 +1568,7 @@ function updateP(dt) {
   traitTick(P, dt);
   updateBreakPressure(dt);
   const tstats = traitStats(P);   // passive trait modifiers (spd/decay/dmgTaken/senseMul)
+  P._crush = tstats.crush;        // cached for canEat() (called many times/frame)
 
   let spd=s.spd*(1+Math.log2(Math.max(1,P.mass))*.08)*tstats.spd;
   if (P.dash) { spd*=2.5; P.dashT-=dt; if(P.dashT<=0)P.dash=false; }
@@ -1821,6 +1825,45 @@ const TRAITS = {
       return true;
     },
   },
+
+  // ── MANTIS (camouflage / ambush) — the second lone-predator fork. Hold still
+  //    to fade from prey's senses; the first strike out of stealth lands a big
+  //    bonus. Rewards patience + positioning over the chase. ──
+  camo: {
+    id:'camo', name:'Chromatophores', cat:'camouflage', max:3,
+    desc:'Go still to vanish from prey. The strike from hiding hits far harder.',
+    onTick(a, dt) {
+      const lv = a.traitLv.camo || 1;
+      const moving = Math.hypot(a.vx, a.vy) > 1.2;
+      a._stealthT = moving ? 0 : Math.min((a._stealthT || 0) + dt, 2000);
+      // 0 → 1 as you stay still; deeper with stacks. Drives flee-radius shrink
+      // (mod, below) + the ambush bonus on the next kill.
+      a._camo = (a._stealthT / 2000) * (0.5 + lv * 0.17);
+    },
+    mod(a, st) { st.camo = 1 - (a._camo || 0); },      // <1 = prey notices you later
+    draw(a, ts) {
+      if (!a._camo || a._camo < 0.15) return;
+      // A shimmer ring that tightens as you vanish — readable stealth feedback.
+      cx.globalAlpha = .25 * a._camo; cx.strokeStyle = '#9affc0';
+      cx.setLineDash([2, 6]); cx.lineDashOffset = ts * .03;
+      cx.beginPath(); cx.arc(a.x, a.y, a.r * (1.5 - a._camo * .5), 0, TAU); cx.stroke();
+      cx.setLineDash([]); cx.globalAlpha = 1;
+    },
+  },
+
+  // ── CRAB (armor / crush) — the tank fork. Heavy plating sharply cuts damage
+  //    taken, and powerful claws let you eat prey closer to your own size. The
+  //    trade: it weighs you down (slower). Stand-and-grind vs hit-and-run. ──
+  carapace: {
+    id:'carapace', name:'Carapace', cat:'defense', max:3,
+    desc:'Crab armor. Shrug off predators and crush larger prey — but move heavier.',
+    mod(a, st) {
+      const lv = a.traitLv.carapace || 1;
+      st.dmgTaken *= (1 - .26 * lv);     // heavy armor (stacks → near-immune)
+      st.crush    += .07 * lv;           // eat prey up to +21% of player size
+      st.spd      *= (1 - .07 * lv);     // the weight of the shell
+    },
+  },
 };
 
 // SPIDER web system — snare prey caught in any web (slow + reel to center),
@@ -1881,7 +1924,7 @@ function drawWebs(ts) {
 // Fold all passive trait modifiers into a stats object. Callers read these
 // instead of hardcoding, so traits compose. Defaults = identity (no traits → no change).
 function traitStats(a) {
-  const st = { spd: 1, decay: 1, dmgTaken: 1, senseMul: 1, eatRatio: 1, reach: 1 };
+  const st = { spd: 1, decay: 1, dmgTaken: 1, senseMul: 1, eatRatio: 1, reach: 1, camo: 1, crush: 0 };
   for (const id of a.traits) { const t = TRAITS[id]; if (t && t.mod) t.mod(a, st); }
   return st;
 }
@@ -2827,6 +2870,14 @@ function updateRival(dt, mySettlements) {
   for (let i = rival.raiders.length-1; i>=0; i--) {
     const r = rival.raiders[i];
     r.t += dt; r.x = lp(r.x, r.tx, .04); r.y = lp(r.y, r.ty, .04);
+    // INTERCEPT: lead your swarm cloud into a raider's path to destroy it before
+    // it lands — the counter to raids (raids were previously unstoppable).
+    if (dst(P, r) < P.r + 80) {
+      burst(r.x, r.y, '#9CF0FF', 14, 2.2); ring(r.x, r.y, '#9CF0FF', 40, 12);
+      fTxt(r.x, r.y - 14, 'RAID REPELLED', '#9CF0FF');
+      try { sfxPrecision(); } catch(e) {}
+      rival.raiders.splice(i, 1); continue;
+    }
     if (dst(r, {x:r.tx,y:r.ty}) < 30 || r.t > 9000) {
       if (r.tgt && hives.includes(r.tgt) && r.tgt.settlement) {
         r.tgt.pop = Math.max(0, r.tgt.pop - 1);
@@ -3262,8 +3313,13 @@ function collide(dt) {
       const T=ORGS[o.type], angleKill = !canEat(o) && !frenzyEdible && canEatAngle(o);
       let gain=killReward(T.mass*(o.massMul||1), o.mhp, P.mass);   // one reward function
       if (angleKill) gain *= 1.6;                              // precision bonus
+      // MANTIS ambush: a strike out of deep stealth pays a big bonus, then the
+      // stealth is spent (camo resets on the kill).
+      let ambush = false;
+      if ((P._camo || 0) > 0.35) { ambush = true; gain *= 1.5 + P._camo; P._stealthT = 0; P._camo = 0; }
       if (frenzy) gain *= frenzyGainMul();  // stage-scaled combo multiplier (up to ~4.7× at NAGA)
       P.mass+=gain; score+=Math.floor(gain*8); streak++; streakT = frenzy ? 1500 : 2500;
+      if (ambush) { ring(o.x,o.y,'#9affc0',o.r*1.8,16); fTxt(o.x,o.y-24,'AMBUSH','#9affc0'); }
       // The Spine: feed the objective engine + the living world.
       objBump('eat');
       if (angleKill) objBump('precision');
