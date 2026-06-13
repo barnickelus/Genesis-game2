@@ -34,8 +34,17 @@ prey track your size and killed the sense of growth. Replaced:
 - 🟢 Prey scale: kill elder-with-player scaling; add tier-based spawn weighting so
   you outscale origins.
 
-## Future layers (Rebuild II.2+)  ⚪
-- Re-skin PHASE I creatures as genuinely microbial (protists, diatoms) so the CELL
-  phase reads cellular, not animal.
-- A real cell→organism transition beat at the Phase I→II boundary (you knit into a body).
+## Rebuild II.2 — microbial LEVEL I + character designs  🟢
+- Two new microbe species so the CELL phase reads cellular, not animal:
+  · DIATOM — glassy faceted silica shell, rotating lattice + bright core (tier 0).
+  · CILIATE — ovoid cell rimmed with beating cilia + contractile vacuole (tier 0).
+  Both omni-edible microbes, schooling, wired into PREY_OF / tiers / families /
+  VULN; ~24+26 seed the opening sea.
+- MOTE reworked from a flat dot into a flagellated cell (membrane, nucleus,
+  drifting organelles, whipping tail).
+- All render without error; outscale-origins shrinks them as you climb.
+
+## Future layers (Rebuild II.3+)  ⚪
+- A real cell→organism transition beat at the LEVEL I→II boundary (you knit into a body).
 - Larger apex fauna for late ORGANISM so there's always something bigger.
+- Continue the character rework upward (polyp, tendril, the apex animals).
