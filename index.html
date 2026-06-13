@@ -336,6 +336,9 @@ const STAGES = [
 // ORGANISM DEFINITIONS
 // ═══════════════════════════════════════════
 const ORGS = {
+  // ── LEVEL I microbes (Rebuild II): a genuine microbial sea for the CELL phase.
+  diatom:   { col:'#7CF2D8', dim:'#10403a', minR:3,   maxR:6,   spd:.06,  hp:1,  mass:6,   beh:'bloom',   spW:520,  mx:30, school:true, schR:80 },
+  ciliate:  { col:'#9CE0FF', dim:'#143040', minR:3,   maxR:6.5, spd:.5,   hp:1,  mass:7,   beh:'drift',   spW:760,  mx:36, school:true, schR:95 },
   bloom:    { col:'#34D898', dim:'#123828', minR:4,   maxR:7,   spd:.04,  hp:1,  mass:8,   beh:'bloom',   spW:500,  mx:12             },
   mote:     { col:'#6AE856', dim:'#1a4212', minR:2.5, maxR:5.5, spd:.25,  hp:1,  mass:5,   beh:'drift',   spW:700,  mx:55, school:true, schR:90  },
   polyp:    { col:'#D8D030', dim:'#383c08', minR:5,   maxR:9,   spd:.5,   hp:2,  mass:12,  beh:'swarm',   spW:850,  mx:28, school:true, schR:110 },
@@ -355,12 +358,12 @@ const ORGS = {
 };
 
 const PREY_OF = {
-  hunter:   ['mote','polyp','bloom'],
-  lurker:   ['mote','polyp','tendril'],
+  hunter:   ['mote','polyp','bloom','diatom','ciliate'],
+  lurker:   ['mote','polyp','tendril','ciliate'],
   phantom:  ['mote','polyp','tendril'],
   behemoth: ['mote','polyp','tendril','hunter','lurker','phantom'],
-  levia:    ['bloom','mote'],
-  tendril:  ['mote','bloom'],
+  levia:    ['bloom','mote','diatom','ciliate'],
+  tendril:  ['mote','bloom','diatom','ciliate'],
   echo:     ['mote','polyp'],
 };
 const ECO_HUNT_R = { hunter:180, lurker:100, phantom:150, behemoth:250, levia:120, tendril:80, echo:140 };
@@ -451,6 +454,7 @@ function init() {
   objProg = 0; domSites = []; detritus = []; webs = []; resetSpeciesGenes();
   discoveryIdx = 0; colonyTier = 0;
 
+  spawn('diatom',24); spawn('ciliate',26);   // LEVEL I microbial sea
   spawn('bloom',10); spawn('mote',45); spawn('polyp',22); spawn('tendril',8);
   spawn('hunter',4); spawn('lurker',2); spawn('levia',2); spawn('phantom',2); spawn('behemoth',1);
 
@@ -473,7 +477,8 @@ function init() {
 // the old "elder scaling" that grew prey WITH the player and made them track size.
 //   0 microbe · 1 small animal · 2 large animal · 3 apex
 const ORG_TIER = {
-  bloom:0, mote:0, polyp:0,                 // microbial drifters
+  diatom:0, ciliate:0,                       // microbial drifters (LEVEL I)
+  bloom:0, mote:0, polyp:0,                  // microbial drifters
   tendril:1, hunter:1, lurker:1, echo:1,    // small animals
   phantom:2, levia:2, grazer:2,             // large animals
   behemoth:3,                               // apex
@@ -481,7 +486,7 @@ const ORG_TIER = {
 // The player's organism tier by stage (CELL→ORGANISM→SUPERORGANISM).
 function playerTier() { return P.stg <= 2 ? 0 : P.stg <= 4 ? 1 : 2; }
 
-const FOOD_TYPES = { bloom:1, mote:1, polyp:1, tendril:1 };
+const FOOD_TYPES = { diatom:1, ciliate:1, bloom:1, mote:1, polyp:1, tendril:1 };
 function spawn(type, n) {
   const T = ORGS[type];
   // Tier gap: how far below the player this species sits. Each level below shrinks
@@ -1271,6 +1276,7 @@ const SENSE_RANGE = [0, 200, 320, 440, 580, 800];
 // Color families — used for camouflage masking. Smaller creatures of the same
 // family as a larger creature can cluster near it; their radar signature dims.
 const COLOR_FAMILY = {
+  diatom:'green', ciliate:'blue',
   bloom:'green', mote:'green',
   polyp:'yellow', lurker:'yellow',
   tendril:'pink', phantom:'pink',
@@ -1284,6 +1290,8 @@ const COLOR_FAMILY = {
 // 0 = head-on, PI = directly behind, PI/2 = right flank, -PI/2 = left flank.
 // `w` is the arc width (radians). w >= TAU means no preferred angle.
 const VULN = {
+  diatom:   { ang:0,    w:TAU  }, // omni-edible microbes
+  ciliate:  { ang:0,    w:TAU  },
   bloom:    { ang:0,    w:TAU  }, // omni-edible
   mote:     { ang:0,    w:TAU  },
   polyp:    { ang:0,    w:TAU  },
@@ -3904,6 +3912,35 @@ function drawCreature(o, ts) {
       cx.fillStyle='#012'; cx.beginPath(); cx.arc(Math.cos(ea)*r*.36,Math.sin(ea)*r*.36,r*.06,0,TAU); cx.fill();
       break; }
 
+    case 'diatom': {
+      // Glassy geometric microbe — a faceted silica shell with a bright core,
+      // gently rotating. Reads unmistakably "single-celled / cellular".
+      const sides = 6;
+      cx.rotate(ts*.0004);
+      cx.fillStyle=col; cx.globalAlpha=.30;
+      cx.beginPath(); for(let i=0;i<sides;i++){const a=i/sides*TAU; cx.lineTo(Math.cos(a)*r,Math.sin(a)*r);} cx.closePath(); cx.fill();
+      cx.strokeStyle=col; cx.lineWidth=.5; cx.globalAlpha=.5;
+      cx.beginPath(); for(let i=0;i<sides;i++){const a=i/sides*TAU; cx.lineTo(Math.cos(a)*r,Math.sin(a)*r);} cx.closePath(); cx.stroke();
+      // inner lattice spokes (the silica frustule)
+      cx.globalAlpha=.18; cx.lineWidth=.35;
+      for(let i=0;i<sides;i++){const a=i/sides*TAU; cx.beginPath(); cx.moveTo(0,0); cx.lineTo(Math.cos(a)*r,Math.sin(a)*r); cx.stroke();}
+      cx.fillStyle='rgba(255,255,255,.5)'; cx.globalAlpha=.6+.2*Math.sin(o.breathPh); cx.beginPath(); cx.arc(0,0,r*.18,0,TAU); cx.fill();
+      break; }
+
+    case 'ciliate': {
+      // Ovoid cell rimmed with beating cilia + a wobbling vacuole. Paramecium-like.
+      cx.fillStyle=col; cx.globalAlpha=.34; cx.beginPath(); cx.ellipse(0,0,r,r*.66,0,0,TAU); cx.fill();
+      cx.strokeStyle=col; cx.lineWidth=.4; cx.globalAlpha=.5; cx.beginPath(); cx.ellipse(0,0,r,r*.66,0,0,TAU); cx.stroke();
+      // beating cilia around the rim
+      cx.strokeStyle=col; cx.lineWidth=.35; cx.globalAlpha=.4;
+      for(let i=0;i<16;i++){ const a=i/16*TAU; const bx=Math.cos(a)*r, by=Math.sin(a)*r*.66;
+        const wig=Math.sin(ts*.02+i)*r*.12; cx.beginPath(); cx.moveTo(bx,by);
+        cx.lineTo(bx+Math.cos(a)*r*.22+(-Math.sin(a))*wig, by+Math.sin(a)*r*.22+Math.cos(a)*wig); cx.stroke(); }
+      // contractile vacuole + nucleus
+      cx.fillStyle=dim; cx.globalAlpha=.4; cx.beginPath(); cx.arc(r*.2,0,r*.22,0,TAU); cx.fill();
+      cx.fillStyle='rgba(255,255,255,.4)'; cx.globalAlpha=.5+.3*Math.sin(o.breathPh*1.5); cx.beginPath(); cx.arc(-r*.25,-r*.06,r*.14,0,TAU); cx.fill();
+      break; }
+
     case 'bloom': {
       const pu=.42+.2*Math.sin(o.breathPh*1.3);
       cx.fillStyle=col; cx.globalAlpha=pu*.08; cx.beginPath(); cx.arc(0,0,r*1.8,0,TAU); cx.fill();
@@ -3917,13 +3954,21 @@ function drawCreature(o, ts) {
       break; }
 
     case 'mote': {
+      // Flagellated cell: a soft membrane with a nucleus, a couple of organelles,
+      // and a whipping tail — reads as a swimming microbe, not a flat dot.
       cx.fillStyle=col; cx.globalAlpha=.42;
       cx.beginPath(); cx.arc(0,0,r,0,TAU); cx.fill();
-      cx.strokeStyle=col; cx.lineWidth=.4; cx.globalAlpha=.5;
+      cx.strokeStyle=col; cx.lineWidth=.4; cx.globalAlpha=.55;
       cx.beginPath(); cx.arc(0,0,r,0,TAU); cx.stroke();
-      // Tiny nucleus
-      cx.fillStyle=dim; cx.globalAlpha=.3; cx.beginPath(); cx.arc(-r*.06,-r*.06,r*.28,0,TAU); cx.fill();
-      cx.fillStyle='rgba(255,255,255,.35)'; cx.globalAlpha=.6; cx.beginPath(); cx.arc(-r*.04,-r*.08,r*.1,0,TAU); cx.fill();
+      // flagellum whipping behind
+      cx.strokeStyle=col; cx.lineWidth=.4; cx.globalAlpha=.4;
+      cx.beginPath(); let fx=-r,fy=0; cx.moveTo(fx,fy);
+      for(let s=0;s<5;s++){ fx-=r*.32; fy=Math.sin(o.finPh+s*1.1)*r*.22; cx.lineTo(fx,fy); } cx.stroke();
+      // nucleus + organelles
+      cx.fillStyle=dim; cx.globalAlpha=.32; cx.beginPath(); cx.arc(-r*.06,-r*.06,r*.3,0,TAU); cx.fill();
+      cx.fillStyle='rgba(255,255,255,.35)'; cx.globalAlpha=.6; cx.beginPath(); cx.arc(-r*.04,-r*.08,r*.11,0,TAU); cx.fill();
+      cx.fillStyle=col; cx.globalAlpha=.3;
+      for(let i=0;i<2;i++){ const a=o.breathPh+i*2.3; cx.beginPath(); cx.arc(Math.cos(a)*r*.4,Math.sin(a)*r*.4,r*.08,0,TAU); cx.fill(); }
       break; }
 
     case 'polyp': {
