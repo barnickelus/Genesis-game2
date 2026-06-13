@@ -162,7 +162,7 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 
 <div id="hud">
   <div id="hudTL">
-    <div id="phaseLbl">LEVEL I · THE CELL</div>
+    <div id="phaseLbl">PHASE I · EMERGENCE</div>
     <div id="stgName">MOTE</div>
     <div id="massTxt"><b id="massV">10</b>&thinsp;mass</div>
     <div id="evoBarWrap"><div id="evoBar"></div></div>
@@ -297,15 +297,16 @@ const COL = {
 };
 
 // ═══════════════════════════════════════════
-// THE ORGANIZATION SPINE  (docs/REBUILD_SPINE.md, REBUILD_II.md)
-// One fantasy: life organizing into ever-larger LEVELS OF ORGANIZATION —
-// cell → organism → superorganism → civilization. Mass is the FUEL; each stage's
-// OBJECTIVE is the story. You OUTSCALE your origins: prey you start among dwindle.
+// THE ORGANIZATION SPINE  (docs/REBUILD_SPINE.md)
+// One fantasy: life organizing into ever-larger levels of complexity.
+// Mass is the FUEL. Each stage's OBJECTIVE is the story — evolution requires
+// the objective complete AND the mass threshold. Phases group the stages into
+// the emotional arc: fear → power → transcendence → stewardship.
 // ═══════════════════════════════════════════
 const PHASES = [
-  { name: 'LEVEL I · THE CELL',          first: 0, c: '#52FFCA', sub: 'A single cell in a microbial sea. Survive.' },
-  { name: 'LEVEL II · THE ORGANISM',     first: 3, c: '#FF9830', sub: 'You have become a body. Hunt the deep.' },
-  { name: 'LEVEL III · THE SUPERORGANISM', first: 5, c: '#5AC8FF', sub: 'One body is no longer enough.' },
+  { name: 'PHASE I · EMERGENCE',     first: 0, c: '#52FFCA', sub: 'Life learns to survive.' },
+  { name: 'PHASE II · PREDATION',    first: 3, c: '#FF9830', sub: 'Life learns to hunt.' },
+  { name: 'PHASE III · SUPERORGANISM', first: 5, c: '#5AC8FF', sub: 'One body is no longer enough.' },
 ];
 function phaseStartingAt(stgIdx) { return PHASES.find(p => p.first === stgIdx) || null; }
 // The phase the player is currently inside (the last phase whose first ≤ stg).
@@ -467,28 +468,12 @@ function init() {
 // rounding error. Radius is scaled gently (and the eat threshold guarantees they
 // stay edible); mass is scaled hard via a per-instance multiplier (massMul) read
 // back in collide(). Predators are never scaled here.
-// ── ORGANISM TIERS (Rebuild II): every species sits at a level of organization.
-// As the player climbs, lower-tier species shrink in relative size + presence
-// (you OUTSCALE your origins) while same/higher-tier fauna populate. This replaces
-// the old "elder scaling" that grew prey WITH the player and made them track size.
-//   0 microbe · 1 small animal · 2 large animal · 3 apex
-const ORG_TIER = {
-  bloom:0, mote:0, polyp:0,                 // microbial drifters
-  tendril:1, hunter:1, lurker:1, echo:1,    // small animals
-  phantom:2, levia:2, grazer:2,             // large animals
-  behemoth:3,                               // apex
-};
-// The player's organism tier by stage (CELL→ORGANISM→SUPERORGANISM).
-function playerTier() { return P.stg <= 2 ? 0 : P.stg <= 4 ? 1 : 2; }
-
 const FOOD_TYPES = { bloom:1, mote:1, polyp:1, tendril:1 };
 function spawn(type, n) {
   const T = ORGS[type];
-  // Tier gap: how far below the player this species sits. Each level below shrinks
-  // its apparent size (you've outgrown it) — origins dwindle toward plankton.
-  const gap = Math.max(0, playerTier() - (ORG_TIER[type] ?? 1));
-  const rScale  = Math.pow(0.62, gap);        // 1 · .62 · .38 — lower tiers shrink
-  const massMul = Math.pow(0.7,  gap);        // their mass shrinks to match
+  const tier = FOOD_TYPES[type] ? P.stg : 0;
+  const rScale  = 1 + tier * 0.15;   // gentle — keeps them comfortably edible
+  const massMul = 1 + tier * 0.65;   // steep — NAGA tendril ≈ 2.95× base mass
   for (let i=0; i<n; i++) {
     if (type==='echo' && orgs.filter(o=>o.type==='echo').length >= 2) return;
 
@@ -1167,7 +1152,7 @@ function beginGame() {
   // Open the spine: the story begins in order — emergence flash, then the phase
   // card, then the first mission. The beat queue spaces them automatically.
   annHold = 2400;   // let the white emergence flash land first
-  announce('LEVEL I · THE CELL', '#52FFCA', 'A single cell in a microbial sea. Survive.', 3600);
+  announce('PHASE I · EMERGENCE', '#52FFCA', 'Life learns to survive.', 3600);
   announceObjective();
 
   // Emergence burst — staggered shockwaves so it feels like genesis, not a click.
@@ -2222,8 +2207,8 @@ function doMitosis() {
   ring(P.x, P.y, '#9CF0FF', P.r * 2.2, 30);
   shk(9, 600);
   try { sfxEvo(); audioBend(5, 1.6); } catch (e) {}
-  announce('THE SUPERORGANISM', '#9CF0FF', 'One body becomes many, acting as one.', 2600);
-  announce('LEVEL III · SUPERORGANISM', '#FFD860', 'Steer the colony. Grow by division. Spread by hive.', 4200);
+  announce('MITOSIS', '#9CF0FF', 'One becomes many.', 2600);
+  announce('PHASE IV · COLONY', '#FFD860', 'Steer the cloud. Grow by division. Spread by hive.', 4200);
 }
 
 // ── Colony shapes (Step 3: shape = ability) ──────────────────────────────────
@@ -2305,7 +2290,7 @@ function igniteCivilization() {
     fields.push({ x: P.x + Math.cos(fa) * fd, y: P.y + Math.sin(fa) * fd,
       r: rng(120, 190), owner: 0, ph: rng(0, TAU) });   // owner: 0 none · 1 you · 2 rival
   }
-  announce('LEVEL IV · CIVILIZATION', '#ffffff',
+  announce('PHASE V · CIVILIZATION', '#ffffff',
     'Settlements, trade, resource fields. Lead your swarm to siege the rival.', 5200);
   announce('A RIVAL STIRS', RIVAL_COLOR, 'Another lineage builds across the deep. Hold the fields. Raze their towns.', 4400);
   announce('◈ OBJECTIVE', '#FFD860', 'Reach 30 citizens before the rival does.', 4600);
@@ -5022,7 +5007,7 @@ function updateHUD() {
   // Persistent place-in-the-journey: which PHASE of the arc you're living.
   document.getElementById('phaseLbl').textContent =
     microMode === 'swarm'
-      ? (colonyTier >= 2 ? 'LEVEL IV · CIVILIZATION' : 'LEVEL III · SUPERORGANISM')
+      ? (colonyTier >= 2 ? 'PHASE V · CIVILIZATION' : 'PHASE IV · COLONY')
       : phaseOf(P.stg).name;
   // Morph control is only meaningful as a swarm.
   document.getElementById('morphBtn').classList.toggle('on', microMode === 'swarm');
@@ -5086,10 +5071,10 @@ function updateHUD() {
       else if (colonyTier === 1) { panel.classList.remove('done'); head.textContent='◈ OBJECTIVE'; txt.innerHTML = `Establish hives — <b>${hives.length} / 3</b>`; }
       else if (civ && civ.won)   { panel.classList.add('done');    head.textContent='✓ CIVILIZATION ENDURES'; txt.innerHTML = `You prevailed — <b>${civ.pop}</b> citizens`; }
       else if (civ && civ.lost)  { panel.classList.add('done');    head.textContent='✕ ECLIPSED'; txt.innerHTML = `The rival reached <b>${CIV_TARGET_POP}</b> first.`; }
-      else if (civ)              { panel.classList.remove('done'); head.textContent='◈ CIVILIZATION · RACE THE RIVAL';
+      else if (civ)              { panel.classList.remove('done'); head.textContent='◈ PHASE V · RACE THE RIVAL';
         const myFields = fields.filter(f=>f.owner===1).length;
         txt.innerHTML = `You <b style="color:#FFD860">${civ.pop}</b> · Rival <b style="color:#FF5A78">${rival?rival.pop:0}</b> &nbsp;→&nbsp; ${CIV_TARGET_POP} &nbsp;·&nbsp; ${Math.floor(civ.cp)} CP · ${myFields}/${fields.length} fields · siege to raze`; }
-      else                       { panel.classList.add('done');    head.textContent='✓ CIVILIZATION NEARS'; txt.innerHTML = 'The colonies signal one another…'; }
+      else                       { panel.classList.add('done');    head.textContent='✓ PHASE V NEARS'; txt.innerHTML = 'The colonies signal one another…'; }
     } else {
       const o = objDef();
       panel.classList.add('on');
@@ -5309,18 +5294,11 @@ function loop(ts) {
   // spawn spreads + cull distances — part of the phone-freeze bug).
   viewR = cl((Math.max(W, H) / zm) * 0.62, 2200, 7000);
 
-  // Ecosystem maintenance — population targets thin out species far below the
-  // player's tier (you've left them behind) and don't spawn fauna above your reach
-  // until you've climbed to meet them. This is the "outscale your origins" loop.
-  const pt = playerTier();
+  // Ecosystem maintenance
   for (const [type,T] of Object.entries(ORGS)) {
     if (type==='echo') continue;
     if (type==='grazer' && P.stg < 3) continue;   // grazers only graze the NAGA-era world onward
-    const tg = ORG_TIER[type] ?? 1;
-    if (tg > pt + 1) continue;                     // too far above you — not yet present
-    const gap = Math.max(0, pt - tg);
-    const target = T.mx * 0.3 * Math.pow(0.5, gap);   // each tier below halves its presence
-    if (orgs.filter(o=>o.type===type).length < target) spawn(type,1);
+    if (orgs.filter(o=>o.type===type).length < T.mx*.3) spawn(type,1);
   }
 
   // TITAN plankton bloom — top up the small drifting types so the zoomed-out
