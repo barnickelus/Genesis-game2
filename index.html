@@ -272,13 +272,18 @@ const ang  = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
 // ═══════════════════════════════════════════
 const CELL = 160;
 let grid = {};
-function gKey(x, y) { return ((x / CELL | 0) + 5000) + ',' + ((y / CELL | 0) + 5000); }
+// Numeric cell keys — integer property access avoids the per-cell string
+// allocation the old 'x,y' concat form churned out (thousands/frame in AI).
+// Offsets keep indices positive; ×20000 stride prevents axis collision.
+function gKey(x, y) { return ((x / CELL | 0) + 5000) * 20000 + ((y / CELL | 0) + 5000); }
 function gIns(o) { const k = gKey(o.x, o.y); (grid[k] || (grid[k] = [])).push(o); }
 function gNear(x, y, radius) {
   const out = [], cr = Math.ceil(radius / CELL), cx0 = x / CELL | 0, cy0 = y / CELL | 0;
-  for (let dx = -cr; dx <= cr; dx++) for (let dy = -cr; dy <= cr; dy++) {
-    const k = (cx0 + dx + 5000) + ',' + (cy0 + dy + 5000);
-    const c = grid[k]; if (c) for (const o of c) out.push(o);
+  for (let dx = -cr; dx <= cr; dx++) {
+    const kx = (cx0 + dx + 5000) * 20000 + 5000 + cy0;
+    for (let dy = -cr; dy <= cr; dy++) {
+      const c = grid[kx + dy]; if (c) for (const o of c) out.push(o);
+    }
   }
   return out;
 }
@@ -434,6 +439,14 @@ function resetSpeciesGenes() {
   speciesGenes = {};
   for (const t in ORGS) speciesGenes[t] = { spd: 1, size: 1, wary: 1 };
 }
+// Precomputed 'rgba(r,g,b,' glow prefix per species — built once, so drawCreature
+// (called for every on-screen creature every frame) never re-parses hex colours.
+const GL_PREFIX = {};
+for (const t in ORGS) {
+  const c = ORGS[t].col;
+  GL_PREFIX[t] = `rgba(${parseInt(c.slice(1,3),16)},${parseInt(c.slice(3,5),16)},${parseInt(c.slice(5,7),16)},`;
+}
+const ORG_KEYS = Object.keys(ORGS);   // cached once for the per-frame maintenance loop
 const GENE_MIN = 0.72, GENE_MAX = 1.42;
 function gauss(mean, sd) { return mean + (Math.random()+Math.random()+Math.random()-1.5) * sd * 2; }
 
@@ -3907,7 +3920,7 @@ function drawCreature(o, ts) {
   const dim = fl ? '#888' : T.dim;
   const breath = 1 + .038*Math.sin(o.breathPh);
   const r = o.r * breath;
-  const gl = `rgba(${parseInt(T.col.slice(1,3),16)},${parseInt(T.col.slice(3,5),16)},${parseInt(T.col.slice(5,7),16)},`;
+  const gl = GL_PREFIX[o.type] || 'rgba(255,255,255,';
 
   bioGlow(o.x, o.y, r*2.8, gl, .28+.08*Math.sin(o.breathPh*2));
 
@@ -5431,15 +5444,25 @@ function loop(ts) {
   // Ecosystem maintenance — population targets thin out species far below the
   // player's tier (you've left them behind) and don't spawn fauna above your reach
   // until you've climbed to meet them. This is the "outscale your origins" loop.
-  const pt = playerTier();
-  for (const [type,T] of Object.entries(ORGS)) {
-    if (type==='echo') continue;
-    if (type==='grazer' && P.stg < 3) continue;   // grazers only graze the NAGA-era world onward
-    const tg = ORG_TIER[type] ?? 1;
-    if (tg > pt + 1) continue;                     // too far above you — not yet present
-    const gap = Math.max(0, pt - tg);
-    const target = T.mx * 0.3 * Math.pow(0.5, gap);   // each tier below halves its presence
-    if (orgs.filter(o=>o.type===type).length < target) spawn(type,1);
+  // Throttled (same cadence as the plankton top-up below) — population targets
+  // drift slowly, so the per-frame sweep was waste. One counting pass replaces the
+  // old N filter() allocations (one array per species, every frame).
+  if ((gt & 3) === 0) {
+    const pt = playerTier();
+    const typeCounts = {};                      // one small alloc every 8th frame
+    for (let i = 0; i < orgs.length; i++) {
+      const tp = orgs[i].type; typeCounts[tp] = (typeCounts[tp] | 0) + 1;
+    }
+    for (let si = 0; si < ORG_KEYS.length; si++) {
+      const type = ORG_KEYS[si];
+      if (type==='echo') continue;
+      if (type==='grazer' && P.stg < 3) continue;   // grazers graze the NAGA-era world onward
+      const tg = ORG_TIER[type] ?? 1;
+      if (tg > pt + 1) continue;                     // too far above you — not yet present
+      const gap = Math.max(0, pt - tg);
+      const target = ORGS[type].mx * 0.3 * Math.pow(0.5, gap);
+      if ((typeCounts[type] | 0) < target) spawn(type,1);
+    }
   }
 
   // TITAN plankton bloom — top up the small drifting types so the zoomed-out
@@ -5463,9 +5486,11 @@ function loop(ts) {
   if (microMode === 'swarm') { updateColonyPatches(dt); updateHives(dt); updateCivilization(dt); }
 
   // ── Audio choreography: threat layer swells when a real predator is close ──
+  // Only predators within 380px matter, so query the grid locally instead of
+  // sweeping every creature every frame.
   {
     let nearest = 0;
-    for (const o of orgs) {
+    for (const o of gNear(P.x, P.y, 380)) {
       if (!isPred(o)) continue;
       const d = dst(P, o);
       if (d < 380) nearest = Math.max(nearest, 1 - d/380);
