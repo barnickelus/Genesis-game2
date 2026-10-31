@@ -39,7 +39,7 @@
 | Colony lineages as true forks | ⚪ | HIVE / PLANT-CORAL (persistent multi-node) / FUNGUS (mycelial, decomposer) as committed paths, not formations |
 | Hive → break off → new hive chains | 🟡 | budding exists; hives founding their own satellites ⚪ |
 | Rocks/reefs terrain | ⚪ | hide-in cover, prey attractor, hive anchor, camouflage formation |
-| Illusionary prey structures | ⚪ | prey flocks forming rug-like shapes — beauty + bait |
+| Illusionary prey structures | 🟢 | **MURMURATIONS** — schools entranced onto a glowing bait-ball vortex (beauty + bait), prefers night |
 
 ### PHASE V — CIVILIZATION (legacy) 🟢 BUILT
 - Ignites at the colony summit (3 hives): hives become **SETTLEMENTS** with
@@ -112,6 +112,7 @@ efficient · fins · deepscan.
 | Utility prey AI, genome-modulated; signature species hooks kept | 🟢 |
 | Anomalies (radar-huntable, mass% + frenzy reward) | 🟢 |
 | Camouflage color-family masking + radar levels + weak-spot arcs | 🟢 |
+| THE DEEP DARK — day/night cycle: neon-on-black nights, dimmed senses (deepscan immune), bolder predators | 🟢 |
 | Predator evolution (predators adapt too, not just prey) | ⚪ |
 | Terrain (rocks/reefs): 14 coral-crowned stone clusters — prey cover (sense mask) + spawn attractor | 🟢 |
 | Biomes / regional fauna (open-world groundwork) | ⚪ |

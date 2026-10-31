@@ -480,14 +480,16 @@ function drawReefs(ts) {
       cx.strokeStyle = '#2A4458'; cx.lineWidth = 1.1; cx.globalAlpha = .3 * rk.tone; cx.stroke();
     }
     // The living crown — coral sprigs swaying, each tipped with a glow mote.
+    // At night the sprigs become lanterns: reefs read as constellations of life.
+    const ng = nightGlow();
     cx.lineWidth = 1; cx.lineCap = 'round';
     for (const s of rf.sprigs) {
       const sway = Math.sin(ts * .0011 + s.ph) * s.h * .22;
-      cx.strokeStyle = s.c; cx.globalAlpha = .34;
+      cx.strokeStyle = s.c; cx.globalAlpha = Math.min(.6, .34 * ng);
       cx.beginPath(); cx.moveTo(s.x, s.y);
       cx.quadraticCurveTo(s.x + sway * .5, s.y - s.h * .6, s.x + sway, s.y - s.h);
       cx.stroke();
-      cx.fillStyle = s.c; cx.globalAlpha = .4 + .22 * Math.sin(ts * .003 + s.ph);
+      cx.fillStyle = s.c; cx.globalAlpha = Math.min(1, (.4 + .22 * Math.sin(ts * .003 + s.ph)) * ng);
       cx.beginPath(); cx.arc(s.x + sway, s.y - s.h, 1.6, 0, TAU); cx.fill();
     }
     cx.restore(); cx.globalAlpha = 1;
@@ -502,6 +504,103 @@ function reefInRange(maxD) {
     if (dq < bd) { bd = dq; best = rf; }
   }
   return best;
+}
+
+// ═══════════════════════════════════════════
+// THE DEEP DARK — the ocean breathes (day/night)
+// ═══════════════════════════════════════════
+// A slow sim-time cycle (~2 min). By day the water reads as it always has; as
+// night rolls in the background drops toward black and every living thing's
+// bioluminescence INTENSIFIES — the world inverts into neon-on-dark. It is not
+// just a palette: senses dim at night (Deep Scan is immune), predators grow
+// bold, and murmurations prefer the dark. Driven by gt, never wall-clock, so
+// it stays deterministic/replayable (multiplayer-ready).
+const DAY_MS = 120000;
+function worldLight() {           // 1.0 noon → 0.35 deep night, smooth cosine
+  return .675 + .325 * Math.cos(((gt % DAY_MS) / DAY_MS) * TAU);
+}
+function nightGlow() { return 1 + (1 - worldLight()) * 1.1; }   // bioluminescence boost in the dark
+let nightFell = false, nightShownOnce = false;
+
+// ═══════════════════════════════════════════
+// MURMURATIONS — the school that turns as one
+// ═══════════════════════════════════════════
+// Periodically (and preferentially at night) a schooling species becomes
+// ENTRANCED: bodies pour onto a slowly-rotating, breathing ribbon — a living
+// bait-ball vortex. Entranced prey do not scatter (the bait half of the
+// beauty+bait idea): swim into the river and feed. The vortex drifts, glows
+// with its species' colour, and dissolves after ~16s.
+let murmur = null, murmurCd = 26000;
+function murmurPoint(u) {
+  // Two layered turns around the heart, radius breathing along the ribbon —
+  // reads as a swirling torus of bodies rather than a flat circle.
+  const a  = u * TAU * 2 + murmur.spin;
+  const rr = murmur.R * (.72 + .28 * Math.sin(u * TAU * 3 + murmur.spin * 1.7));
+  return { x: murmur.x + Math.cos(a) * rr, y: murmur.y + Math.sin(a) * rr * .74 };
+}
+function updateMurmur(dt) {
+  if (microMode !== 'single') { if (murmur) endMurmur(); return; }
+  if (murmur) {
+    murmur.age += dt; murmur.spin += dt * .00045;
+    murmur.x += murmur.vx * (dt/16); murmur.y += murmur.vy * (dt/16);
+    if (murmur.age > murmur.dur) endMurmur();
+    return;
+  }
+  murmurCd -= dt;
+  if (murmurCd > 0 || P.stg < 1) return;
+  // The most common schooling species on the board is the school that turns.
+  let sp = null, best = 11;                       // needs ≥12 bodies to read as a school
+  for (const t of ['mote','diatom','ciliate','polyp']) {
+    let n = 0; for (const o of orgs) if (o.type === t) n++;
+    if (n > best) { best = n; sp = t; }
+  }
+  if (!sp) { murmurCd = 9000; return; }
+  // The dark calls them — by day, the school often holds off.
+  if (worldLight() > .62 && Math.random() < .5) { murmurCd = 12000; return; }
+  const a = rng(0, TAU), d = rng(430, 640);
+  murmur = { sp, x: P.x + Math.cos(a)*d, y: P.y + Math.sin(a)*d,
+             vx: rng(-.35,.35), vy: rng(-.35,.35),
+             R: rng(130, 185), pullR: 1500, age: 0, dur: 16000, spin: rng(0,TAU) };
+  spawn(sp, 8);                                   // the school swells toward the spiral
+  announce('A MURMURATION', ORGS[sp].col, 'The school turns as one, entranced. Swim the river — feed.', 3200);
+  try { sfxRadarPing(); } catch(e) {}
+}
+function endMurmur() {
+  for (const o of orgs) if (o._murmur) o._murmur = 0;   // release the entranced
+  murmur = null; murmurCd = rng(42000, 78000);
+}
+function drawMurmur(ts) {
+  if (!murmur) return;
+  const a = cl(murmur.age / 900, 0, 1) * cl((murmur.dur - murmur.age) / 1200, 0, 1);
+  const col = ORGS[murmur.sp].col;
+  if (onScr(murmur.x, murmur.y, murmur.R * 1.6)) {
+    cx.save(); cx.globalCompositeOperation = 'lighter';
+    cx.strokeStyle = col; cx.lineCap = 'round';
+    // the current itself — a faint double ribbon the school rides
+    for (let pass = 0; pass < 2; pass++) {
+      cx.lineWidth = pass ? .7 : 2.4;
+      cx.globalAlpha = (pass ? .11 : .05) * a * Math.min(nightGlow(), 1.8);
+      cx.beginPath();
+      for (let k = 0; k <= 48; k++) {
+        const pt = murmurPoint(k / 48);
+        if (k) cx.lineTo(pt.x, pt.y); else cx.moveTo(pt.x, pt.y);
+      }
+      cx.stroke();
+    }
+    cx.globalAlpha = .1 * a; cx.fillStyle = col;   // the vortex heart
+    cx.beginPath(); cx.arc(murmur.x, murmur.y, murmur.R * .3, 0, TAU); cx.fill();
+    cx.restore(); cx.globalAlpha = 1;
+  } else {
+    // Off-screen: a small pulsing chevron on a ring around the player points the way.
+    const aa = Math.atan2(murmur.y - P.y, murmur.x - P.x);
+    const rd = (Math.min(W, H) / zm) * .3;
+    const px = P.x + Math.cos(aa) * rd, py = P.y + Math.sin(aa) * rd;
+    cx.save(); cx.translate(px, py); cx.rotate(aa);
+    cx.globalAlpha = (.35 + .25 * Math.sin(ts * .008)) * a; cx.fillStyle = col;
+    const s = 9 / zm * .35 + 6;
+    cx.beginPath(); cx.moveTo(s, 0); cx.lineTo(-s * .6, -s * .55); cx.lineTo(-s * .6, s * .55); cx.fill();
+    cx.restore(); cx.globalAlpha = 1;
+  }
 }
 const DETRITUS_MAX = 80;
 // ── THE EVOLVING ECOSYSTEM: per-species genome means. Individuals are born
@@ -545,6 +644,7 @@ function init() {
   patches = []; hives = []; civ = null; rival = null; fields = [];
   objProg = 0; domSites = []; detritus = []; webs = []; resetSpeciesGenes();
   seedReefs();   // the world's places — stone + coral cover, fresh layout each run
+  murmur = null; murmurCd = 26000; nightFell = false; nightShownOnce = false;
   discoveryIdx = 0; colonyTier = 0;
 
   spawn('diatom',24); spawn('ciliate',26);   // LEVEL I microbial sea
@@ -1444,7 +1544,12 @@ function canEatAngle(o) {
   return df < v.w / 2;
 }
 
-function senseRange() { return (SENSE_RANGE[P.stg] || 0) * traitStats(P).senseMul; }
+function senseRange() {
+  // Night dims the senses (down to ×0.82 at deep dark) — unless you've grown
+  // Deep Scan, which turns the dark into home water.
+  const nightMul = (P.traitLv && P.traitLv.deepscan > 0) ? 1 : .82 + .18 * worldLight();
+  return (SENSE_RANGE[P.stg] || 0) * traitStats(P).senseMul * nightMul;
+}
 function senseLevel() { return P.stg; }
 
 function updateSense() {
@@ -1564,7 +1669,7 @@ function aiOrg(o, dt) {
   // toward you the deeper your stealth (P._camo set by the camo trait's onTick).
   const camoMul = 1 - (P._camo || 0);
   const fleeR=smaller ? (100+P.r*2.5)*g.wary*camoMul : 0;   // wary genes flee earlier; camo shrinks it
-  const huntR=bigger  ? 180+o.r*3   : 0;
+  const huntR=bigger  ? (180+o.r*3) * (1 + (1 - worldLight()) * .4) : 0;   // predators grow bold in the dark
 
   // ═══ UTILITY AI (rebuilt) ═══════════════════════════════════════════════
   // Four signature species keep their authored identity as hooks; everyone
@@ -1661,6 +1766,24 @@ function aiOrg(o, dt) {
   const fl=boids(o);
   o.vx=o.vx*.9+((tx-o.x)*.04+fl.fx*.3);
   o.vy=o.vy*.9+((ty-o.y)*.04+fl.fy*.3);
+
+  // ── MURMURATION: entranced bodies pour onto the vortex ribbon. Each body owns
+  //    a slot (hashed from its random phase) that travels along the curve, so the
+  //    school reads as a flowing river, not a clump. Entranced prey do not
+  //    scatter — the bait half of the beauty+bait mechanic. ──
+  if (murmur && o.type === murmur.sp) {
+    const mdx = o.x - murmur.x, mdy = o.y - murmur.y;
+    if (mdx*mdx + mdy*mdy < murmur.pullR * murmur.pullR) {
+      const u = (o.ph / TAU + murmur.age * .00006) % 1;
+      const pt = murmurPoint(u);
+      const sa = Math.atan2(pt.y - o.y, pt.x - o.x);
+      const pd = Math.hypot(pt.x - o.x, pt.y - o.y);
+      const k = Math.min(1, pd / 140);
+      o.vx = o.vx * .82 + Math.cos(sa) * (1.1 + k * 2.4) * .3;
+      o.vy = o.vy * .82 + Math.sin(sa) * (1.1 + k * 2.4) * .3;
+      o._murmur = 1; o.scatterT = 0;
+    } else o._murmur = 0;
+  }
 
   // ── Camouflage seek: when player is sensed, drift toward same-color larger anchor ──
   if (o._maskAnchor) {
@@ -3842,7 +3965,7 @@ function bioGlow(x, y, r, gl, a) {
   // the entire frame's render pipeline. Validate and short-circuit safely.
   if (typeof gl !== 'string' || gl.indexOf('rgba(') !== 0 || gl.charAt(gl.length-1) !== ',') return;
   try {
-    cx.globalAlpha = a;
+    cx.globalAlpha = Math.min(1, a * nightGlow());   // bioluminescence burns brighter in the dark
     // Richer falloff: a brighter hot core that fades through a wide soft skirt,
     // giving creatures a luminous, lensed presence instead of a flat haze.
     const g = cx.createRadialGradient(x, y, 0, x, y, r);
@@ -3983,6 +4106,15 @@ function drawBg(ts) {
     cx.fillRect(sx,sy,s.s*.7,s.s*.7);
   }
   cx.globalAlpha=1;
+
+  // ── THE DEEP DARK: night sinks the water toward black. Only the backdrop is
+  //    darkened — everything alive is drawn after this and its glow is BOOSTED,
+  //    so night reads as neon-on-black, never as mud. ──
+  const L = worldLight();
+  if (L < .98) {
+    cx.fillStyle = `rgba(0,2,10,${((1 - L) * .62).toFixed(3)})`;
+    cx.fillRect(0, 0, W, H);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -4054,7 +4186,9 @@ function drawCreature(o, ts) {
   const screenR = o.r * zm;
   if (screenR < 6) {
     const fl0 = o.flT > 0;
-    cx.globalAlpha = fl0 ? 0.95 : 0.78;
+    // Night + murmuration read even at plankton scale: dots burn brighter.
+    const nb = 1 + (1 - worldLight()) * .35;
+    cx.globalAlpha = Math.min(1, (fl0 ? 0.95 : 0.78) * nb * (o._murmur ? 1.25 : 1));
     cx.fillStyle = fl0 ? '#fff' : T.col;
     cx.beginPath(); cx.arc(o.x, o.y, Math.max(o.r * 0.7, 2.2 / zm), 0, TAU); cx.fill();
     cx.globalAlpha = 1;
@@ -4068,7 +4202,7 @@ function drawCreature(o, ts) {
   const r = o.r * breath;
   const gl = GL_PREFIX[o.type] || 'rgba(255,255,255,';
 
-  bioGlow(o.x, o.y, r*2.8, gl, .28+.08*Math.sin(o.breathPh*2));
+  bioGlow(o.x, o.y, r*2.8, gl, (.28+.08*Math.sin(o.breathPh*2)) * (o._murmur ? 1.5 : 1));
 
   // Trail
   for (const t of o.trail) {
@@ -5629,8 +5763,19 @@ function loop(ts) {
   ecoCollide();
   updateDetritus(dt);   // the living economy
   updateWebs(dt);       // spider silk snares
+  updateMurmur(dt);     // the school that turns as one
   processAnnounce(dt);  // narrative beats play in order, one at a time
   updateDomSites(dt);   // PRIMORDIAL territory objective
+
+  // ── THE DEEP DARK: nightfall beat (the first night gets its story card) ──
+  { const L = worldLight();
+    if (!nightFell && L < .55) {
+      nightFell = true;
+      if (!nightShownOnce) { nightShownOnce = true;
+        announce('THE DEEP DARK', '#9CE0FF', 'Night in the open water. Senses dim, predators grow bold — and everything luminous burns brighter.', 3800); }
+      try { audioBend(-2, 2.0); } catch(e) {}
+    } else if (nightFell && L > .8) nightFell = false;
+  }
 
   // Camera — zoom adapts to actual screen size so phones and tablets show
   // comparable amounts of world. The zoom cap scales DOWN on small screens
@@ -5717,6 +5862,7 @@ function loop(ts) {
   drawGrid();
   drawDust(ts);
   try { drawReefs(ts); } catch(e) { cx.globalAlpha=1; }   // terrain under everything alive
+  try { drawMurmur(ts); } catch(e) { cx.globalAlpha=1; cx.globalCompositeOperation='source-over'; }
 
   // Particles
   for (let i=parts.length-1; i>=0; i--) {

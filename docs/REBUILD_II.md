@@ -90,6 +90,27 @@ prey track your size and killed the sense of growth. Replaced:
 - Verified: 6000-frame harness clean + 13/13 targeted tests (momentum build,
   speed fold, ram damage/spend/cooldown, reef mask + pierce, render).
 
-## Future layers (Rebuild II.6+)  ⚪
+## Rebuild II.6 — THE LIVING DEEP (night + murmurations)  🟢
+- **THE DEEP DARK** — the ocean breathes on a ~2-minute sim-time cycle (gt-driven,
+  never wall-clock → deterministic/multiplayer-safe). Night sinks only the
+  backdrop toward black while every living thing's bioluminescence INTENSIFIES
+  (`nightGlow()` boosts bioGlow, LOD dots, reef sprigs → the reefs become
+  constellations). Gameplay turns with the light: senses dim to ×0.82 at deep
+  night (Deep Scan is immune — the dark becomes home water), predators' hunt
+  radius grows +40%, and the first nightfall gets its own story card.
+- **MURMURATIONS** — the player's rug vision ("illusionary prey structures",
+  beauty + bait) made real. Periodically — preferentially at night — the most
+  common schooling species becomes ENTRANCED: each body owns a traveling slot on
+  a rotating, breathing two-turn ribbon (`murmurPoint`), so the school pours into
+  a living bait-ball vortex. Entranced prey do not scatter (the bait): swim the
+  river and feed. Announced, species-coloured, glowing ribbon + offscreen
+  chevron, drifts, dissolves in ~16s, releases the school on end.
+- Verified: 6000-frame harness clean (the run itself crosses a nightfall and a
+  murmuration window); 25/25 targeted assertions ×5 runs (light curve, sense
+  penalty + deepscan immunity, vortex formation, ≥10 entranced, racing speed
+  signature, dissolve + release + cooldown).
+
+## Future layers (Rebuild II.7+)  ⚪
 - Continue the character rework upward (the apex animals).
 - Reef-aware AI (prey actively fleeing INTO cover) + hive anchoring on reefs.
+- Night-blooming anomalies / lures that only surface in the dark.
