@@ -430,6 +430,79 @@ let domSites = [];          // PRIMORDIAL dominion sites {x,y,claimT,claimed}
 //    where they settle — kill-grounds bloom, blooms attract life) ──
 let detritus = [];
 let webs = [];                 // SPIDER trait: laid web nodes that snare drifting prey
+// ── ROCKS & REEFS: the world gains PLACES. Static terrain clusters — dark stone
+//    silhouettes crowned with living coral sprigs. Small prey tucked inside a reef
+//    read dim on your senses (cover), and spawns drift toward them, so reefs
+//    become where life gathers and where hunters learn to look. (docs/ROADMAP.md)
+let reefs = [];
+const REEF_N = 14;
+function seedReefs() {
+  reefs = [];
+  for (let i = 0; i < REEF_N; i++) {
+    // Ring placement: none in the opening pool, spread through the hunting range.
+    const a = (i / REEF_N) * TAU + rng(-.3, .3), d = rng(900, 5400);
+    const R = rng(130, 290);
+    const rocks = [];
+    const nR = rni(3, 7);
+    for (let k = 0; k < nR; k++) {
+      const ra = rng(0, TAU), rd = rng(0, R * .55), rr = rng(R * .24, R * .46);
+      const pts = [];
+      const nv = rni(7, 11);
+      for (let v = 0; v < nv; v++) pts.push(rng(.72, 1.18));   // jagged radius multipliers
+      rocks.push({ x: Math.cos(ra) * rd, y: Math.sin(ra) * rd, r: rr, pts, tone: rng(.5, 1) });
+    }
+    const sprigs = [];
+    const nS = rni(4, 9);
+    for (let k = 0; k < nS; k++) {
+      const sa = rng(0, TAU), sd = rng(R * .25, R * .9);
+      sprigs.push({ x: Math.cos(sa) * sd, y: Math.sin(sa) * sd,
+                    h: rng(9, 24), ph: rng(0, TAU),
+                    c: ['#DC60A8', '#52FFCA', '#FFD860', '#9CE0FF'][rni(0, 4)] });
+    }
+    reefs.push({ x: Math.cos(a) * d, y: Math.sin(a) * d, R, rocks, sprigs });
+  }
+}
+function drawReefs(ts) {
+  for (const rf of reefs) {
+    if (!onScr(rf.x, rf.y, rf.R * 1.25)) continue;
+    cx.save(); cx.translate(rf.x, rf.y);
+    // The stones — dark silhouettes with a faint cool rim, under everything alive.
+    for (const rk of rf.rocks) {
+      cx.beginPath();
+      const nv = rk.pts.length;
+      for (let v = 0; v <= nv; v++) {
+        const va = (v % nv) / nv * TAU, rr = rk.r * rk.pts[v % nv];
+        const px = rk.x + Math.cos(va) * rr, py = rk.y + Math.sin(va) * rr;
+        if (v === 0) cx.moveTo(px, py); else cx.lineTo(px, py);
+      }
+      cx.closePath();
+      cx.fillStyle = '#0B1522'; cx.globalAlpha = .82 * rk.tone; cx.fill();
+      cx.strokeStyle = '#2A4458'; cx.lineWidth = 1.1; cx.globalAlpha = .3 * rk.tone; cx.stroke();
+    }
+    // The living crown — coral sprigs swaying, each tipped with a glow mote.
+    cx.lineWidth = 1; cx.lineCap = 'round';
+    for (const s of rf.sprigs) {
+      const sway = Math.sin(ts * .0011 + s.ph) * s.h * .22;
+      cx.strokeStyle = s.c; cx.globalAlpha = .34;
+      cx.beginPath(); cx.moveTo(s.x, s.y);
+      cx.quadraticCurveTo(s.x + sway * .5, s.y - s.h * .6, s.x + sway, s.y - s.h);
+      cx.stroke();
+      cx.fillStyle = s.c; cx.globalAlpha = .4 + .22 * Math.sin(ts * .003 + s.ph);
+      cx.beginPath(); cx.arc(s.x + sway, s.y - s.h, 1.6, 0, TAU); cx.fill();
+    }
+    cx.restore(); cx.globalAlpha = 1;
+  }
+}
+// Nearest reef within `maxD` of the player, or null. Deterministic, so spawn's
+// guard call and pick call agree on the same reef.
+function reefInRange(maxD) {
+  let best = null, bd = maxD * maxD;
+  for (const rf of reefs) {
+    const dx = rf.x - P.x, dy = rf.y - P.y, dq = dx*dx + dy*dy;
+    if (dq < bd) { bd = dq; best = rf; }
+  }
+  return best;
+}
 const DETRITUS_MAX = 80;
 // ── THE EVOLVING ECOSYSTEM: per-species genome means. Individuals are born
 //    around these; player kills apply selection pressure (means drift away from
@@ -471,6 +544,7 @@ function init() {
   microMode = 'single'; cells = []; colonyShape = 'swarm'; colonyHd = 0; breakPressure = 0; microChoiceShown = false; plantRootT = 0;
   patches = []; hives = []; civ = null; rival = null; fields = [];
   objProg = 0; domSites = []; detritus = []; webs = []; resetSpeciesGenes();
+  seedReefs();   // the world's places — stone + coral cover, fresh layout each run
   discoveryIdx = 0; colonyTier = 0;
 
   spawn('diatom',24); spawn('ciliate',26);   // LEVEL I microbial sea
@@ -534,6 +608,13 @@ function spawn(type, n) {
     if (anchor && !big) {
       const aa = Math.random()*TAU, ad = rng(10, 90);
       x = anchor.x + Math.cos(aa)*ad; y = anchor.y + Math.sin(aa)*ad;
+    } else if (!big && (T.school || FOOD_TYPES[type]) && Math.random() < .3 && reefInRange(T.spW * 1.4)) {
+      // Reefs gather life — a share of small/schooling spawns settle into cover,
+      // so the places read inhabited and hunters learn to check the stones.
+      // (Two calls: cheap scan, and spawn is event-paced, not per-frame.)
+      const rf = reefInRange(T.spW * 1.4);
+      const aa = Math.random()*TAU, ad = rng(20, rf.R * .85);
+      x = rf.x + Math.cos(aa)*ad; y = rf.y + Math.sin(aa)*ad;
     } else {
       const a = Math.random()*TAU;
       const spread = big ? Math.max(1, viewR / 2200) : 1;
@@ -1380,6 +1461,19 @@ function updateSense() {
     // Camouflage check — same color family, larger anchor nearby
     const fam = COLOR_FAMILY[o.type];
     o._maskHide = 0;
+    o._inReef = false;
+    // Reef cover — small creatures tucked into stone read dim on your senses.
+    // High sense level (Deep Scan territory) pierces it, same as family camo.
+    if (o.r < 24) {
+      for (const rf of reefs) {
+        const rdx = o.x - rf.x, rdy = o.y - rf.y;
+        if (rdx*rdx + rdy*rdy < rf.R * rf.R) {
+          o._inReef = true;
+          if (lvl < 3) o._maskHide = .5;
+          break;
+        }
+      }
+    }
     if (fam && o.r < 22) {
       let best=null, bestD=110;
       for (const m of gNear(o.x, o.y, 110)) {
@@ -1392,7 +1486,7 @@ function updateSense() {
         o._maskAnchor = best;
         // Higher sense level pierces the mask. Lower stages see it dimmed.
         const fade = 1 - bestD/110;
-        o._maskHide = lvl >= 3 ? 0 : fade * 0.78;
+        o._maskHide = lvl >= 3 ? 0 : Math.max(o._maskHide, fade * 0.78);
       }
     }
   }
@@ -1930,6 +2024,46 @@ const TRAITS = {
       st.dmgTaken *= (1 - .26 * lv);     // heavy armor (stacks → near-immune)
       st.crush    += .07 * lv;           // eat prey up to +21% of player size
       st.spd      *= (1 - .07 * lv);     // the weight of the shell
+    },
+  },
+
+  // ── SAILFISH (pursuit / speed) — the last lone-predator fork. Keep swimming
+  //    one direction and the water lets go of you: sustained motion compounds
+  //    into a SLIPSTREAM, and at full stream your momentum becomes a weapon —
+  //    a spearing RAM that gores prey too big to swallow. Commit to the chase. ──
+  slipstream: {
+    id:'slipstream', name:'Slipstream', cat:'pursuit', max:3,
+    desc:'Sustained swimming compounds into racing speed. At full stream, RAM larger prey to gore them.',
+    onTick(a, dt) {
+      const lv = a.traitLv.slipstream || 1;
+      const sp = Math.hypot(a.vx, a.vy);
+      // Momentum builds while swimming with intent (~1.8s to full), bleeds off
+      // fast when you stall. _moment drives the speed bonus, the ram, the wake.
+      a._moment = cl((a._moment || 0) + (sp > 1.4 ? dt/1800 : -dt/650), 0, 1);
+      a._ram = a._moment > .6 ? (3 + 2.5*lv) * a._moment : 0;
+      if ((a._ramCd || 0) > 0) a._ramCd -= dt;
+    },
+    mod(a, st) {
+      const lv = a.traitLv.slipstream || 1;
+      st.spd *= 1 + (.07 + .06*lv) * (a._moment || 0);   // up to +25%/+37%/+50% at full stream
+    },
+    draw(a, ts) {
+      const m = a._moment || 0; if (m < .25) return;
+      // The slipstream wake — speed-lines peeling off the flanks, denser and
+      // longer as the stream builds. At ram-ready (>0.6) the lines go hot white.
+      const hd = Math.atan2(a.vy, a.vx);
+      cx.strokeStyle = m > .6 ? '#DFF9FF' : '#8FF6FF';
+      cx.lineWidth = .9; cx.lineCap = 'round';
+      for (let i = 0; i < 6; i++) {
+        const side = (i % 2 ? 1 : -1), lane = a.r * (.35 + (i >> 1) * .3);
+        const phase = ((ts * .0022 + i * .37) % 1);
+        const bx = a.x - Math.cos(hd) * a.r * (0.6 + phase * 1.6) + Math.cos(hd + PI/2) * side * lane;
+        const by = a.y - Math.sin(hd) * a.r * (0.6 + phase * 1.6) + Math.sin(hd + PI/2) * side * lane;
+        const len = a.r * (0.7 + m * 1.6) * (1 - phase * .6);
+        cx.globalAlpha = .34 * m * (1 - phase);
+        cx.beginPath(); cx.moveTo(bx, by); cx.lineTo(bx - Math.cos(hd) * len, by - Math.sin(hd) * len); cx.stroke();
+      }
+      cx.globalAlpha = 1;
     },
   },
 };
@@ -3429,6 +3563,18 @@ function collide(dt) {
       if (cnt<ORGS[o.type].mx) setTimeout(()=>spawn(o.type,1),rng(1500,4000));
       checkEvo(); continue;
     }
+    // SAILFISH ram — at full slipstream your momentum IS the weapon: spear prey
+    // too big to swallow. The strike spends the stream (rebuild it to strike
+    // again) and grants a glancing moment of safety as you blow through.
+    if ((P._ram||0) > 0 && (P._ramCd||0) <= 0 && !canEat(o) && d < P.r + o.r*.6) {
+      o.hp -= P._ram; o.flT = 200; o.stunT = Math.max(o.stunT||0, 420);
+      const ka = Math.atan2(P.vy, P.vx);
+      o.vx += Math.cos(ka)*2.6; o.vy += Math.sin(ka)*2.6;
+      P._ramCd = 900; P._moment = .3; P._ram = 0;
+      P.blink = Math.max(P.blink, 220);
+      burst(o.x, o.y, '#8FF6FF', 10, 2.6); fTxt(o.x, o.y-20, 'RAM', '#8FF6FF');
+      shk(2, 120); try { sfxPrecision(); } catch(e) {}
+    }
     if (isPred(o)&&d<o.r&&P.blink<=0&&!shOn) {
       // Frenzy = glass cannon: take 1.5× damage during the window.
       // Defense traits (membrane) reduce damage taken via traitStats.
@@ -4028,20 +4174,84 @@ function drawCreature(o, ts) {
       break; }
 
     case 'polyp': {
-      cx.fillStyle=col; cx.globalAlpha=.45;
-      for (let i=0;i<3;i++) { const pa=(i/3)*TAU+ts*.002; cx.beginPath(); cx.arc(Math.cos(pa)*r*.3,Math.sin(pa)*r*.3,r*.65,0,TAU); cx.fill(); }
-      cx.fillStyle='rgba(255,255,255,.15)'; cx.globalAlpha=.4; cx.beginPath(); cx.arc(0,0,r*.2,0,TAU); cx.fill();
+      // REWORKED (Rebuild II): a budding colonial animal, not three flat circles.
+      // A central disc with a crown of tentacle nubs around the oral opening, and
+      // 1–2 daughter buds pinching off the flank — mid-division, visibly ALIVE.
+      const budPh = Math.sin(o.ph * 1.7);
+      // daughter buds — offset lobes that swell and pinch with the cycle
+      cx.fillStyle = dim; cx.globalAlpha = .5;
+      for (let b = 0; b < 2; b++) {
+        const ba = o.ph + b * 2.6, bd = r * (.62 + .1 * budPh);
+        cx.beginPath(); cx.arc(Math.cos(ba) * bd, Math.sin(ba) * bd, r * (.34 + .07 * budPh * (b ? -1 : 1)), 0, TAU); cx.fill();
+      }
+      // central body
+      cx.fillStyle = col; cx.globalAlpha = .5;
+      cx.beginPath(); cx.arc(0, 0, r * .72, 0, TAU); cx.fill();
+      // crown of tentacle nubs around the oral disc
+      cx.strokeStyle = col; cx.lineWidth = .6; cx.lineCap = 'round'; cx.globalAlpha = .4;
+      for (let t = 0; t < 7; t++) {
+        const ta = (t / 7) * TAU, flex = Math.sin(o.finPh + t) * .22;
+        cx.beginPath();
+        cx.moveTo(Math.cos(ta) * r * .62, Math.sin(ta) * r * .62);
+        cx.lineTo(Math.cos(ta + flex) * r * 1.02, Math.sin(ta + flex) * r * 1.02);
+        cx.stroke();
+      }
+      // oral opening — a dark mouth with a faint luminous rim
+      cx.fillStyle = 'rgba(10,14,4,.75)'; cx.globalAlpha = .7;
+      cx.beginPath(); cx.arc(0, 0, r * .22, 0, TAU); cx.fill();
+      cx.strokeStyle = 'rgba(255,255,255,.3)'; cx.lineWidth = .5; cx.globalAlpha = .35 + .2 * budPh;
+      cx.beginPath(); cx.arc(0, 0, r * .3, 0, TAU); cx.stroke();
       break; }
 
     case 'tendril': {
-      cx.fillStyle=col; cx.globalAlpha=.38;
-      cx.beginPath(); cx.moveTo(-r*.85,r*.1); cx.quadraticCurveTo(-r*.9,-r*.72,0,-r); cx.quadraticCurveTo(r*.9,-r*.72,r*.85,r*.1); cx.quadraticCurveTo(r*.4,r*.26,0,r*.14); cx.quadraticCurveTo(-r*.4,r*.26,-r*.85,r*.1); cx.fill();
-      // Tendrils
-      cx.strokeStyle=col; cx.lineWidth=.55; cx.globalAlpha=.18;
-      for (let t=0;t<5;t++) {
-        const bx=(t-2)*r*.28; let tx=bx,ty=r*.12;
-        cx.beginPath(); cx.moveTo(bx,r*.12);
-        for (let seg=0;seg<5;seg++) { tx+=Math.sin(o.finPh+t*1.1+seg*.7)*r*.1; ty+=r*.22; cx.lineTo(tx,ty); }
+      // REWORKED (Rebuild II): a true pulsing medusa. The bell contracts on the
+      // same phase that drives its swim pulse (beh:'pulse'), so motion and body
+      // finally agree; radial canals, a gonad ring, oral arms + fine tentacles.
+      const pulse = Math.abs(Math.sin(o.breathPh * 2));          // 0 relaxed → 1 contracted
+      const bw = 1 - pulse * .22, bh = 1 + pulse * .14;          // contract wide → tall
+      // bell
+      cx.fillStyle = col; cx.globalAlpha = .34;
+      cx.beginPath();
+      cx.moveTo(-r * .9 * bw, r * .08);
+      cx.quadraticCurveTo(-r * .95 * bw, -r * .78 * bh, 0, -r * bh);
+      cx.quadraticCurveTo(r * .95 * bw, -r * .78 * bh, r * .9 * bw, r * .08);
+      cx.quadraticCurveTo(r * .42 * bw, r * .3, 0, r * .18);
+      cx.quadraticCurveTo(-r * .42 * bw, r * .3, -r * .9 * bw, r * .08);
+      cx.fill();
+      // inner bell membrane
+      cx.strokeStyle = col; cx.lineWidth = .5; cx.globalAlpha = .22;
+      cx.beginPath();
+      cx.moveTo(-r * .6 * bw, r * .02);
+      cx.quadraticCurveTo(0, -r * .62 * bh, r * .6 * bw, r * .02);
+      cx.stroke();
+      // radial canals up the bell
+      cx.globalAlpha = .14;
+      for (let k = -2; k <= 2; k++) {
+        cx.beginPath(); cx.moveTo(k * r * .3 * bw, r * .12);
+        cx.quadraticCurveTo(k * r * .34 * bw, -r * .4 * bh, k * r * .18 * bw, -r * .86 * bh);
+        cx.stroke();
+      }
+      // gonad ring — four luminous dots (the medusa signature)
+      cx.fillStyle = 'rgba(255,255,255,.5)';
+      for (let k = 0; k < 4; k++) {
+        const ga = (k / 4) * TAU + PI / 4;
+        cx.globalAlpha = .3 + .2 * Math.sin(o.breathPh + k);
+        cx.beginPath(); cx.arc(Math.cos(ga) * r * .34 * bw, -r * .3 * bh + Math.sin(ga) * r * .2, r * .07, 0, TAU); cx.fill();
+      }
+      // oral arms (4, heavier) + fine trailing tentacles (6, lighter)
+      cx.strokeStyle = col; cx.lineCap = 'round';
+      for (let t = 0; t < 4; t++) {
+        cx.lineWidth = .9; cx.globalAlpha = .26;
+        const bx = (t - 1.5) * r * .3 * bw; let tx = bx, ty = r * .14;
+        cx.beginPath(); cx.moveTo(bx, r * .14);
+        for (let seg = 0; seg < 4; seg++) { tx += Math.sin(o.finPh + t * 1.3 + seg * .8) * r * .12; ty += r * (.26 + pulse * .08); cx.lineTo(tx, ty); }
+        cx.stroke();
+      }
+      cx.lineWidth = .4; cx.globalAlpha = .14;
+      for (let t = 0; t < 6; t++) {
+        const bx = (t - 2.5) * r * .3 * bw; let tx = bx, ty = r * .1;
+        cx.beginPath(); cx.moveTo(bx, r * .1);
+        for (let seg = 0; seg < 6; seg++) { tx += Math.sin(o.finPh * 1.4 + t + seg * .6) * r * .1; ty += r * .24; cx.lineTo(tx, ty); }
         cx.stroke();
       }
       break; }
@@ -5506,6 +5716,7 @@ function loop(ts) {
   cx.setTransform(zm,0,0,zm,off.x+shx,off.y+shy);
   drawGrid();
   drawDust(ts);
+  try { drawReefs(ts); } catch(e) { cx.globalAlpha=1; }   // terrain under everything alive
 
   // Particles
   for (let i=parts.length-1; i>=0; i--) {

@@ -68,6 +68,28 @@ prey track your size and killed the sense of growth. Replaced:
   not a farmable meal. Wired into ORGS / PREY_OF / ECO_HUNT_R / ORG_TIER /
   COLOR_FAMILY(red) / VULN. Verified clean across 6000 frames.
 
-## Future layers (Rebuild II.5+)  ⚪
-- Continue the character rework upward (polyp, tendril, the apex animals).
-- SAILFISH (pursuit/speed-burst) — last of the lone-predator forks.
+## Rebuild II.5 — the enhanced world (sailfish · reefs · medusa rework)  🟢
+- **SAILFISH / SLIPSTREAM** — the last lone-predator fork (trait `slipstream`,
+  cat `pursuit`). Sustained swimming compounds into a slipstream: up to
+  +25/37/50% speed at full stream, with a speed-line wake that goes hot white at
+  ram-readiness. At full stream your momentum IS the weapon — a spearing RAM
+  (3+2.5/lv damage) that gores prey too big to swallow, spends the stream, and
+  grants a glancing blink as you blow through. All four archetypes now live:
+  SPIDER · MANTIS · CRAB · SAILFISH.
+- **ROCKS & REEFS** — the world gains PLACES. 14 stone clusters (jagged dark
+  silhouettes with cool rims) crowned with swaying coral sprigs, seeded in a ring
+  through the hunting range each run. Small prey inside a reef read dim on your
+  senses (cover, pierced at sense lvl ≥ 3, composing with family camo), and ~30%
+  of small/schooling spawns settle into nearby reefs — so reefs become where life
+  gathers and where hunters learn to look.
+- **POLYP + TENDRIL reworked** (the queued character pass): polyp is now a budding
+  colonial animal — oral disc, tentacle-nub crown, two daughter buds pinching off
+  mid-division; tendril is a true pulsing medusa whose bell contracts on the same
+  phase as its swim pulse, with radial canals, a gonad ring, oral arms and fine
+  trailing tentacles.
+- Verified: 6000-frame harness clean + 13/13 targeted tests (momentum build,
+  speed fold, ram damage/spend/cooldown, reef mask + pierce, render).
+
+## Future layers (Rebuild II.6+)  ⚪
+- Continue the character rework upward (the apex animals).
+- Reef-aware AI (prey actively fleeing INTO cover) + hive anchoring on reefs.

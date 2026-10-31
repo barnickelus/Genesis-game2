@@ -21,7 +21,7 @@ full *builds* with matching bodies:
 | **SPIDER** | web-weaver | lay sticky webs that snare drifting prey, then reel in |
 | **CRAB / ARMORED** | strength/tank | heavy, slow, crushes; shrugs off hits |
 | **MANTIS / AMBUSH** | camouflage | go near-invisible, burst-strike for huge bonus |
-| **SAILFISH / PURSUIT** | speed | outrun and run down anything |
+| **SAILFISH / PURSUIT** 🟢 | speed | `slipstream` — momentum compounds into speed; full stream = spearing RAM |
 | **ARCHER** | projectile | the bolt build, ranged kills (already seeded) |
 
 These hang off the existing **trait engine** — each is a "signature trait" + body
@@ -56,7 +56,7 @@ lineage rather than the whole identity.
   buildable, persistent nodes.
 - ⚪ **HIVE**: bud off new hives ("grow → break off → start new hive").
 - ⚪ **FUNGUS**: mycelial spread + decomposition.
-- ⚪ **Lone-creature predator forks** (spider/crab/mantis/sailfish): the pre-colony tier.
+- 🟢 **Lone-creature predator forks** (spider/crab/mantis/sailfish): ALL FOUR live.
 
 ---
 
@@ -108,6 +108,8 @@ New ideas to build (player, round 3):
 - ⚪ **Illusionary prey structures**: certain prey groups arrange into shapes/
    patterns (the rug-like "plant" cluster the player saw) — flocking presets that
    form recognizable structures, an emergent-beauty + bait mechanic.
-- ⚪ **Environment structures (rocks/reefs)**: static terrain blobs. Creatures hide
+- 🟡 **Environment structures (rocks/reefs)**: BUILT — 14 coral-crowned stone
+   clusters; prey inside read dim on senses (cover) and small spawns settle into
+   them. Still open: hive anchoring + camouflage formation. Creatures hide
    in them; some prey are drawn to them; a hive can be PLANTED onto one (anchor);
    enables a CAMOUFLAGE colony formation (hide in/near rock, ambush).

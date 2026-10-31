@@ -83,10 +83,12 @@ Data-driven TRAITS registry · actor-first hooks (onTap/onTick/onKill/mod/draw) 
 per-actor cooldowns · stacking with caps · pick-1-of-3 card chooser at every
 evolution · category-varied hands · stat folding (spd/decay/dmgTaken/senseMul).
 
-### Current pool (9 traits / 5 categories) 🟢
+### Current pool (12 traits / 7 categories) 🟢
 bolt (stacks→spread shot) · gravity_well · venom_tip · arms (octopus grasping
 arms: +reach, hauls prey in) · web (spider silk: lay webs that snare/reel
-drifting prey — first lone-predator fork) · membrane · efficient · fins · deepscan.
+drifting prey) · camo (mantis stealth/ambush) · carapace (crab armor/crush) ·
+slipstream (sailfish pursuit: momentum speed + spearing RAM) · membrane ·
+efficient · fins · deepscan.
 
 ### Planned growth ⚪
 - Migrate legacy stage abilities (dash/sting/whip/echo) into traits — uniform system.
@@ -97,7 +99,8 @@ drifting prey — first lone-predator fork) · membrane · efficient · fins · 
 - **Lone-predator forks (Tier 1, BEFORE colony)**: SPIDER (webs) 🟢 · MANTIS
   (camo/ambush) 🟢 `camo` — go still to vanish, strike from hiding for +bonus ·
   CRAB (armor/crush) 🟢 `carapace` — −damage + eat bigger prey, but slower ·
-  SAILFISH (pursuit) ⚪. Now 11 traits.
+  SAILFISH (pursuit) 🟢 `slipstream` — momentum compounds into speed; at full
+  stream, RAM larger prey. **All four archetypes live.**
 
 ---
 
@@ -110,7 +113,7 @@ drifting prey — first lone-predator fork) · membrane · efficient · fins · 
 | Anomalies (radar-huntable, mass% + frenzy reward) | 🟢 |
 | Camouflage color-family masking + radar levels + weak-spot arcs | 🟢 |
 | Predator evolution (predators adapt too, not just prey) | ⚪ |
-| Terrain (rocks/reefs) + creatures using cover | ⚪ |
+| Terrain (rocks/reefs): 14 coral-crowned stone clusters — prey cover (sense mask) + spawn attractor | 🟢 |
 | Biomes / regional fauna (open-world groundwork) | ⚪ |
 
 ## PLATFORM & META
