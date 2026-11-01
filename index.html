@@ -41,7 +41,7 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 #danger{position:fixed;inset:0;z-index:8;pointer-events:none;opacity:0;transition:opacity .45s;background:radial-gradient(ellipse at center,transparent 35%,rgba(130,6,0,.22) 100%)}
 
 /* ── Intro ── */
-#intro{position:fixed;inset:0;z-index:50;background:#00050e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity 1.4s;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+#intro{position:fixed;inset:0;z-index:50;background:radial-gradient(ellipse 60% 34% at 50% 50%,rgba(0,5,14,.72) 0%,rgba(0,5,14,.5) 55%,rgba(0,5,14,.38) 100%),radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(0,3,10,.85) 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity 1.4s;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:manipulation}
 #iTitle{font-family:'Cinzel',serif;font-size:clamp(20px,5vw,40px);letter-spacing:clamp(8px,2.5vw,20px);color:#fff;opacity:0;transition:opacity 1.8s;text-align:center;animation:titleBreathe 6s ease-in-out infinite 2s}
 #iSub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(11px,2vw,14px);letter-spacing:5px;color:rgba(255,255,255,.3);opacity:0;transition:opacity 1.8s .9s;text-align:center}
 #iHint{font-family:'Cormorant Garamond',serif;font-size:11px;letter-spacing:3px;color:rgba(255,255,255,.15);opacity:0;transition:opacity 1.8s 1.8s;text-align:center;animation:hintPulse 2.6s ease-in-out infinite 3.5s}
@@ -50,6 +50,10 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 @keyframes titleBreathe{0%,100%{letter-spacing:clamp(8px,2.5vw,20px);text-shadow:0 0 24px rgba(255,255,255,.18)}50%{letter-spacing:clamp(9px,2.7vw,22px);text-shadow:0 0 40px rgba(255,255,255,.32)}}
 @keyframes hintPulse{0%,100%{opacity:.18;letter-spacing:3px}50%{opacity:.55;letter-spacing:4px}}
 @keyframes sparkPulse{0%,100%{opacity:0;transform:translate(-50%,-50%) scale(.4)}50%{opacity:.55;transform:translate(-50%,-50%) scale(1.4)}}
+
+/* Title screen: the living ocean shows through the intro, so the game HUD must not. */
+body.introOn #hud,body.introOn #pBtn,body.introOn #cheatBtn,body.introOn #morphBtn,body.introOn #budBtn,
+body.introOn #mmap,body.introOn #objHud,body.introOn #radarHud,body.introOn #danger{opacity:0!important;pointer-events:none!important}
 
 /* canvas baseline */
 #g{touch-action:none;-webkit-tap-highlight-color:transparent;display:block}
@@ -104,12 +108,18 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 #adaptTitle{font-family:'Cinzel',serif;font-size:clamp(16px,3vw,24px);letter-spacing:10px;color:#9CF0FF;text-shadow:0 0 18px rgba(156,240,255,.5)}
 #adaptSub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:13px;letter-spacing:3px;color:rgba(255,255,255,.4);margin-bottom:18px}
 #adaptCards{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;max-width:680px;padding:0 14px}
-.adaptCard{width:180px;min-height:172px;padding:18px 16px;background:rgba(8,18,30,.7);border:1px solid rgba(156,240,255,.18);border-top:2px solid #9CF0FF;border-radius:3px;cursor:pointer;display:flex;flex-direction:column;gap:9px;transition:transform .12s,background .15s,border-color .15s;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-.adaptCard:hover,.adaptCard:active{transform:translateY(-4px);background:rgba(14,30,46,.85);border-color:rgba(156,240,255,.5)}
-.adaptCard .cName{font-family:'Cinzel',serif;font-size:14px;letter-spacing:3px;color:#9CF0FF}
-.adaptCard .cCat{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.3);text-transform:uppercase}
+.adaptCard{--cc:#9CF0FF;--ccg:rgba(156,240,255,.14);position:relative;overflow:hidden;width:180px;min-height:172px;padding:18px 16px;background:radial-gradient(ellipse 120% 70% at 50% 0%,var(--ccg),transparent 72%),rgba(8,18,30,.74);border:1px solid rgba(156,240,255,.14);border-top:2px solid var(--cc);border-radius:3px;cursor:pointer;display:flex;flex-direction:column;gap:9px;transition:transform .14s,background .15s,border-color .15s,box-shadow .2s;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;animation:cardIn .6s cubic-bezier(.2,.8,.2,1) backwards}
+.adaptCard:hover,.adaptCard:active{transform:translateY(-5px);border-color:var(--cc);box-shadow:0 10px 34px -10px var(--cc),inset 0 0 26px -16px var(--cc)}
+@keyframes cardIn{from{opacity:0;transform:translateY(22px) scale(.95)}to{opacity:1;transform:none}}
+.adaptCard .cIcon{width:46px;height:46px;color:var(--cc);filter:drop-shadow(0 0 5px var(--cc));margin-bottom:2px;transition:transform .3s}
+.adaptCard:hover .cIcon{transform:scale(1.08)}
+.adaptCard .cIcon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.adaptCard .cName{font-family:'Cinzel',serif;font-size:14px;letter-spacing:3px;color:var(--cc);overflow-wrap:anywhere}
+.adaptCard .cName.long{font-size:12.5px;letter-spacing:1.2px}
+.adaptCard .cCat{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:var(--cc);opacity:.55;text-transform:uppercase}
 .adaptCard .cDesc{font-family:'Cormorant Garamond',serif;font-size:13px;line-height:1.35;color:rgba(255,255,255,.6);flex:1}
-.adaptCard .cLv{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;color:rgba(156,240,255,.7)}
+.adaptCard .cLv{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;color:var(--cc);opacity:.75}
+.adaptCard .cLv.up{opacity:1}
 .adaptCard .cLv.up{color:#FFD860}
 
 /* ── Minimap ── */
@@ -157,7 +167,7 @@ html,body{height:100%;overflow:hidden;background:#00050e;touch-action:none}
 #mmC{display:block}
 </style>
 </head>
-<body>
+<body class="introOn">
 <canvas id="g"></canvas>
 
 <div id="hud">
@@ -1572,6 +1582,7 @@ function startIntro() {
 function beginGame() {
   if (!introActive) return;
   introActive = false;
+  document.body.classList.remove('introOn');   // HUD returns as the title fades
   const el = document.getElementById('intro');
   el.style.opacity = '0';
   el.style.pointerEvents = 'none';
@@ -2560,25 +2571,82 @@ function dealHand(a, n = 3) {
   return picked;
 }
 
+// ═══════════════════════════════════════════
+// CARD GLYPHS — every adaptation gets a line-drawn icon in its category colour,
+// so the choice reads at a glance (what it IS) before the text (what it DOES).
+// 48×48 viewBox, stroked in currentColor; a few are generated (spiral, web, sun).
+// ═══════════════════════════════════════════
+const CAT_COLOR = {
+  acquisition: '#FF9C6B', defense: '#8CC4FF', metabolism: '#7CE8B4', movement: '#8FF6FF',
+  senses: '#C9A6FF', camouflage: '#9AFFC0', pursuit: '#E6FBFF', micro: '#7CE8FF', macro: '#FFD27A',
+};
+const svgPoly = (pts, close) => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ') + (close ? ' Z' : '');
+function glyphSpiral() {
+  const pts = []; for (let i = 0; i <= 70; i++) { const t = i / 70, a = t * 2.6 * TAU, r = 1.5 + 16.5 * t; pts.push([24 + Math.cos(a) * r, 24 + Math.sin(a) * r]); }
+  return `<path d="${svgPoly(pts)}"/><circle cx="24" cy="24" r="2.4" fill="currentColor" stroke="none"/>`;
+}
+function glyphWeb() {
+  let s = ''; const n = 8;
+  for (let i = 0; i < n; i++) { const a = i / n * TAU; s += `<line x1="24" y1="24" x2="${(24 + Math.cos(a) * 18).toFixed(1)}" y2="${(24 + Math.sin(a) * 18).toFixed(1)}"/>`; }
+  for (const rr of [6, 11.5, 17]) { const pts = []; for (let i = 0; i < n; i++) { const a = i / n * TAU; pts.push([24 + Math.cos(a) * rr, 24 + Math.sin(a) * rr]); } s += `<path d="${svgPoly(pts, true)}" opacity="${rr > 16 ? 1 : .7}"/>`; }
+  return s;
+}
+function glyphSun() {
+  let s = `<circle cx="24" cy="24" r="7.5"/><circle cx="24" cy="24" r="3" fill="currentColor" stroke="none"/>`;
+  for (let i = 0; i < 12; i++) { const a = i / 12 * TAU, r0 = 11, r1 = i % 2 ? 16 : 20; s += `<line x1="${(24 + Math.cos(a) * r0).toFixed(1)}" y1="${(24 + Math.sin(a) * r0).toFixed(1)}" x2="${(24 + Math.cos(a) * r1).toFixed(1)}" y2="${(24 + Math.sin(a) * r1).toFixed(1)}"/>`; }
+  return s;
+}
+const DOT = (x, y, r, o) => `<circle cx="${x}" cy="${y}" r="${r}" fill="currentColor" stroke="none"${o ? ` opacity="${o}"` : ''}/>`;
+const CARD_ICONS = {
+  bolt:         `<path d="M9 39 L31 17"/><path d="M28 12 L40 8 L36 20 Z" fill="currentColor" stroke="none"/><path d="M8 29 L15 22 M19 41 L26 34" opacity=".45"/>`,
+  gravity_well: glyphSpiral(),
+  venom_tip:    `<path d="M24 7 C24 7 12 22 12 30 a12 12 0 0 0 24 0 C36 22 24 7 24 7 Z"/><path d="M18.5 31 a5.5 5.5 0 0 0 5.5 5.5" opacity=".6"/>` + DOT(38, 12, 1.6) + DOT(42, 19, 1.1) + DOT(9, 14, 1.2),
+  membrane:     `<path d="M24 6 L39.6 15 L39.6 33 L24 42 L8.4 33 L8.4 15 Z"/><path d="M24 12 L34.4 18 L34.4 30 L24 36 L13.6 30 L13.6 18 Z" opacity=".5"/>` + DOT(24, 24, 3, .8),
+  efficient:    `<path d="M36.5 17 A14 14 0 1 0 38 28"/><path d="M37 9 L37 17 L29 17"/><path d="M24 16.5 Q30.5 24 24 31.5 Q17.5 24 24 16.5 Z" fill="currentColor" stroke="none" opacity=".7"/>`,
+  fins:         `<path d="M8 38 Q14 12 40 8 Q30 22 35 38 Z"/><path d="M13 37 Q20 20 35 11 M19 38 Q24 25 36 16 M26 38 Q29 28 36 22" opacity=".5"/>`,
+  deepscan:     `<path d="M7 24 Q24 9 41 24 Q24 39 7 24 Z"/><circle cx="24" cy="24" r="5.5"/>` + DOT(24, 24, 2) + `<path d="M5 12 Q24 -2 43 12 M5 36 Q24 50 43 36" opacity=".45"/>`,
+  arms:         `<path d="M12 42 C10 28 30 30 30 18 C30 9 20 9 20 16 C20 21 26 21 26 17"/><path d="M22 42 C24 34 38 36 38 27" opacity=".55"/>` + DOT(15, 33, 1.4) + DOT(22, 27, 1.4) + DOT(28, 22, 1.3),
+  web:          glyphWeb(),
+  camo:         `<path d="M8 26 Q24 12 40 26 Q24 38 8 26 Z" stroke-dasharray="3 3.5"/>` + DOT(18, 25, 2, .35) + DOT(25, 22, 2.6, .65) + DOT(31, 27, 1.8, .25) + `<path d="M14 13 Q24 6 34 13" opacity=".4"/>`,
+  carapace:     `<path d="M9 29 Q24 6 39 29 Q24 37 9 29 Z"/><path d="M24 14 L24 33 M16 20 Q20 26 17 32 M32 20 Q28 26 31 32" opacity=".55"/><path d="M9 29 L5 22 L9 19 M39 29 L43 22 L39 19"/>`,
+  slipstream:   `<path d="M12 31 Q26 27 42 30 L36 33 Q24 35 12 31 Z" fill="currentColor" stroke="none" opacity=".55"/><path d="M17 30 Q20 11 34 13 L31 29"/><path d="M4 22 L13 22 M2 28 L10 28 M5 34 L12 34" opacity=".55"/>`,
+  DIVIDE:       `<circle cx="17" cy="24" r="10"/><circle cx="31" cy="24" r="10"/>` + DOT(17, 24, 2.5) + DOT(31, 24, 2.5) + `<path d="M24 16.5 L24 31.5" opacity=".5" stroke-dasharray="2 2.5"/>`,
+  ASCEND:       glyphSun(),
+};
+// Build one choice card. `key` picks the glyph; `cat` picks the colour.
+function makeChoiceCard(key, cat, catLabel, name, desc, lvHtml, i) {
+  const col = CAT_COLOR[cat] || '#9CF0FF';
+  const card = document.createElement('div');
+  card.className = 'adaptCard';
+  card.style.setProperty('--cc', col);
+  card.style.setProperty('--ccg', hexA(col, .14));
+  card.style.animationDelay = (i * 95) + 'ms';
+  card.innerHTML =
+    `<div class="cIcon"><svg viewBox="0 0 48 48" aria-hidden="true">${CARD_ICONS[key] || ''}</svg></div>` +
+    `<div class="cCat">${catLabel}</div>` +
+    // A long single word (CHROMATOPHORES) can't wrap — tighten it to fit the card.
+    `<div class="cName${name.length > 12 && !/\s/.test(name) ? ' long' : ''}">${name}</div>` +
+    `<div class="cDesc">${desc}</div>` + lvHtml;
+  return card;
+}
+
 function openAdapt(a) {
   const hand = dealHand(a, 3);
   if (!hand.length) return;                 // everything maxed — skip silently
   adaptOpen = true; paused = true;          // freeze sim while choosing
   const wrap = document.getElementById('adaptCards');
   wrap.innerHTML = '';
-  for (const id of hand) {
+  // (The Singularity fork re-titles this overlay; restore the adaptation header.)
+  document.getElementById('adaptTitle').textContent = 'ADAPT';
+  document.getElementById('adaptSub').textContent = 'Choose an adaptation';
+  hand.forEach((id, i) => {
     const def = TRAITS[id], owned = (a.traitLv[id] || 0) > 0;
-    const card = document.createElement('div');
-    card.className = 'adaptCard';
     const lvTxt = owned ? `▲ UPGRADE · LV ${(a.traitLv[id]||0)+1}/${def.max}` : 'NEW ADAPTATION';
-    card.innerHTML =
-      `<div class="cCat">${def.cat}</div>` +
-      `<div class="cName">${def.name}</div>` +
-      `<div class="cDesc">${def.desc}</div>` +
-      `<div class="cLv${owned?' up':''}">${lvTxt}</div>`;
+    const card = makeChoiceCard(id, def.cat, def.cat, def.name, def.desc,
+      `<div class="cLv${owned?' up':''}">${lvTxt}</div>`, i);
     card.onclick = () => chooseAdapt(a, id);
     wrap.appendChild(card);
-  }
+  });
   document.getElementById('adapt').classList.add('on');
 }
 
@@ -2716,13 +2784,12 @@ function openSingularityFork() {
     { name:'DIVIDE', cat:'MICRO · mitosis', desc:'Burst into a living colony of cells. Grow by numbers — feed cells until they divide, and shape the colony to filter the deep.', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; doMitosis(); } },
     { name:'ASCEND', cat:'MACRO · colossus', desc:'Stay whole. Remain the colossus and keep drawing the ocean in. (The macro branch expands in a future update.)', go:() => { document.getElementById('adapt').classList.remove('on'); paused=false; microMode='single'; breakPressure=0; announce('ASCENDANT','#5AC8FF','You remain singular. Filter on.',3000); } },
   ];
-  for (const f of forks) {
-    const card = document.createElement('div');
-    card.className = 'adaptCard';
-    card.innerHTML = `<div class="cCat">${f.cat}</div><div class="cName">${f.name}</div><div class="cDesc">${f.desc}</div><div class="cLv">CHOOSE</div>`;
+  forks.forEach((f, i) => {
+    const card = makeChoiceCard(f.name, f.name === 'DIVIDE' ? 'micro' : 'macro', f.cat, f.name, f.desc,
+      `<div class="cLv">CHOOSE</div>`, i);
     card.onclick = f.go;
     wrap.appendChild(card);
-  }
+  });
   document.getElementById('adapt').classList.add('on');
 }
 
@@ -4213,7 +4280,10 @@ const bloomA = document.createElement('canvas'), bxA = bloomA.getContext('2d');
 const bloomB = document.createElement('canvas'), bxB = bloomB.getContext('2d');
 let bloomOn = true;
 function applyBloom() {
-  if (!bloomOn) return;
+  if (!bloomOn) {   // bloom toggled off ('B'): caustics fall back to a direct full-res draw
+    try { drawCausticsInto(cx, W, H, 1, frameTs, 1); } catch (e) {}
+    return;
+  }
   const w4 = Math.max(1, W >> 2), h4 = Math.max(1, H >> 2),
         w8 = Math.max(1, W >> 3), h8 = Math.max(1, H >> 3);
   if (bloomA.width !== w4) { bloomA.width = w4; bloomA.height = h4; }
@@ -4224,15 +4294,175 @@ function applyBloom() {
   bxA.clearRect(0, 0, w4, h4); bxA.drawImage(G, 0, 0, w4, h4);
   bxB.globalCompositeOperation = 'source-over'; bxB.globalAlpha = 1; bxB.imageSmoothingEnabled = true;
   bxB.clearRect(0, 0, w8, h8); bxB.drawImage(bloomA, 0, 0, w8, h8);
+  // Caustics ride the ¼-res buffer (after B is derived, so they aren't double-
+  // blurred). Alpha ×3.4: ×2 because bloomA composites at .5, and more because
+  // the thin strands spread across the 4× upscale and lose peak brightness —
+  // tuned by eye against the full-res render.
+  try { drawCausticsInto(bxA, w4, h4, .25, frameTs, 3.4); } catch (e) {}
 
-  // Composite the blurred buffers back additively at full size
+  // Composite the blurred buffers back at full size with SCREEN, not 'lighter'.
+  // 'lighter' (a+b) is fine for small glows on black, but inside any LARGE
+  // bright body the blur ≈ the body, so its interior gained ~+78% and clipped
+  // flat (PRIMORDIAL became a featureless sun; TITAN's hex blew out). Screen
+  // (1-(1-a)(1-b)) ≈ a+b for dim halos on dark water — the glow look is kept —
+  // but rolls off smoothly toward white on bright surfaces: a soft-knee tone
+  // curve, so lit bodies keep their shading. (Alphas nudged up to match punch.)
   cx.setTransform(1, 0, 0, 1, 0, 0);
   cx.imageSmoothingEnabled = true;
-  cx.globalCompositeOperation = 'lighter';
-  cx.globalAlpha = .42; cx.drawImage(bloomA, 0, 0, W, H);
-  cx.globalAlpha = .36; cx.drawImage(bloomB, 0, 0, W, H);
+  cx.globalCompositeOperation = 'screen';
+  cx.globalAlpha = .5;  cx.drawImage(bloomA, 0, 0, W, H);
+  cx.globalAlpha = .42; cx.drawImage(bloomB, 0, 0, W, H);
   cx.globalCompositeOperation = 'source-over';
   cx.globalAlpha = 1;
+}
+
+// ═══════════════════════════════════════════
+// LIVING WATER — caustics + foreground bokeh
+// ═══════════════════════════════════════════
+// The single strongest "this is an OCEAN, not space" cue: sunlight focused by
+// the rippling surface into a shifting web on everything below. Generated ONCE
+// as a tileable Voronoi-ridge texture (minimum-image wrap → seamless), then two
+// copies drift at different scales, speeds and parallax depths; where their
+// ridges cross they brighten, so the web shimmers and re-forms like real
+// caustics. Daylight only — they fade out as THE DEEP DARK falls, which makes
+// night read as a genuinely different world. Cost: two pattern fills/frame.
+const CAUST_S = 256;
+const caustTile = document.createElement('canvas');
+caustTile.width = caustTile.height = CAUST_S;
+(() => {
+  const g = caustTile.getContext('2d');
+  const img = g.createImageData(CAUST_S, CAUST_S), d = img.data;
+  const N = 24, sx = [], sy = [];
+  for (let i = 0; i < N; i++) { sx.push(Math.random() * CAUST_S); sy.push(Math.random() * CAUST_S); }
+  const half = CAUST_S / 2, w = TAU / CAUST_S;
+  const p1 = rng(0, TAU), p2 = rng(0, TAU), p3 = rng(0, TAU), p4 = rng(0, TAU);
+  for (let y = 0; y < CAUST_S; y++) for (let x = 0; x < CAUST_S; x++) {
+    // Domain warp with whole-period sines (still seamlessly tileable): straight
+    // Voronoi walls → curving light filaments. Unwarped it reads as cracked
+    // glass / a tissue of CELLS, which in this game is exactly the wrong read.
+    const wx = x + 9 * Math.sin(w * 2 * y + p1) + 5 * Math.sin(w * 5 * (x + y) + p2);
+    const wy = y + 9 * Math.sin(w * 3 * x + p3) + 5 * Math.sin(w * 4 * (x - y) + p4);
+    let d1 = 1e9, d2 = 1e9, d3 = 1e9;
+    for (let i = 0; i < N; i++) {
+      let dx = Math.abs(wx - sx[i]) % CAUST_S; if (dx > half) dx = CAUST_S - dx;
+      let dy = Math.abs(wy - sy[i]) % CAUST_S; if (dy > half) dy = CAUST_S - dy;
+      const q = dx * dx + dy * dy;
+      if (q < d1) { d3 = d2; d2 = d1; d1 = q; } else if (q < d2) { d3 = d2; d2 = q; } else if (q < d3) d3 = q;
+    }
+    const r1 = Math.sqrt(d1), e = Math.sqrt(d2) - r1;      // 0 on a filament
+    let v = Math.pow(Math.max(0, 1 - e / 3.6), 2.6);        // thin bright strand
+    const jn = Math.max(0, 1 - (Math.sqrt(d3) - r1) / 10);  // where strands meet…
+    v *= 1 + 1.1 * jn * jn;                                  // …light pools into a knot
+    // Uneven: strands swell and fade along their length (tileable low-freq mask).
+    v *= .45 + .55 * (.5 + .5 * Math.sin(w * 2 * x + p2) * Math.sin(w * 3 * y + p3));
+    const k = (y * CAUST_S + x) * 4;
+    d[k] = 175; d[k + 1] = 238; d[k + 2] = 255; d[k + 3] = Math.round(Math.min(1, v) * 255);
+  }
+  g.putImageData(img, 0, 0);
+})();
+const caustPats = new Map();                 // a pattern per target context
+let caustStrength = 1;                       // the title screen runs them a touch softer
+let frameTs = 0;                             // this frame's timestamp (set by loop / intro)
+function caustDay() { return cl((worldLight() - .5) / .45, 0, 1); }   // 1 by day → 0 by deep night
+// PERF: caustics are soft by nature, so they're drawn into the bloom's ¼-res
+// buffer (1/16 the pixels) and ride the bloom composite the frame already pays
+// for — zero extra full-screen passes. (Drawn at full res as two screen fills
+// they measured +66% frame time under software raster at DPR 2 — not shippable
+// after a lag report.) `px` = target pixels per backing pixel (¼ for bloomA).
+function drawCausticsInto(g, w, h, px, ts, alphaMul) {
+  const day = caustDay() * caustStrength;
+  if (day <= .02) return;
+  let pat = caustPats.get(g);
+  if (!pat) { pat = g.createPattern(caustTile, 'repeat'); caustPats.set(g, pat); }
+  const zs = cl(Math.sqrt(zm), .5, 1.25);             // the web tightens as the lens pulls back
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  g.fillStyle = pat;
+  for (let layer = 0; layer < 2; layer++) {
+    const sc  = (layer ? 1.35 : 1.85) * DPR * zs * px; // target px per texel
+    const par = layer ? .62 : .48;                     // parallax: the light lies BELOW the action
+    const t   = ts * (layer ? .0042 : .0029);          // each layer drifts its own way
+    const span = CAUST_S * sc;
+    let ox = ((-P.x * zm * par + Math.cos(layer ? 2.1 : .4) * t) * px) % span;
+    let oy = ((-P.y * zm * par + Math.sin(layer ? 2.1 : .4) * t) * px) % span;
+    if (ox > 0) ox -= span; if (oy > 0) oy -= span;
+    g.setTransform(sc, 0, 0, sc, ox, oy);
+    g.globalAlpha = Math.min(1, (layer ? .028 : .038) * day * alphaMul);
+    g.fillRect(0, 0, w / sc + CAUST_S, h / sc + CAUST_S);
+  }
+  g.restore();
+}
+
+// Foreground bokeh — soft out-of-focus motes drifting IN FRONT of the action,
+// moving faster than the world (parallax > 1). A cheap depth-of-field cue that
+// gives the camera a lens and the water a volume. Sprite is pre-rendered once.
+const bokehSprite = document.createElement('canvas');
+bokehSprite.width = bokehSprite.height = 64;
+(() => {
+  const g = bokehSprite.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(210,240,255,.9)'); gr.addColorStop(.45, 'rgba(170,220,255,.35)');
+  gr.addColorStop(.8, 'rgba(150,200,255,.08)'); gr.addColorStop(1, 'rgba(150,200,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+})();
+const bokeh = [];
+for (let i = 0; i < 14; i++) bokeh.push({ u: Math.random(), v: Math.random(), s: rng(9, 30), a: rng(.035, .085),
+  par: rng(1.35, 2.1), ph: rng(0, TAU), dx: rng(-.008, .008), dy: rng(-.012, -.003) });
+function drawBokeh(ts) {
+  cx.save(); cx.setTransform(1, 0, 0, 1, 0, 0);
+  cx.globalCompositeOperation = 'lighter';
+  const m = 40 * DPR, sw = W + 2 * m, sh = H + 2 * m;
+  for (const b of bokeh) {
+    let x = (b.u * sw - P.x * zm * b.par + ts * b.dx * DPR) % sw; if (x < 0) x += sw;
+    let y = (b.v * sh - P.y * zm * b.par + ts * b.dy * DPR) % sh; if (y < 0) y += sh;
+    const s = b.s * DPR;
+    cx.globalAlpha = b.a * (.75 + .25 * Math.sin(ts * .0011 + b.ph));
+    cx.drawImage(bokehSprite, x - m - s, y - m - s, s * 2, s * 2);
+  }
+  cx.restore();
+}
+
+// ═══════════════════════════════════════════
+// LIVING TITLE — the real ocean drifts behind "GENESIS EVOLUTION"
+// ═══════════════════════════════════════════
+// Render-only: no AI, no collisions, no spawning, no clock. The opening sea
+// (already seeded by init) just breathes and wanders under a slow camera
+// drift, lit by caustics, seen through the intro's vignette. When the player
+// taps, the overlay fades and the SAME world is simply already there.
+let introLast = 0;
+function drawIntroWorld(ts) {
+  const dt = introLast ? Math.min(ts - introLast, 50) : 16; introLast = ts;
+  const minDim = Math.min(CW, CH);
+  zm = cl(minDim / 800, .55, 1.15) * 1.05;
+  // Slow lissajous camera drift; P is borrowed as the camera and restored.
+  const px = P.x, py = P.y;
+  const camX = Math.sin(ts * .000055) * 240, camY = Math.cos(ts * .000041) * 170;
+  P.x = camX; P.y = camY;
+  off.x = W / 2 - camX * zm; off.y = H / 2 - camY * zm;
+  const viewHalf = Math.max(W, H) / zm;
+  for (const o of orgs) {
+    const dx = o.x - camX, dy = o.y - camY;
+    if (dx * dx + dy * dy > viewHalf * viewHalf) continue;
+    const T = ORGS[o.type];
+    o.ph += dt * .003; o.finPh += dt * .006; o.breathPh += dt * .004;
+    o.wAng += (Math.random() - .5) * .0015 * dt;
+    const sp = Math.min(T.spd, .6) * .35 * (dt / 16);
+    o.x += Math.cos(o.wAng) * sp; o.y += Math.sin(o.wAng) * sp;
+    o.hd = o.wAng;
+  }
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+  cx.clearRect(0, 0, W, H);
+  drawBg(ts);
+  cx.setTransform(zm, 0, 0, zm, off.x, off.y);
+  drawDust(ts);
+  try { drawReefs(ts); } catch (e) { cx.globalAlpha = 1; }
+  frameTs = ts; caustStrength = .85;   // caustics are composited inside applyBloom (¼-res)
+  cx.setTransform(zm, 0, 0, zm, off.x, off.y);
+  try { for (const o of orgs) drawCreature(o, ts); } catch (e) { cx.globalAlpha = 1; cx.shadowBlur = 0; }
+  cx.globalAlpha = 1; cx.shadowBlur = 0;
+  try { drawBokeh(ts); } catch (e) {}
+  P.x = px; P.y = py;
+  try { applyBloom(); } catch (e) { cx.setTransform(1,0,0,1,0,0); cx.globalCompositeOperation='source-over'; cx.globalAlpha=1; }
 }
 
 // ═══════════════════════════════════════════
@@ -4346,14 +4576,14 @@ function drawGrid() {
   for (let i=-18;i<=18;i++) for (let j=-18;j<=18;j++) {
     const x=i*50,y=j*50; if(!onScr(x,y,55))continue;
     const dd=Math.hypot(x+25-P.x,y+25-P.y), f=Math.max(0,1-dd/360); if(f<.01)continue;
-    cx.strokeStyle=`rgba(14,26,44,${.055*f})`; cx.beginPath(); cx.rect(x,y,50,50); cx.stroke();
-  }
+    cx.strokeStyle=`rgba(14,26,44,${.03*f})`; cx.beginPath(); cx.rect(x,y,50,50); cx.stroke();
+  }   // (grid softened: caustics now carry the sense of motion — water, not graph paper)
   // Major grid
   cx.lineWidth=.45;
   for (let i=-9;i<=9;i++) for (let j=-9;j<=9;j++) {
     const x=i*200,y=j*200; if(!onScr(x,y,280))continue;
     const dd=Math.hypot(x+100-P.x,y+100-P.y), f=Math.max(0,1-dd/850);
-    cx.strokeStyle=`rgba(20,38,60,${.1*f+.012})`; cx.beginPath(); cx.rect(x,y,200,200); cx.stroke();
+    cx.strokeStyle=`rgba(20,38,60,${.055*f+.007})`; cx.beginPath(); cx.rect(x,y,200,200); cx.stroke();
   }
   // Landmarks
   for (const lm of LANDMARKS) {
@@ -4638,14 +4868,71 @@ function drawCreature(o, ts) {
       break; }
 
     case 'levia': {
-      cx.fillStyle=col; cx.globalAlpha=.4;
-      cx.beginPath(); cx.moveTo(r*1.12,0); cx.quadraticCurveTo(r,-r*.42,r*.22,-r*.5); cx.quadraticCurveTo(-r*.32,-r*.52,-r*.62,-r*.28); cx.quadraticCurveTo(-r*1.02,0,-r*.62,r*.28); cx.quadraticCurveTo(-r*.32,r*.52,r*.22,r*.5); cx.quadraticCurveTo(r,r*.42,r*1.12,0); cx.fill();
-      cx.fillStyle=dim; cx.globalAlpha=.28;
-      cx.beginPath(); cx.moveTo(-r*.97,0); cx.lineTo(-r*1.32,-r*.3); cx.lineTo(-r*1.08,0); cx.fill();
-      cx.beginPath(); cx.moveTo(-r*.97,0); cx.lineTo(-r*1.32,r*.3); cx.lineTo(-r*1.08,0); cx.fill();
-      // Spots
-      cx.fillStyle='rgba(255,255,255,.06)';
-      for (let i=0;i<4;i++) { const sa=(i/4)*TAU+ts*.0008; cx.globalAlpha=.25+.1*Math.sin(o.breathPh+i); cx.beginPath(); cx.arc(Math.cos(sa)*r*.4,Math.sin(sa)*r*.35,r*.06,0,TAU); cx.fill(); }
+      // REWORKED: the leviathan is a MANTA — the gentle filter-feeding giant
+      // (it already grazes plankton) and the most readable top-down silhouette
+      // in the sea. The wings flap (tips sweep fore/aft, span breathes), cephalic
+      // fins scoop at the mouth, pale shoulder chevrons + spots on the back, a
+      // whip tail, and luminous leading edges the bloom catches.
+      const fp = Math.sin(o.finPh * .7);                 // slow, majestic stroke
+      const span = r * (1.18 + .1 * fp);
+      const tipX = -r * (.12 - .16 * fp);
+      const hx = r * .5, hy = r * .2;                    // broad head corners
+      cx.lineCap = 'round';
+      // whip tail (under the body)
+      cx.strokeStyle = col; cx.lineWidth = r * .05; cx.globalAlpha = .35;
+      cx.beginPath(); cx.moveTo(-r * .4, 0);
+      cx.quadraticCurveTo(-r * .85, Math.sin(o.finPh * .7 - 1) * r * .12, -r * 1.35, Math.sin(o.finPh * .7 - 2) * r * .2);
+      cx.stroke();
+      // wings + body as one silhouette
+      cx.beginPath();
+      cx.moveTo(hx, -hy);
+      cx.bezierCurveTo(r * .45, -span * .55, r * .05, -span * .92, tipX, -span);   // leading edge → tip
+      cx.bezierCurveTo(-r * .2, -span * .7, -r * .3, -r * .3, -r * .45, -r * .12); // trailing edge sweeps back
+      cx.quadraticCurveTo(-r * .52, 0, -r * .45, r * .12);
+      cx.bezierCurveTo(-r * .3, r * .3, -r * .2, span * .7, tipX, span);
+      cx.bezierCurveTo(r * .05, span * .92, r * .45, span * .55, hx, hy);
+      cx.quadraticCurveTo(r * .58, 0, hx, -hy);                                     // flat, wide mouth edge
+      cx.closePath();
+      cx.fillStyle = col; cx.globalAlpha = .5; cx.fill();
+      // raised dorsal body down the centre
+      cx.fillStyle = dim; cx.globalAlpha = .38;
+      cx.beginPath(); cx.ellipse(r * .02, 0, r * .48, r * .2, 0, 0, TAU); cx.fill();
+      // shoulder chevrons — the manta's pale back markings
+      cx.fillStyle = '#ebf5ff'; cx.globalAlpha = .15;
+      for (const s of [-1, 1]) {
+        cx.beginPath();
+        cx.moveTo(r * .3, s * r * .16);
+        cx.quadraticCurveTo(r * .05, s * r * .55, -r * .25, s * span * .62);
+        cx.quadraticCurveTo(-r * .05, s * r * .38, r * .3, s * r * .16);
+        cx.fill();
+      }
+      // back spots
+      cx.fillStyle = '#fff';
+      for (let i = 0; i < 6; i++) {
+        const sx2 = -r * .1 + (i % 3) * r * .14, sy2 = (i < 3 ? -1 : 1) * r * (.07 + (i % 3) * .03);
+        cx.globalAlpha = .12 + .06 * Math.sin(o.breathPh + i);
+        cx.beginPath(); cx.arc(sx2, sy2, r * .035, 0, TAU); cx.fill();
+      }
+      // cephalic fins — curled scoops either side of the mouth
+      cx.strokeStyle = col; cx.lineWidth = r * .08; cx.globalAlpha = .55;
+      for (const s of [-1, 1]) {
+        cx.beginPath(); cx.moveTo(hx, s * hy);
+        cx.quadraticCurveTo(r * .72, s * hy * 1.3, r * .74, s * hy * .45 + Math.sin(o.finPh + s) * r * .03);
+        cx.stroke();
+      }
+      // luminous leading edges
+      cx.strokeStyle = '#c8e6ff'; cx.lineWidth = r * .025; cx.globalAlpha = .32;
+      for (const s of [-1, 1]) {
+        cx.beginPath(); cx.moveTo(hx, s * hy);
+        cx.bezierCurveTo(r * .45, s * span * .55, r * .05, s * span * .92, tipX, s * span);
+        cx.stroke();
+      }
+      // eyes on the sides of the head
+      if (r * zm > 6) {
+        cx.fillStyle = '#e8f4ff'; cx.globalAlpha = .7;
+        for (const s of [-1, 1]) { cx.beginPath(); cx.arc(r * .42, s * r * .22, r * .035, 0, TAU); cx.fill(); }
+      }
+      cx.lineCap = 'butt';
       break; }
 
     case 'phantom': {
@@ -4746,7 +5033,7 @@ function drawCreature(o, ts) {
     cx.lineWidth=.9; cx.beginPath(); cx.arc(o.x,o.y,r+2,-PI/2,-PI/2+pct*TAU); cx.stroke();
   }
   // Eat/flee indicator
-  if (dd<280 && r*zm>3) {
+  if (dd<280 && r*zm>3 && !introActive) {   // (no gameplay cues on the title screen)
     if (canEat(o)) {
       cx.fillStyle='rgba(100,220,80,.28)'; cx.beginPath(); cx.moveTo(o.x-2.5,o.y-r-8); cx.lineTo(o.x+2.5,o.y-r-8); cx.lineTo(o.x,o.y-r-3); cx.fill();
     } else if (isPred(o)) {
@@ -4838,8 +5125,9 @@ function drawPlayerBody(ts) {
   // of ~.48 produced effectively-invisible alpha of .16 — the user's complaint.)
   const bv = 1;  // body always full visibility
 
-  // Ambient outer glow (drawn before body, no transform)
-  bioGlow(P.x, P.y, r*3.8, s.c.gl, .48);
+  // Ambient outer glow (drawn before body, no transform). PRIMORDIAL's saturated
+  // gold clips under bloom, so its halo runs gentler.
+  bioGlow(P.x, P.y, r*3.8, s.c.gl, P.stg === 4 ? .32 : .48);
 
   cx.save();
   cx.translate(P.x, P.y);
@@ -4957,17 +5245,34 @@ function drawPlayerBody(ts) {
 
   // ── STAGE 4: PRIMORDIAL — mythological organism ──
   else if (P.stg===4) {
-    const br=1+.025*Math.sin(ts*.0035);
-    cx.shadowBlur=12*zm; cx.shadowColor=s.c.pri;
-    cx.fillStyle=s.c.pri; cx.globalAlpha=bv*.48;
-    cx.beginPath(); cx.arc(0,0,r*br,0,TAU); cx.fill();
+    // Re-lit: the old flat #FFD700 disc (plus halo, failsafe wash and bloom)
+    // clipped into a featureless sun, and its crown + geometry were drawn in the
+    // DARK stage colour at ~.2 alpha — invisible on gold. Now: a shaded sphere
+    // (pale-gold core → deep amber rim) whose features actually contrast.
+    const br=1+.025*Math.sin(ts*.0035), R=r*br;
+    // Orbital crown spikes — bright blades with dark edges, behind the body
+    for (let i=0;i<8;i++) {
+      const sa=(i/8)*TAU+ts*.0012, tip=r*1.5+Math.sin(ts*.003+i)*r*.08;
+      cx.beginPath(); cx.moveTo(Math.cos(sa-.085)*r*.8,Math.sin(sa-.085)*r*.8); cx.lineTo(Math.cos(sa)*tip,Math.sin(sa)*tip); cx.lineTo(Math.cos(sa+.085)*r*.8,Math.sin(sa+.085)*r*.8); cx.closePath();
+      cx.fillStyle='#FFE58A'; cx.globalAlpha=.42; cx.fill();
+      cx.strokeStyle='#6b3d00'; cx.lineWidth=.8; cx.globalAlpha=.5; cx.stroke();
+    }
+    // Shaded body
+    cx.shadowBlur=7*zm; cx.shadowColor=s.c.pri;
+    const bg=cx.createRadialGradient(-R*.25,-R*.28,R*.05,0,0,R);
+    bg.addColorStop(0,'rgba(255,246,196,.92)'); bg.addColorStop(.42,'rgba(255,206,52,.78)');
+    bg.addColorStop(.82,'rgba(206,124,8,.74)'); bg.addColorStop(1,'rgba(120,58,0,.7)');
+    cx.fillStyle=bg; cx.globalAlpha=bv;
+    cx.beginPath(); cx.arc(0,0,R,0,TAU); cx.fill();
     cx.shadowBlur=0;
-    // Orbital crown spikes
-    cx.fillStyle=s.c.dim; cx.globalAlpha=.26;
-    for (let i=0;i<8;i++) { const sa=(i/8)*TAU+ts*.0012,tip=r*1.48+Math.sin(ts*.003+i)*r*.07; cx.beginPath(); cx.moveTo(Math.cos(sa-.07)*r*.82,Math.sin(sa-.07)*r*.82); cx.lineTo(Math.cos(sa)*tip,Math.sin(sa)*tip); cx.lineTo(Math.cos(sa+.07)*r*.82,Math.sin(sa+.07)*r*.82); cx.fill(); }
-    // Sacred geometry ring
-    cx.strokeStyle=s.c.dim; cx.lineWidth=.5; cx.globalAlpha=.2+.08*Math.sin(ts*.002);
-    cx.beginPath(); for (let i=0;i<7;i++) { const a=(i/7)*TAU; const nx=Math.cos(a)*r*.55,ny=Math.sin(a)*r*.55; i===0?cx.moveTo(nx,ny):cx.lineTo(nx,ny); } cx.closePath(); cx.stroke();
+    // Sacred geometry — an engraved heptagram (7-point star, every 3rd vertex)
+    cx.strokeStyle='#5a3000'; cx.lineWidth=Math.max(.8, r*.035); cx.globalAlpha=.42+.1*Math.sin(ts*.002);
+    cx.beginPath();
+    for (let i=0;i<=7;i++) { const a=((i*3)%7/7)*TAU+ts*.0004; const nx=Math.cos(a)*r*.6,ny=Math.sin(a)*r*.6; i===0?cx.moveTo(nx,ny):cx.lineTo(nx,ny); }
+    cx.stroke();
+    // Rim line so the sphere has an edge against its own glow
+    cx.strokeStyle='#7a4300'; cx.lineWidth=Math.max(.8, r*.03); cx.globalAlpha=.55;
+    cx.beginPath(); cx.arc(0,0,R*.985,0,TAU); cx.stroke();
     // Three eyes in arc
     const eyeConfig=[{ex:r*.42,ey:0,rs:.11},{ex:r*.32,ey:-r*.22,rs:.08},{ex:r*.32,ey:r*.22,rs:.08}];
     for (const ec of eyeConfig) {
@@ -5076,14 +5381,19 @@ function drawPlayerScreenSpace(ts) {
   // shows through clearly, while this still guarantees the player is findable —
   // and grows brighter only when the world-space render genuinely failed.
   const failsafe = !isFinite(P.x) || !isFinite(P.y);  // artistic body couldn't place itself
-  const bodyA = failsafe ? 0.82 : 0.10;
+  // The locator matters for SMALL bodies (that was the invisible-player bug). A
+  // large body is plainly visible, and this colour wash over it was flattening
+  // its shading (measured: PRIMORDIAL's amber rim 198,133 → 216,160 from this
+  // layer alone, then bloom clipped it to flat yellow). Fade it as r grows.
+  const sizeK = failsafe ? 1 : cl(18 / r, .22, 1);
+  const bodyA = failsafe ? 0.82 : 0.10 * sizeK;
   const pipA  = failsafe ? 0.95 : 0.40;
 
   // Outer glow halo — stage colored, soft
   cx.shadowBlur = r * 1.2;
   cx.shadowColor = s.c.pri;
   cx.fillStyle = s.c.pri;
-  cx.globalAlpha = failsafe ? 0.28 : 0.14;
+  cx.globalAlpha = failsafe ? 0.28 : 0.14 * sizeK;
   cx.beginPath(); cx.arc(cx2, cy2, r * 1.5, 0, TAU); cx.fill();
 
   // Faint body wash (full disc only when failsafe-bright)
@@ -5955,6 +6265,8 @@ addEventListener('focus', () => { lt = performance.now(); });
 
 function loop(ts) {
   requestAnimationFrame(loop);
+  // Title screen: the real ocean drifts behind the title (render-only).
+  if (introActive && !document.hidden) { lt = ts; try { drawIntroWorld(ts); } catch(e) { cx.setTransform(1,0,0,1,0,0); cx.globalAlpha=1; cx.globalCompositeOperation='source-over'; } return; }
   if (paused||introActive||document.hidden) { lt=ts; return; }
   // dt clamp guards against tab-switch catch-up. 50ms is one slow frame at 20fps.
   let dt = (lt > 0) ? Math.min(ts - lt, 50) : 16;
@@ -6096,6 +6408,7 @@ function loop(ts) {
   drawGrid();
   drawDust(ts);
   try { drawReefs(ts); } catch(e) { cx.globalAlpha=1; }   // terrain under everything alive
+  frameTs = ts; caustStrength = 1;   // caustics: composited inside applyBloom at ¼-res (perf)
   try { drawMurmur(ts); } catch(e) { cx.globalAlpha=1; cx.globalCompositeOperation='source-over'; }
 
   // Particles
@@ -6151,6 +6464,9 @@ function loop(ts) {
     try { drawPlayer(ts); }        catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
     try { traitDraw(P, ts); }      catch(e) { cx.globalAlpha=1; cx.shadowBlur=0; }
   }
+
+  // Foreground bokeh — out-of-focus motes in front of the action (lens depth).
+  try { drawBokeh(ts); } catch(e) { cx.setTransform(zm,0,0,zm,off.x+shx,off.y+shy); cx.globalAlpha=1; cx.globalCompositeOperation='source-over'; }
 
   // Float texts
   cx.textAlign='center'; cx.font='500 11px "Cormorant Garamond",serif';
