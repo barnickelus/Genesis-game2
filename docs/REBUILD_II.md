@@ -128,7 +128,30 @@ Rebuilt, verified by headless-Chromium screenshots before/after:
 - Also: dormant DRIFTER beacons (a featureless grey disc before DRIFTER) now
   carry a faint core + halo so they read as objects, not holes.
 
-## Future layers (Rebuild II.7+)  ⚪
+## Rebuild II.7 — visual pass (verified by screenshots + measurement)  🟢
+Driven by a full-game headless-Chromium gallery (title → every stage → colony),
+critiqued frame by frame:
+- **Living water** — procedural tileable CAUSTICS (domain-warped Voronoi ridges:
+  thin curving filaments, light pooling in knots, uneven strands; two parallax
+  layers drifting apart so the web shimmers). Daylight only → night now reads
+  as a different world. Drawn into the bloom's ¼-res buffer: measured free
+  (full-res version cost +66% frame time — rejected). Foreground BOKEH motes
+  (parallax > 1) give the lens depth. Digital grid softened ~45%.
+- **Adaptation cards** — 14 line-drawn glyphs (one per trait + DIVIDE/ASCEND),
+  per-category colour identity (accent, name, glyph glow, top wash, hover
+  glow), staggered entrance. Long single-word names tighten to fit (measured).
+- **Leviathan → MANTA** — flapping wings, cephalic fins, shoulder chevrons,
+  back spots, whip tail, luminous leading edges (it was already a filter feeder).
+- **Living title screen** — the seeded ocean drifts behind the title under a
+  vignette (render-only: no AI/clock/spawns); HUD hidden until you emerge.
+- **Bloom → SCREEN blend** — 'lighter' doubled the interior of any large bright
+  body (PRIMORDIAL a featureless sun, TITAN's hex blown). Screen ≈ additive for
+  dim halos but a soft knee on highlights. Plus: the screen-space locator now
+  fades as the body grows (it alone shifted PRIMORDIAL's amber rim to yellow —
+  measured), and PRIMORDIAL is re-lit as a shaded sphere with a visible crown
+  and an engraved heptagram.
+
+## Future layers (Rebuild II.8+)  ⚪
 - Continue the character rework upward (the apex animals).
 - Reef-aware AI (prey actively fleeing INTO cover) + hive anchoring on reefs.
 - Night-blooming anomalies / lures that only surface in the dark.
