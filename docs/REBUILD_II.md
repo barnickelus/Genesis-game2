@@ -110,6 +110,24 @@ prey track your size and killed the sense of growth. Replaced:
   penalty + deepscan immunity, vortex formation, ≥10 entranced, racing speed
   signature, dissolve + release + cooldown).
 
+## Rebuild II.6.1 — reefs redrawn for a top-down camera  🟢
+Playtest (iPad): "what's going on with this structure?" — v1 reefs drew
+TRANSLUCENT low-poly shards (every overlap showed through → read as stacked
+glass) and upright coral "sprigs" (from top-down → stray pins/scratches).
+Rebuilt, verified by headless-Chromium screenshots before/after:
+- Opaque stone, back-to-front: smoothed + stretched + chipped boulder outlines,
+  charcoal/slate palette (saturated round blue stones read as giant CELLS),
+  low-contrast lit top plane, mineral grain, pores, CRACKS, dark crevices.
+- One true silhouette rim (stroke-then-fill trick hides every internal edge).
+- A rock PILE (2 anchors + rubble), not a few equal blobs.
+- Top-down life: branching coral fans grown outward from boundary-only rim
+  spots, polyp-tipped; anemones as tentacle rings; tube-sponge rings;
+  encrusting colour blotches. Each reef has its own colour identity + a cached
+  haze pool; night boosts all of it. LOD past R·zm < 50.
+- First-encounter card: "A REEF — stone and living coral, a place…".
+- Also: dormant DRIFTER beacons (a featureless grey disc before DRIFTER) now
+  carry a faint core + halo so they read as objects, not holes.
+
 ## Future layers (Rebuild II.7+)  ⚪
 - Continue the character rework upward (the apex animals).
 - Reef-aware AI (prey actively fleeing INTO cover) + hive anchoring on reefs.
