@@ -430,69 +430,289 @@ let domSites = [];          // PRIMORDIAL dominion sites {x,y,claimT,claimed}
 //    where they settle — kill-grounds bloom, blooms attract life) ──
 let detritus = [];
 let webs = [];                 // SPIDER trait: laid web nodes that snare drifting prey
-// ── ROCKS & REEFS: the world gains PLACES. Static terrain clusters — dark stone
-//    silhouettes crowned with living coral sprigs. Small prey tucked inside a reef
-//    read dim on your senses (cover), and spawns drift toward them, so reefs
-//    become where life gathers and where hunters learn to look. (docs/ROADMAP.md)
+// ── ROCKS & REEFS: the world gains PLACES. Static terrain clusters — solid stone
+//    boulders crusted with top-down reef life (branching coral fans, anemones,
+//    tube sponges). Small prey tucked inside a reef read dim on your senses
+//    (cover), and spawns drift toward them, so reefs become where life gathers
+//    and where hunters learn to look. Each reef has its own colour identity.
+//    (Rebuilt: v1 drew translucent low-poly shards + upright "sprigs", which from
+//    a top-down camera read as glass and pins — not as a place.)
 let reefs = [];
+let reefSeen = false;          // first-encounter story card fired?
 const REEF_N = 14;
+const REEF_TINTS = ['#52FFCA', '#DC60A8', '#FFD860', '#9CE0FF', '#B48CFF', '#FF9E6A'];
+// Charcoal + slate, deliberately desaturated: saturated blue round stones read
+// as giant CELLS in a cell game. Stone must look mineral, not alive.
+const STONE_BASE = ['#090b0f', '#0a0c0e', '#0b0b10', '#080c0d'];
+const STONE_LIT  = ['#141920', '#16191d', '#18181f', '#131a1b'];
+function hexA(hex, a) {
+  return `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;
+}
+// A boulder outline: smoothed radial noise, stored as local [dx,dy,...] offsets
+// from the rock centre, so drawing is pure arithmetic (no trig per frame).
+function genBoulder(r) {
+  const nv = rni(10, 15), m = [];
+  for (let v = 0; v < nv; v++) m.push(rng(.72, 1.18) * (Math.random() < .22 ? .84 : 1));   // occasional chipped facet
+  // Light smoothing only — keeps the chips and planes that say "stone", never an egg.
+  const ex = rng(.78, 1.22), ey = 2 - ex, rot = rng(0, TAU), cr = Math.cos(rot), sr = Math.sin(rot);
+  const pts = [];
+  for (let v = 0; v < nv; v++) {
+    const s = (m[(v + nv - 1) % nv] + m[v] * 3 + m[(v + 1) % nv]) / 5;
+    const a = (v / nv) * TAU;
+    const lx = Math.cos(a) * r * s * ex, ly = Math.sin(a) * r * s * ey;   // stretched…
+    pts.push(lx * cr - ly * sr, lx * sr + ly * cr);                          // …and turned
+  }
+  return pts;
+}
+// Cracks: jagged dark fissures running in from the edge — the single strongest
+// visual cue that this is rock. Stored as flat polylines [n, x0,y0, x1,y1, …].
+function genCracks(rk) {
+  const out = [], n = rk.pts.length >> 1;
+  for (let c = rni(1, 4); c > 0; c--) {
+    const v = rni(0, n);
+    let x = rk.pts[v*2] * .93, y = rk.pts[v*2+1] * .93;
+    let a = Math.atan2(-y, -x);                          // head inward
+    const seg = rni(3, 5); out.push(seg + 1, x, y);
+    for (let s = 0; s < seg; s++) {
+      a += rng(-.6, .6); const l = rk.r * rng(.1, .2);
+      x += Math.cos(a) * l; y += Math.sin(a) * l; out.push(x, y);
+    }
+  }
+  return out;
+}
+// Trace a boulder (scaled s about its centre, offset ox/oy) with quadratic curves
+// through the edge midpoints — smooth stone instead of a polygon.
+function rockPath(rk, s, ox, oy) {
+  const p = rk.pts, n = p.length >> 1, bx = rk.x + ox, by = rk.y + oy;
+  let px = bx + p[(n-1)*2] * s, py = by + p[(n-1)*2+1] * s;
+  let qx = bx + p[0] * s, qy = by + p[1] * s;
+  cx.moveTo((px + qx) / 2, (py + qy) / 2);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const nx = bx + p[j*2] * s, ny = by + p[j*2+1] * s;
+    cx.quadraticCurveTo(qx, qy, (qx + nx) / 2, (qy + ny) / 2);
+    qx = nx; qy = ny;
+  }
+  cx.closePath();
+}
+// A branching coral fan in a local frame (root at 0,0, growing along +x).
+// Segments are bucketed by depth so each width strokes in one call.
+function genFan(len) {
+  const segs = [[], [], []], tips = [];
+  (function br(x, y, a, l, d) {
+    const x2 = x + Math.cos(a) * l, y2 = y + Math.sin(a) * l;
+    segs[2 - d].push(x, y, x2, y2);
+    if (d === 0) { tips.push(x2, y2); return; }
+    const k = rni(2, 4);
+    for (let i = 0; i < k; i++) br(x2, y2, a + rng(-.7, .7), l * rng(.55, .78), d - 1);
+  })(0, 0, 0, len, 2);
+  return { segs, tips };
+}
 function seedReefs() {
-  reefs = [];
+  reefs = []; reefSeen = false;
   for (let i = 0; i < REEF_N; i++) {
     // Ring placement: none in the opening pool, spread through the hunting range.
     const a = (i / REEF_N) * TAU + rng(-.3, .3), d = rng(900, 5400);
     const R = rng(130, 290);
+    const tint = REEF_TINTS[i % REEF_TINTS.length];
+    const tint2 = REEF_TINTS[(i * 3 + 1) % REEF_TINTS.length];
     const rocks = [];
-    const nR = rni(3, 7);
+    // A rock PILE: a couple of anchor boulders plus smaller stones and rubble,
+    // rather than a few equal blobs (which read as a cluster of cells).
+    const nR = rni(5, 10);
     for (let k = 0; k < nR; k++) {
-      const ra = rng(0, TAU), rd = rng(0, R * .55), rr = rng(R * .24, R * .46);
-      const pts = [];
-      const nv = rni(7, 11);
-      for (let v = 0; v < nv; v++) pts.push(rng(.72, 1.18));   // jagged radius multipliers
-      rocks.push({ x: Math.cos(ra) * rd, y: Math.sin(ra) * rd, r: rr, pts, tone: rng(.5, 1) });
+      const big = k < 2;
+      const ra = rng(0, TAU), rd = big ? rng(0, R * .3) : rng(R * .2, R * .66);
+      const rr = big ? rng(R * .28, R * .4) : rng(R * .1, R * .24);
+      const tone = rni(0, STONE_BASE.length);
+      const pores = [], grain = [];
+      for (let q = rni(1, 4); q > 0; q--) {
+        const pa = rng(0, TAU), pd = rng(0, rr * .55);
+        pores.push(Math.cos(pa) * pd, Math.sin(pa) * pd, rng(.025, .055) * rr);
+      }
+      for (let q = rni(6, 12); q > 0; q--) {
+        const pa = rng(0, TAU), pd = rng(0, rr * .7);
+        grain.push(Math.cos(pa) * pd, Math.sin(pa) * pd, rng(.5, 1.3));
+      }
+      const rk = { x: Math.cos(ra) * rd, y: Math.sin(ra) * rd, r: rr,
+                   pts: genBoulder(rr), base: STONE_BASE[tone], lit: STONE_LIT[tone], pores, grain };
+      rk.cracks = genCracks(rk);
+      rocks.push(rk);
     }
-    const sprigs = [];
-    const nS = rni(4, 9);
-    for (let k = 0; k < nS; k++) {
-      const sa = rng(0, TAU), sd = rng(R * .25, R * .9);
-      sprigs.push({ x: Math.cos(sa) * sd, y: Math.sin(sa) * sd,
-                    h: rng(9, 24), ph: rng(0, TAU),
-                    c: ['#DC60A8', '#52FFCA', '#FFD860', '#9CE0FF'][rni(0, 4)] });
+    // Draw order: small stones sit on top of big ones (reads as a heap).
+    rocks.sort((p, q) => q.r - p.r);
+
+    // A point on the cluster's OUTER boundary (not buried inside another stone),
+    // with its outward direction — where coral fans can actually grow into water.
+    const insideOther = (x, y, self) => rocks.some(o => o !== self && Math.hypot(x - o.x, y - o.y) < o.r * .86);
+    const rimSpots = [];
+    for (const rk of rocks) {
+      const n = rk.pts.length >> 1;
+      for (let v = 0; v < n; v++) {
+        const vx = rk.x + rk.pts[v*2], vy = rk.y + rk.pts[v*2+1];
+        if (!insideOther(vx, vy, rk)) rimSpots.push({ x: vx, y: vy, a: Math.atan2(rk.pts[v*2+1], rk.pts[v*2]), r: rk.r });
+      }
     }
-    reefs.push({ x: Math.cos(a) * d, y: Math.sin(a) * d, R, rocks, sprigs });
+    // A point on top of a stone face (for anemones, sponges, encrusting growth).
+    const faceSpot = () => {
+      // ≤ .4r keeps it on the stone even for the most stretched/chipped boulder
+      // (min extent ≈ .78 stretch × .72 radius × .84 chip ≈ .47r).
+      const rk = rocks[rni(0, rocks.length)], fa = rng(0, TAU), fd = rng(0, rk.r * .4);
+      return { x: rk.x + Math.cos(fa) * fd, y: rk.y + Math.sin(fa) * fd, r: rk.r };
+    };
+
+    const fans = [];
+    for (let k = rni(8, 14); k > 0 && rimSpots.length; k--) {
+      const s = rimSpots.splice(rni(0, rimSpots.length), 1)[0];
+      const len = cl(R * rng(.06, .11), 11, 30);
+      fans.push({ x: s.x - Math.cos(s.a) * 3, y: s.y - Math.sin(s.a) * 3, a: s.a + rng(-.35, .35),
+                  ph: rng(0, TAU), c: Math.random() < .72 ? tint : tint2, ...genFan(len) });
+    }
+    const anems = [];
+    for (let k = rni(3, 7); k > 0; k--) {
+      const s = faceSpot();
+      anems.push({ x: s.x, y: s.y, s: rng(4.5, 8.5), n: rni(11, 16), ph: rng(0, TAU),
+                   c: Math.random() < .6 ? tint2 : tint });
+    }
+    const sponges = [];
+    for (let k = rni(2, 5); k > 0; k--) {
+      const s = faceSpot(), tubes = [];
+      for (let q = rni(3, 6); q > 0; q--) tubes.push(s.x + rng(-9, 9), s.y + rng(-9, 9), rng(2.6, 5.2));
+      sponges.push({ tubes, c: Math.random() < .5 ? tint : '#FFD860' });
+    }
+    const crust = [];   // encrusting algae/sponge blotches that colour the stone faces
+    for (let k = rni(6, 12); k > 0; k--) { const s = faceSpot(); crust.push(s.x, s.y, rng(3, 9)); }
+
+    reefs.push({ x: Math.cos(a) * d, y: Math.sin(a) * d, R, tint, tint2, rocks, fans, anems, sponges, crust,
+                 hazeIn: hexA(tint, .085), hazeOut: hexA(tint, 0), _haze: null });
   }
 }
 function drawReefs(ts) {
+  const ng = nightGlow();
   for (const rf of reefs) {
-    if (!onScr(rf.x, rf.y, rf.R * 1.25)) continue;
+    if (!onScr(rf.x, rf.y, rf.R * 1.35)) continue;
     cx.save(); cx.translate(rf.x, rf.y);
-    // The stones — dark silhouettes with a faint cool rim, under everything alive.
+    const detail = rf.R * zm > 50;        // LOD: far out, just the stone mass + glow
+
+    // 1. Ambient pool — the reef's colour haze. Gradient cached once in local
+    //    space (gradients resolve in the current transform at fill time).
+    if (!rf._haze) {
+      rf._haze = cx.createRadialGradient(0, 0, rf.R * .25, 0, 0, rf.R * 1.35);
+      rf._haze.addColorStop(0, rf.hazeIn); rf._haze.addColorStop(1, rf.hazeOut);
+    }
+    cx.fillStyle = rf._haze; cx.globalAlpha = Math.min(1, .8 * ng);
+    cx.beginPath(); cx.arc(0, 0, rf.R * 1.35, 0, TAU); cx.fill();
+
+    // 2. Outer rim light — stroke the whole cluster first; the opaque stone drawn
+    //    next covers the inner half and every internal edge, so only the TRUE
+    //    silhouette glows (one rim, not a stack of glass shards).
+    cx.beginPath();
+    for (const rk of rf.rocks) rockPath(rk, 1, 0, 0);
+    cx.lineJoin = 'round';
+    cx.strokeStyle = rf.tint; cx.lineWidth = 7; cx.globalAlpha = Math.min(.3, .09 * ng); cx.stroke();
+    cx.strokeStyle = '#3b4a58'; cx.lineWidth = 2.2; cx.globalAlpha = .34; cx.stroke();
+
+    // 3. The stones — opaque, back to front. Each boulder: charcoal base, a low-
+    //    contrast lit top plane toward the light (upper-left), a faint crown,
+    //    mineral grain, pores, cracks, then a dark crevice line so stacked stones
+    //    separate with depth.
     for (const rk of rf.rocks) {
-      cx.beginPath();
-      const nv = rk.pts.length;
-      for (let v = 0; v <= nv; v++) {
-        const va = (v % nv) / nv * TAU, rr = rk.r * rk.pts[v % nv];
-        const px = rk.x + Math.cos(va) * rr, py = rk.y + Math.sin(va) * rr;
-        if (v === 0) cx.moveTo(px, py); else cx.lineTo(px, py);
+      cx.globalAlpha = 1;
+      cx.fillStyle = rk.base; cx.beginPath(); rockPath(rk, 1, 0, 0); cx.fill();
+      if (detail) {
+        cx.fillStyle = rk.lit; cx.globalAlpha = .85;
+        cx.beginPath(); rockPath(rk, .8, -rk.r * .08, -rk.r * .1); cx.fill();
+        cx.fillStyle = '#20262e'; cx.globalAlpha = .22;
+        cx.beginPath(); rockPath(rk, .45, -rk.r * .18, -rk.r * .22); cx.fill();
+        // mineral grain — pale flecks catching the light
+        cx.fillStyle = '#4a5560'; cx.globalAlpha = .3;
+        cx.beginPath();
+        const gr = rk.grain;
+        for (let q = 0; q < gr.length; q += 3) { cx.moveTo(rk.x + gr[q] + gr[q+2], rk.y + gr[q+1]); cx.arc(rk.x + gr[q], rk.y + gr[q+1], gr[q+2], 0, TAU); }
+        cx.fill();
+        cx.fillStyle = '#020305'; cx.globalAlpha = .8;
+        cx.beginPath();
+        const pr = rk.pores;
+        for (let q = 0; q < pr.length; q += 3) { cx.moveTo(rk.x + pr[q] + pr[q+2], rk.y + pr[q+1]); cx.arc(rk.x + pr[q], rk.y + pr[q+1], pr[q+2], 0, TAU); }
+        cx.fill();
+        // cracks — jagged fissures running in from the edge
+        cx.strokeStyle = '#010204'; cx.lineWidth = 1.3; cx.globalAlpha = .85;
+        cx.beginPath();
+        const ck = rk.cracks;
+        for (let q = 0; q < ck.length; ) {
+          const n = ck[q++];
+          cx.moveTo(rk.x + ck[q], rk.y + ck[q+1]); q += 2;
+          for (let s = 1; s < n; s++, q += 2) cx.lineTo(rk.x + ck[q], rk.y + ck[q+1]);
+        }
+        cx.stroke();
+        cx.strokeStyle = '#010204'; cx.lineWidth = 1.6; cx.globalAlpha = .9;
+        cx.beginPath(); rockPath(rk, 1, 0, 0); cx.stroke();
       }
-      cx.closePath();
-      cx.fillStyle = '#0B1522'; cx.globalAlpha = .82 * rk.tone; cx.fill();
-      cx.strokeStyle = '#2A4458'; cx.lineWidth = 1.1; cx.globalAlpha = .3 * rk.tone; cx.stroke();
     }
-    // The living crown — coral sprigs swaying, each tipped with a glow mote.
-    // At night the sprigs become lanterns: reefs read as constellations of life.
-    const ng = nightGlow();
-    cx.lineWidth = 1; cx.lineCap = 'round';
-    for (const s of rf.sprigs) {
-      const sway = Math.sin(ts * .0011 + s.ph) * s.h * .22;
-      cx.strokeStyle = s.c; cx.globalAlpha = Math.min(.6, .34 * ng);
-      cx.beginPath(); cx.moveTo(s.x, s.y);
-      cx.quadraticCurveTo(s.x + sway * .5, s.y - s.h * .6, s.x + sway, s.y - s.h);
-      cx.stroke();
-      cx.fillStyle = s.c; cx.globalAlpha = Math.min(1, (.4 + .22 * Math.sin(ts * .003 + s.ph)) * ng);
-      cx.beginPath(); cx.arc(s.x + sway, s.y - s.h, 1.6, 0, TAU); cx.fill();
+
+    if (detail) {
+      // 4. Encrusting life — soft colour blotches on the stone faces.
+      cx.fillStyle = rf.tint; cx.globalAlpha = Math.min(.4, .13 * ng);
+      cx.beginPath();
+      const cr = rf.crust;
+      for (let q = 0; q < cr.length; q += 3) { cx.moveTo(cr[q] + cr[q+2], cr[q+1]); cx.arc(cr[q], cr[q+1], cr[q+2], 0, TAU); }
+      cx.fill();
+
+      // 5. Branching coral fans reaching out from the rim, swaying in the current,
+      //    every tip a glowing polyp. At night they become the reef's lanterns.
+      cx.lineCap = 'round';
+      for (const f of rf.fans) {
+        cx.save(); cx.translate(f.x, f.y); cx.rotate(f.a + Math.sin(ts * .0009 + f.ph) * .07);
+        cx.strokeStyle = f.c;
+        for (let d = 0; d < 3; d++) {
+          const sg = f.segs[d]; if (!sg.length) continue;
+          cx.lineWidth = 2.6 - d * .8; cx.globalAlpha = Math.min(.85, (.5 - d * .07) * Math.sqrt(ng));
+          cx.beginPath();
+          for (let q = 0; q < sg.length; q += 4) { cx.moveTo(sg[q], sg[q+1]); cx.lineTo(sg[q+2], sg[q+3]); }
+          cx.stroke();
+        }
+        cx.fillStyle = f.c; cx.globalAlpha = Math.min(1, (.55 + .25 * Math.sin(ts * .003 + f.ph)) * ng);
+        cx.beginPath();
+        const tp = f.tips;
+        for (let q = 0; q < tp.length; q += 2) { cx.moveTo(tp[q] + 1.7, tp[q+1]); cx.arc(tp[q], tp[q+1], 1.7, 0, TAU); }
+        cx.fill();
+        cx.restore();
+      }
+
+      // 6. Anemones — seen from above: a ring of waving tentacles around a disc.
+      for (const an of rf.anems) {
+        cx.strokeStyle = an.c; cx.lineWidth = 1.1; cx.globalAlpha = Math.min(.8, .45 * Math.sqrt(ng));
+        cx.beginPath();
+        for (let t = 0; t < an.n; t++) {
+          const ta = (t / an.n) * TAU + an.ph;
+          const L = an.s * (1.9 + .4 * Math.sin(ts * .0021 + t * 1.3 + an.ph));
+          const curl = .32 * Math.sin(ts * .0016 + t + an.ph);
+          const sx = an.x + Math.cos(ta) * an.s * .8, sy = an.y + Math.sin(ta) * an.s * .8;
+          cx.moveTo(sx, sy);
+          cx.quadraticCurveTo(an.x + Math.cos(ta + curl) * L * .7, an.y + Math.sin(ta + curl) * L * .7,
+                              an.x + Math.cos(ta + curl * 1.6) * L, an.y + Math.sin(ta + curl * 1.6) * L);
+        }
+        cx.stroke();
+        cx.fillStyle = an.c; cx.globalAlpha = .5;
+        cx.beginPath(); cx.arc(an.x, an.y, an.s, 0, TAU); cx.fill();
+        cx.fillStyle = '#05030a'; cx.globalAlpha = .7;
+        cx.beginPath(); cx.arc(an.x, an.y, an.s * .32, 0, TAU); cx.fill();
+      }
+
+      // 7. Tube sponges — clustered rings with dark open throats.
+      for (const sp of rf.sponges) {
+        const tb = sp.tubes;
+        cx.fillStyle = sp.c; cx.globalAlpha = Math.min(.75, .42 * Math.sqrt(ng));
+        cx.beginPath();
+        for (let q = 0; q < tb.length; q += 3) { cx.moveTo(tb[q] + tb[q+2], tb[q+1]); cx.arc(tb[q], tb[q+1], tb[q+2], 0, TAU); }
+        cx.fill();
+        cx.fillStyle = '#04060b'; cx.globalAlpha = .82;
+        cx.beginPath();
+        for (let q = 0; q < tb.length; q += 3) { cx.moveTo(tb[q] + tb[q+2] * .55, tb[q+1]); cx.arc(tb[q], tb[q+1], tb[q+2] * .55, 0, TAU); }
+        cx.fill();
+      }
     }
-    cx.restore(); cx.globalAlpha = 1;
+    cx.restore(); cx.globalAlpha = 1; cx.lineCap = 'butt'; cx.lineJoin = 'miter';
   }
 }
 // Nearest reef within `maxD` of the player, or null. Deterministic, so spawn's
@@ -5384,6 +5604,12 @@ function drawPickups(ts) {
       const want = P.stg===1 && !objComplete();
       cx.fillStyle='rgba(200,218,255,.28)'; cx.globalAlpha=(want?.55:.32)+.14*Math.sin(ts*.003);
       cx.beginPath(); cx.arc(b.x,b.y,b.r,0,TAU); cx.fill();
+      // Dormant beacons get a faint core + halo so they read as "a beacon, asleep"
+      // rather than a featureless grey disc in the water before DRIFTER.
+      cx.fillStyle='#cfe6ff'; cx.globalAlpha=.4+.2*Math.sin(ts*.003);
+      cx.beginPath(); cx.arc(b.x,b.y,2.4,0,TAU); cx.fill();
+      cx.strokeStyle='rgba(156,240,255,.5)'; cx.lineWidth=.8; cx.globalAlpha=want?0:.16;
+      cx.beginPath(); cx.arc(b.x,b.y,b.r*1.55,0,TAU); cx.stroke();
       if (want) {
         cx.strokeStyle='#9CF0FF'; cx.lineWidth=1; cx.globalAlpha=.25+.2*Math.sin(ts*.005);
         cx.beginPath(); cx.arc(b.x,b.y,b.r*2.2,0,TAU); cx.stroke();
@@ -5775,6 +6001,14 @@ function loop(ts) {
         announce('THE DEEP DARK', '#9CE0FF', 'Night in the open water. Senses dim, predators grow bold — and everything luminous burns brighter.', 3800); }
       try { audioBend(-2, 2.0); } catch(e) {}
     } else if (nightFell && L > .8) nightFell = false;
+  }
+  // ── First reef: name the place the first time you swim up to one. ──
+  if (!reefSeen && microMode === 'single') {
+    const rf = reefInRange(460);
+    if (rf && Math.hypot(rf.x - P.x, rf.y - P.y) < rf.R + 150) {
+      reefSeen = true;
+      announce('A REEF', rf.tint, 'Stone and living coral — a place. Small prey shelter here, and your senses read them dim.', 3600);
+    }
   }
 
   // Camera — zoom adapts to actual screen size so phones and tablets show
